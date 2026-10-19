@@ -66,11 +66,13 @@ fun MapPickerScreen(
     val bridge = remember {
         MapBridge { lat, lng -> selected = lat to lng }
     }
-    val url = remember {
+    // مقداردهی نقشه از طریق evaluateJavascript انجام می‌شود؛
+    // خواندن query-string از روی file:///android_asset در WebView قابل اعتماد نیست.
+    val initJs = remember {
         val la = String.format(Locale.US, "%.6f", initialLat)
         val ln = String.format(Locale.US, "%.6f", initialLng)
         val r = String.format(Locale.US, "%.1f", initialRadiusM.coerceAtLeast(1.0))
-        "file:///android_asset/map_picker.html?lat=$la&lng=$ln&zoom=15&radius=$r"
+        "window.initMap($la, $ln, $r, 15)"
     }
 
     Scaffold(
@@ -136,11 +138,17 @@ fun MapPickerScreen(
                 WebView(ctx).apply {
                     settings.javaScriptEnabled = true
                     settings.domStorageEnabled = true
+                    settings.allowFileAccess = true
                     settings.loadWithOverviewMode = true
                     settings.useWideViewPort = true
-                    webViewClient = WebViewClient()
+                    webViewClient = object : WebViewClient() {
+                        override fun onPageFinished(view: WebView, url: String) {
+                            super.onPageFinished(view, url)
+                            view.evaluateJavascript(initJs, null)
+                        }
+                    }
                     addJavascriptInterface(bridge, "Android")
-                    loadUrl(url)
+                    loadUrl("file:///android_asset/map_picker.html")
                 }
             }
         )

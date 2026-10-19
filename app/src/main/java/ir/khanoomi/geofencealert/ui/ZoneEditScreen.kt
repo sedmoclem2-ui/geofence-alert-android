@@ -529,7 +529,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         val lat = ZoneValidator.parseDoubleFa(vm.latText) ?: 0.0
                         val lng = ZoneValidator.parseDoubleFa(vm.lngText) ?: 0.0
                         val radiusM = ZoneValidator.parseDoubleFa(vm.radiusText)
-                            ?.let { toMeters(it, vm.unit) } ?: 500.0
+                            ?.let { toMeters(it, vm.unit) } ?: 300.0
                         navController.navigate("map_picker?lat=$lat&lng=$lng&radius=$radiusM")
                     },
                     modifier = Modifier.fillMaxWidth()

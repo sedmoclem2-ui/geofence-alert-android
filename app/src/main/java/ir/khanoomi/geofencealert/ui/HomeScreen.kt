@@ -165,6 +165,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             prefs.setMonitoringEnabled(enabled)
             GeofenceHelper.refreshRegistrations(getApplication())
+            ZoneWidgetProvider.updateAll(getApplication())
         }
     }
 

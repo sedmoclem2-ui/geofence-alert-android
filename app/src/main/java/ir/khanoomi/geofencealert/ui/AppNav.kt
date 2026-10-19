@@ -67,7 +67,7 @@ fun AppNav() {
                 },
                 navArgument("radius") {
                     type = NavType.StringType
-                    defaultValue = "500.0"
+                    defaultValue = "300.0"
                 }
             )
         ) { backStackEntry ->
@@ -75,7 +75,7 @@ fun AppNav() {
                 navController = navController,
                 initialLat = backStackEntry.arguments?.getString("lat")?.toDoubleOrNull() ?: 0.0,
                 initialLng = backStackEntry.arguments?.getString("lng")?.toDoubleOrNull() ?: 0.0,
-                initialRadiusM = backStackEntry.arguments?.getString("radius")?.toDoubleOrNull() ?: 500.0
+                initialRadiusM = backStackEntry.arguments?.getString("radius")?.toDoubleOrNull() ?: 300.0
             )
         }
         composable(

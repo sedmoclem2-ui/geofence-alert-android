@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
+import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,6 +22,7 @@ class BootReceiver : BroadcastReceiver() {
         scope.launch {
             try {
                 GeofenceHelper.refreshRegistrations(context)
+                ZoneWidgetProvider.updateAll(context)
             } catch (e: Exception) {
                 Log.e(TAG, "refreshRegistrations failed on boot", e)
             } finally {

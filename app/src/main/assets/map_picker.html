@@ -22,36 +22,50 @@
 <script src="leaflet/leaflet.js"></script>
 <script>
 (function () {
-  var q = new URLSearchParams(window.location.search);
-  var lat = parseFloat(q.get('lat')) || 35.6892;
-  var lng = parseFloat(q.get('lng')) || 51.3890;
-  var radius = parseFloat(q.get('radius')) || 500;
-  var zoom = parseInt(q.get('zoom') || '15', 10);
+  // نقطه پیش‌فرض: تهران (اگر مختصات معتبر داده نشود)
+  var FALLBACK_LAT = 35.6892;
+  var FALLBACK_LNG = 51.3890;
 
-  var map = L.map('map').setView([lat, lng], zoom);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-  }).addTo(map);
+  function validLat(v) { return typeof v === 'number' && isFinite(v) && v >= -90 && v <= 90 && v !== 0; }
+  function validLng(v) { return typeof v === 'number' && isFinite(v) && v >= -180 && v <= 180 && v !== 0; }
 
-  var marker = L.circleMarker([lat, lng], {
-    radius: 8, color: '#0E6B5C', weight: 3, fillColor: '#0E6B5C', fillOpacity: 1
-  }).addTo(map);
-  var circle = L.circle([lat, lng], {
-    radius: radius, color: '#0E6B5C', weight: 2, fillColor: '#0E6B5C', fillOpacity: 0.15
-  }).addTo(map);
+  /**
+   * ساخت نقشه — فقط یک بار اجرا می‌شود. از طریق evaluateJavascript صدا زده می‌شود،
+   * چون خواندن query-string از روی file:///android_asset در WebView قابل اعتماد نیست.
+   */
+  window.initMap = function (lat, lng, radius, zoom) {
+    if (window.__map) return;
+    if (!validLat(lat)) lat = FALLBACK_LAT;
+    if (!validLng(lng)) lng = FALLBACK_LNG;
+    if (!(radius > 0)) radius = 300;
+    zoom = zoom || 15;
 
-  function selectPoint(p) {
-    marker.setLatLng(p);
-    circle.setLatLng(p);
-    if (window.Android && window.Android.onLocationSelected) {
-      window.Android.onLocationSelected(p.lat, p.lng);
+    var map = L.map('map').setView([lat, lng], zoom);
+    window.__map = map;
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    var marker = L.circleMarker([lat, lng], {
+      radius: 8, color: '#0E6B5C', weight: 3, fillColor: '#0E6B5C', fillOpacity: 1
+    }).addTo(map);
+    var circle = L.circle([lat, lng], {
+      radius: radius, color: '#0E6B5C', weight: 2, fillColor: '#0E6B5C', fillOpacity: 0.15
+    }).addTo(map);
+
+    function selectPoint(p) {
+      marker.setLatLng(p);
+      circle.setLatLng(p);
+      if (window.Android && window.Android.onLocationSelected) {
+        window.Android.onLocationSelected(p.lat, p.lng);
+      }
     }
-  }
 
-  map.on('click', function (e) { selectPoint(e.latlng); });
-  // گزارش نقطه اولیه هم تا دکمه تأیید همیشه مقدار داشته باشد
-  selectPoint(L.latLng(lat, lng));
+    map.on('click', function (e) { selectPoint(e.latlng); });
+    // گزارش نقطه اولیه هم تا دکمه تأیید همیشه مقدار داشته باشد
+    selectPoint(L.latLng(lat, lng));
+  };
 })();
 </script>
 </body>
