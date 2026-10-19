@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Delete
@@ -579,6 +580,29 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                         label = { Text("کیلومتر") }
                     )
+                }
+                // هشدار برای شعاع‌های خیلی کوچک: دقت GPS گوشی محدود است
+                val radiusMeters = vm.radiusText.toDoubleOrNull()?.let { toMeters(it, vm.unit) }
+                if (radiusMeters != null && radiusMeters > 0 && radiusMeters < 50) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            "دقت مکان‌یابی گوشی حدود ۱۰ تا ۲۰ متر است؛ شعاع کمتر از ۵۰ متر ممکن است دقیق عمل نکند.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
 
