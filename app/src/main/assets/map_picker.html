@@ -87,14 +87,27 @@
     var circle = L.circle([lat, lng], {
       radius: radius, color: '#0E6B5C', weight: 2, fillColor: '#0E6B5C', fillOpacity: 0.15
     }).addTo(map);
+    // دایره آبی شاخص ۲۰۰ متر: مرز شروع پایش دقیق برای شعاع‌های کوچک
+    var gateCircle = L.circle([lat, lng], {
+      radius: 200, color: '#3B82F6', weight: 2, fillColor: '#3B82F6', fillOpacity: 0.08
+    }).addTo(map);
 
     function selectPoint(p) {
       marker.setLatLng(p);
       circle.setLatLng(p);
+      gateCircle.setLatLng(p);
       if (window.Android && window.Android.onLocationSelected) {
         window.Android.onLocationSelected(p.lat, p.lng);
       }
     }
+
+    /** جابه‌جایی نمایش نقشه به یک نقطه (مثلاً موقعیت فعلی کاربر). */
+    window.moveMap = function (mLat, mLng) {
+      if (window.__map && typeof mLat === 'number' && typeof mLng === 'number' &&
+          isFinite(mLat) && isFinite(mLng)) {
+        window.__map.setView([mLat, mLng], 16);
+      }
+    };
 
     map.on('click', function (e) { selectPoint(e.latlng); });
     // گزارش نقطه اولیه هم تا دکمه تأیید همیشه مقدار داشته باشد

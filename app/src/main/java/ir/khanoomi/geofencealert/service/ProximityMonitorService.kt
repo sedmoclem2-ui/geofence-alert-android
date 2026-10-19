@@ -29,18 +29,22 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 /**
  * سرویس پیش‌زمینه پایش دقیق محدوده‌های کوچک.
  *
- * ژئوفنس سیستمی اندروید برای شعاع‌های کمتر از ۲۰۰ متر دقیق نیست؛ این سرویس
- * برای محدوده‌های فعال با شعاع کمتر از [PRECISE_RADIUS_THRESHOLD_M]، هر
- * ۲۰ ثانیه فاصله دقیق گوشی تا مرکز محدوده را با فرمول هاورساین حساب می‌کند
- * و ورود/خروج را با همان منطق ژئوفنس سیستمی ([ZoneTransitionHandler]) اعلام می‌کند.
+ * ژئوفنس سیستمی اندروید برای شعاع‌های کمتر از ۲۰۰ متر دقیق نیست؛ برای این
+ * محدوده‌ها یک ژئوفنس «دروازه» ۲۰۰ متری ثبت می‌شود ([GeofenceHelper]):
+ * - ورود به دروازه → [armZone](true): پایش دقیق این محدوده فعال می‌شود.
+ * - خروج از دروازه → [armZone](false): پایش دقیق متوقف می‌شود.
  *
- * سرویس فقط وقتی روشن می‌ماند که پایش کلی فعال، مجوز مکان موجود، و دست‌کم یک
- * محدوده فعال کوچک وجود داشته باشد؛ در غیر این صورت خودش را متوقف می‌کند.
+ * وقتی محدوده‌ای armed است، سرویس هر [Zone.checkIntervalSec] ثانیه فاصله دقیق
+ * گوشی تا مرکز محدوده را با فرمول هاورساین حساب می‌کند و ورود/خروج را با همان
+ * منطق ژئوفنس سیستمی ([ZoneTransitionHandler]) اعلام می‌کند. وقتی هیچ محدوده‌ای
+ * armed نیست، سرویس خودش را متوقف می‌کند تا باتری مصرف نشود.
+ *
  * چون سرویس پیش‌زمینه است، با بسته شدن برنامه (سوایپ) از بین نمی‌رود.
  */
 class ProximityMonitorService : Service() {
@@ -62,6 +66,7 @@ class ProximityMonitorService : Service() {
                         stopSelf()
                         return@launch
                     }
+                    coarseArmPass()
                     ensureLoopRunning()
                 } catch (e: Exception) {
                     Log.e(TAG, "sync failed", e)
@@ -71,7 +76,7 @@ class ProximityMonitorService : Service() {
         return START_STICKY
     }
 
-    /** آیا شرایط پایش دقیق برقرار است؟ */
+    /** آیا شرایط کلی پایش دقیق برقرار است؟ */
     private suspend fun needsPolling(): Boolean {
         val app = applicationContext as GeofenceAlertApp
         val monitoring = try {
@@ -97,7 +102,34 @@ class ProximityMonitorService : Service() {
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
 
-    /** شروع حلقه ۲۰ ثانیه‌ای (اگر در حال اجرا نیست) به‌همراه اعلان پیش‌زمینه. */
+    /**
+     * یک دور درشت اولیه هنگام شروع سرویس: موقعیت فعلی گرفته می‌شود و هر
+     * محدوده کوچکی که هم‌اکنون در ۲۰۰ متری است، armed می‌شود؛ وضعیت
+     * داخل/خارج اولیه بی‌صدا ثبت می‌شود (بدون هشدار).
+     */
+    private suspend fun coarseArmPass() {
+        val loc = getCurrentLocation() ?: return
+        val app = applicationContext as GeofenceAlertApp
+        val zones = try {
+            app.zoneRepo.getActiveZones()
+        } catch (e: Exception) {
+            Log.e(TAG, "Cannot load zones in coarse pass", e)
+            return
+        }.filter { it.radiusMeters < PRECISE_RADIUS_THRESHOLD_M }
+        val now = System.currentTimeMillis()
+        for (zone in zones) {
+            val d = GeoMath.distanceMeters(
+                loc.latitude, loc.longitude, zone.latitude, zone.longitude
+            )
+            if (d <= PRECISE_RADIUS_THRESHOLD_M) {
+                armed[zone.id] = now
+                preciseInside[zone.id] = d <= zone.radiusMeters
+                Log.i(TAG, "Coarse-armed zone ${zone.id} (d=${d.toInt()}m)")
+            }
+        }
+    }
+
+    /** شروع حلقه پایش (اگر در حال اجرا نیست) به‌همراه اعلان پیش‌زمینه. */
     private fun ensureLoopRunning() {
         if (loopJob?.isActive == true) return
         try {
@@ -113,66 +145,76 @@ class ProximityMonitorService : Service() {
             return
         }
         loopJob = scope.launch {
-            val inside = mutableMapOf<Long, Boolean>()
             while (isActive) {
                 try {
-                    tick(inside)
+                    tickDue()
                 } catch (e: Exception) {
                     Log.e(TAG, "tick failed", e)
                 }
-                try {
-                    if (!needsPolling()) {
-                        stopSelf()
-                        break
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "needsPolling check failed", e)
+                if (armed.isEmpty()) {
+                    stopSelf()
+                    break
                 }
-                delay(POLL_INTERVAL_MS)
+                val nextDelay = (armed.values.minOrNull()?.minus(System.currentTimeMillis()))
+                    ?.coerceIn(1_000L, 3_600_000L) ?: 20_000L
+                delay(nextDelay)
             }
         }
     }
 
     /**
-     * یک دور بررسی: موقعیت فعلی → فاصله تا مرکز هر محدوده کوچک فعال →
-     * تشخیص تغییر وضعیت داخل/خارج و اعلام ورود/خروج.
-     *
-     * اولین مشاهده هر محدوده فقط وضعیت اولیه را ثبت می‌کند (بدون هشدار)،
-     * مثل رفتار ژئوفنس سیستمی که ثبتِ صرف، رویداد تولید نمی‌کند.
+     * بررسی محدوده‌های armed که موعدشان رسیده؛ پس از هر بررسی، موعد بعدی
+     * بر اساس [Zone.checkIntervalSec] همان محدوده تنظیم می‌شود.
      */
-    private suspend fun tick(inside: MutableMap<Long, Boolean>) {
-        if (!needsPolling()) return
-        val loc = getCurrentLocation() ?: return
+    private suspend fun tickDue() {
         val app = applicationContext as GeofenceAlertApp
-        val zones = try {
-            app.zoneRepo.getActiveZones()
+        val zonesById = try {
+            app.zoneRepo.getActiveZones().associateBy { it.id }
         } catch (e: Exception) {
             Log.e(TAG, "Cannot load zones in tick", e)
             return
-        }.filter { it.radiusMeters < PRECISE_RADIUS_THRESHOLD_M }
-        for (zone in zones) {
-            val d = GeoMath.distanceMeters(
-                loc.latitude, loc.longitude, zone.latitude, zone.longitude
-            )
-            val isInside = d <= zone.radiusMeters
-            when (val prev = inside[zone.id]) {
-                null -> inside[zone.id] = isInside // مقداردهی اولیه بدون هشدار
-                else -> {
-                    if (!prev && isInside) {
-                        inside[zone.id] = true
-                        Log.i(TAG, "Precise ENTER for zone ${zone.id} (d=${d.toInt()}m)")
-                        ZoneTransitionHandler.onEnter(this, zone)
-                    } else if (prev && !isInside) {
-                        inside[zone.id] = false
-                        Log.i(TAG, "Precise EXIT for zone ${zone.id} (d=${d.toInt()}m)")
-                        ZoneTransitionHandler.onExit(this, zone)
-                    }
+        }
+        val now = System.currentTimeMillis()
+        val due = armed.filter { it.value <= now }.keys.toList()
+        for (id in due) {
+            val zone = zonesById[id]
+            if (zone == null || !zone.isActive ||
+                zone.radiusMeters >= PRECISE_RADIUS_THRESHOLD_M
+            ) {
+                armed.remove(id)
+                preciseInside.remove(id)
+                continue
+            }
+            tickZone(zone)
+            val intervalMs = zone.checkIntervalSec.coerceIn(5, 3600) * 1000L
+            armed[id] = now + intervalMs
+        }
+    }
+
+    /**
+     * یک دور بررسی دقیق یک محدوده: فاصله واقعی تا مرکز و تشخیص
+     * تغییر وضعیت داخل/خارج. اولین مشاهده فقط وضعیت را ثبت می‌کند.
+     */
+    private suspend fun tickZone(zone: Zone) {
+        val loc = getCurrentLocation() ?: return
+        val d = GeoMath.distanceMeters(
+            loc.latitude, loc.longitude, zone.latitude, zone.longitude
+        )
+        val isInside = d <= zone.radiusMeters
+        when (val prev = preciseInside[zone.id]) {
+            null -> preciseInside[zone.id] = isInside // مقداردهی اولیه بدون هشدار
+            else -> {
+                if (!prev && isInside) {
+                    preciseInside[zone.id] = true
+                    Log.i(TAG, "Precise ENTER for zone ${zone.id} (d=${d.toInt()}m)")
+                    ZoneTransitionHandler.onEnter(this, zone)
+                } else if (prev && !isInside) {
+                    preciseInside[zone.id] = false
+                    Log.i(TAG, "Precise EXIT for zone ${zone.id} (d=${d.toInt()}m)")
+                    ZoneTransitionHandler.onExit(this, zone)
                 }
             }
         }
-        // پاک‌سازی وضعیت محدوده‌های حذف‌شده یا بزرگ‌شده
-        val liveIds = zones.map { it.id }.toSet()
-        inside.keys.retainAll(liveIds)
     }
 
     /** موقعیت فعلی با دقت بالا (مسدودکننده روی نخ IO؛ تا ۱۵ ثانیه صبر می‌کند). */
@@ -208,14 +250,79 @@ class ProximityMonitorService : Service() {
         const val ACTION_SYNC = "ir.khanoomi.geofencealert.action.PROXIMITY_SYNC"
 
         private const val FOREGROUND_NOTIFICATION_ID = 9003
-        private const val POLL_INTERVAL_MS = 20_000L
         private const val LOCATION_TIMEOUT_S = 15L
 
         private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         /**
+         * محدوده‌های دارای پایش دقیق فعال: zoneId → زمان موعد بعدی (میلی‌ثانیه).
+         * ورود به دروازه ۲۰۰ متری، محدوده را armed و خروج از آن، disarm می‌کند.
+         */
+        private val armed = ConcurrentHashMap<Long, Long>()
+
+        /** آخرین وضعیت داخل/خارج شناخته‌شده هر محدوده armed. */
+        private val preciseInside = ConcurrentHashMap<Long, Boolean>()
+
+        /**
+         * فعال/غیرفعال کردن پایش دقیق یک محدوده (از رویداد دروازه).
+         * امن برای فراخوانی از هر نخی.
+         */
+        fun armZone(context: Context, zoneId: Long, arm: Boolean) {
+            if (arm) {
+                armed[zoneId] = System.currentTimeMillis() // بررسی فوری در دور بعد
+                try {
+                    ContextCompat.startForegroundService(
+                        context,
+                        Intent(context, ProximityMonitorService::class.java)
+                            .setAction(ACTION_SYNC)
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "armZone: start service failed", e)
+                }
+                return
+            }
+            armed.remove(zoneId)
+            syncScope.launch {
+                try {
+                    // اگر داخل شعاع کوچک بودیم، خروج ثبت شود
+                    if (preciseInside.remove(zoneId) == true) {
+                        val app = context.applicationContext as GeofenceAlertApp
+                        val zone = try {
+                            app.zoneRepo.getById(zoneId)
+                        } catch (e: Exception) {
+                            null
+                        }
+                        if (zone != null) {
+                            Log.i(TAG, "Gate EXIT while inside → precise EXIT for $zoneId")
+                            ZoneTransitionHandler.onExit(context, zone)
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "armZone(false) failed", e)
+                } finally {
+                    if (armed.isEmpty()) {
+                        try {
+                            context.stopService(
+                                Intent(context, ProximityMonitorService::class.java)
+                            )
+                        } catch (e: Exception) {
+                            Log.e(TAG, "stopService failed", e)
+                        }
+                    }
+                }
+            }
+        }
+
+        /** پاک‌سازی کامل وضعیت پایش دقیق (مثلاً هنگام ثبت مجدد ژئوفنس‌ها). */
+        fun clearArmed() {
+            armed.clear()
+            preciseInside.clear()
+        }
+
+        /**
          * همگام‌سازی وضعیت سرویس با شرایط واقعی؛ امن برای فراخوانی از هر نخی.
-         * اگر پایش دقیق لازم باشد سرویس را روشن، وگرنه خاموش می‌کند.
+         * اگر پایش دقیق لازم باشد سرویس را روشن (تا درشت‌اولیه armed کند)،
+         * وگرنه خاموش می‌کند.
          */
         fun sync(context: Context) {
             syncScope.launch {

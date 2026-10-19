@@ -34,6 +34,11 @@ data class Zone(
     val scheduleEndMin: Int = 1439,
     /** URI صدای دلخواه انتخاب‌شده توسط کاربر؛ null یعنی صدای سیستمی انتخاب‌شده */
     val customSoundUri: String? = null,
+    /**
+     * فاصله بررسی دقیق به ثانیه، برای محدوده‌های با شعاع کمتر از ۲۰۰ متر.
+     * هر چند ثانیه یک بار فاصله واقعی گوشی تا مرکز محدوده حساب شود.
+     */
+    val checkIntervalSec: Int = 20,
     val updatedAt: Long = System.currentTimeMillis()
 ) {
     companion object {

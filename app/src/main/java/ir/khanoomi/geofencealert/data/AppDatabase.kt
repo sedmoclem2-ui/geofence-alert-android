@@ -24,7 +24,14 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
-@Database(entities = [Zone::class, EventLog::class], version = 3, exportSchema = false)
+/** مهاجرت ۳ به ۴: فاصله بررسی دقیق هر محدوده. */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `checkIntervalSec` INTEGER NOT NULL DEFAULT 20")
+    }
+}
+
+@Database(entities = [Zone::class, EventLog::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun zoneDao(): ZoneDao
     abstract fun eventDao(): EventDao

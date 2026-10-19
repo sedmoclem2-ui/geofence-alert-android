@@ -16,9 +16,12 @@ import kotlinx.coroutines.launch
 /**
  * دریافت رویدادهای ورود/خروج از Geofencing API و هدایت به [ZoneTransitionHandler].
  *
- * فقط برای محدوده‌های با شعاع ۲۰۰ متر یا بیشتر؛ محدوده‌های کوچک‌تر با
- * پایش دقیق ۲۰ ثانیه‌ای ([ProximityMonitorService]) کنترل می‌شوند و
- * رویدادهای سیستمی آن‌ها نادیده گرفته می‌شود.
+ * دو نوع رویداد داریم:
+ * - ژئوفنس عادی (محدوده‌های با شعاع ۲۰۰ متر یا بیشتر): ورود/خروج مستقیماً
+ *   به منطق هشدار ([ZoneTransitionHandler]) می‌رسد.
+ * - ژئوفنس «دروازه» (محدوده‌های کوچک‌تر): ورود به دروازه، پایش دقیق همان
+ *   محدوده را فعال و خروج از آن، پایش دقیق را متوقف می‌کند؛ خودِ دروازه
+ *   هرگز هشدار تولید نمی‌کند.
  *
  * - ثبت محدوده به‌تنهایی (بدون ورود جدید) هشدار تولید نمی‌کند.
  */
@@ -40,14 +43,27 @@ class GeofenceReceiver : BroadcastReceiver() {
         ) {
             return
         }
-        val ids = event.triggeringGeofences
-            ?.mapNotNull { GeofenceHelper.parseId(it.requestId) }
-            .orEmpty()
-        if (ids.isEmpty()) return
+        val triggering = event.triggeringGeofences.orEmpty()
+        val gateIds = triggering.mapNotNull { GeofenceHelper.parseGateId(it.requestId) }
+        val ids = triggering.mapNotNull { GeofenceHelper.parseId(it.requestId) }
+        if (gateIds.isEmpty() && ids.isEmpty()) return
 
         val pending = goAsync()
         scope.launch {
             try {
+                // دروازه‌ها: فعال/غیرفعال کردن پایش دقیق (بدون هشدار مستقیم)
+                for (gateId in gateIds) {
+                    when (transition) {
+                        Geofence.GEOFENCE_TRANSITION_ENTER -> {
+                            Log.i(TAG, "Gate ENTER for zone $gateId → arming precise monitoring")
+                            ProximityMonitorService.armZone(context, gateId, true)
+                        }
+                        Geofence.GEOFENCE_TRANSITION_EXIT -> {
+                            Log.i(TAG, "Gate EXIT for zone $gateId → disarming precise monitoring")
+                            ProximityMonitorService.armZone(context, gateId, false)
+                        }
+                    }
+                }
                 val app = context.applicationContext as GeofenceAlertApp
                 for (id in ids) {
                     val zone = try {

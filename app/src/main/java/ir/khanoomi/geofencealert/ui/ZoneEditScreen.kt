@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Notifications
@@ -82,6 +83,7 @@ import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.audio.AlertPlayer
 import ir.khanoomi.geofencealert.data.Zone
 import ir.khanoomi.geofencealert.domain.RadiusUnit
+import ir.khanoomi.geofencealert.domain.CheckInterval
 import ir.khanoomi.geofencealert.domain.ZoneValidator
 import ir.khanoomi.geofencealert.domain.toMeters
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
@@ -98,12 +100,15 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
     var name by mutableStateOf("")
     var latText by mutableStateOf("")
     var lngText by mutableStateOf("")
-    var radiusText by mutableStateOf("")
+    var radiusText by mutableStateOf("200")
     var unit by mutableStateOf(RadiusUnit.METER)
     var stopMode by mutableStateOf(Zone.STOP_AUTO)
     var soundKey by mutableStateOf(Zone.SOUND_ALARM)
     var customSoundUri by mutableStateOf<String?>(null)
     var isActive by mutableStateOf(true)
+    /** فاصله بررسی دقیق به‌صورت متنی (ثانیه یا دقیقه)؛ فقط برای شعاع < ۲۰۰ متر */
+    var checkIntervalText by mutableStateOf("20")
+    var checkIntervalIsMinutes by mutableStateOf(false)
     // زمان‌بندی: ۱=شنبه … ۷=جمعه
     var scheduleEnabled by mutableStateOf(false)
     var scheduleDays by mutableStateOf("1,2,3,4,5,6,7")
@@ -142,6 +147,14 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
                         scheduleStartMin = z.scheduleStartMin
                         scheduleEndMin = z.scheduleEndMin
                         isActive = z.isActive
+                        // نمایش فاصله بررسی ذخیره‌شده: دقیقه اگر مضرب ۶۰ و دست‌کم ۶۰ ثانیه
+                        if (z.checkIntervalSec >= 60 && z.checkIntervalSec % 60 == 0) {
+                            checkIntervalText = (z.checkIntervalSec / 60).toString()
+                            checkIntervalIsMinutes = true
+                        } else {
+                            checkIntervalText = z.checkIntervalSec.toString()
+                            checkIntervalIsMinutes = false
+                        }
                     }
                     loaded = true
                 }
@@ -332,6 +345,16 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
         val radius = ZoneValidator.parseDoubleFa(vm.radiusText)
         val validation = ZoneValidator.validate(vm.name, lat, lng, radius, vm.unit)
         val allErrors = validation.errors.toMutableList()
+        // فاصله بررسی دقیق فقط وقتی معنا دارد که شعاع کمتر از ۲۰۰ متر باشد
+        val radiusMetersForCheck = radius?.let { toMeters(it, vm.unit) }
+        val checkIntervalSec: Int =
+            if (radiusMetersForCheck != null && radiusMetersForCheck < 200.0) {
+                val sec = CheckInterval.toSeconds(vm.checkIntervalText, vm.checkIntervalIsMinutes)
+                CheckInterval.errorFa(sec)?.let { allErrors += it }
+                sec ?: 20
+            } else {
+                20
+            }
         saving = true
         scope.launch(Dispatchers.IO) {
             try {
@@ -360,6 +383,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             scheduleDays = vm.scheduleDays.ifBlank { "1,2,3,4,5,6,7" },
                             scheduleStartMin = vm.scheduleStartMin,
                             scheduleEndMin = vm.scheduleEndMin,
+                            checkIntervalSec = checkIntervalSec,
                             isAlerting = vm.existing?.isAlerting ?: false,
                             lastTriggeredAt = vm.existing?.lastTriggeredAt ?: 0,
                             updatedAt = System.currentTimeMillis()
@@ -530,7 +554,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         val lat = ZoneValidator.parseDoubleFa(vm.latText) ?: 0.0
                         val lng = ZoneValidator.parseDoubleFa(vm.lngText) ?: 0.0
                         val radiusM = ZoneValidator.parseDoubleFa(vm.radiusText)
-                            ?.let { toMeters(it, vm.unit) } ?: 300.0
+                            ?.let { toMeters(it, vm.unit) } ?: 200.0
                         navController.navigate("map_picker?lat=$lat&lng=$lng&radius=$radiusM")
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -599,6 +623,52 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         )
                         Text(
                             "دقت مکان‌یابی گوشی حدود ۱۰ تا ۲۰ متر است؛ شعاع کمتر از ۵۰ متر ممکن است دقیق عمل نکند.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            }
+
+            // فاصله بررسی دقیق: فقط برای شعاع‌های کمتر از ۲۰۰ متر
+            val radiusMetersNow =
+                ZoneValidator.parseDoubleFa(vm.radiusText)?.let { toMeters(it, vm.unit) }
+            if (radiusMetersNow != null && radiusMetersNow < 200.0) {
+                SectionCard(icon = Icons.Filled.Refresh, title = "فاصله بررسی دقیق") {
+                    Text(
+                        "چون شعاع کمتر از ۲۰۰ متر است، موقعیت شما با همین فاصله زمانی بررسی می‌شود.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = vm.checkIntervalText,
+                        onValueChange = { vm.checkIntervalText = it },
+                        label = { Text("هر چند وقت یک بار بررسی شود") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        SegmentedButton(
+                            selected = !vm.checkIntervalIsMinutes,
+                            onClick = { vm.checkIntervalIsMinutes = false },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                            label = { Text("ثانیه") }
+                        )
+                        SegmentedButton(
+                            selected = vm.checkIntervalIsMinutes,
+                            onClick = { vm.checkIntervalIsMinutes = true },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                            label = { Text("دقیقه") }
+                        )
+                    }
+                    val intervalError = CheckInterval.errorFa(
+                        CheckInterval.toSeconds(vm.checkIntervalText, vm.checkIntervalIsMinutes)
+                    )
+                    if (intervalError != null) {
+                        Text(
+                            intervalError,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
                         )

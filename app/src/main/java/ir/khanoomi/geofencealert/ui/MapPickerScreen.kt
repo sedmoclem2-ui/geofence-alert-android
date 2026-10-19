@@ -6,6 +6,7 @@ import android.os.Looper
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,20 +23,32 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import com.google.android.gms.tasks.Tasks
 import ir.khanoomi.geofencealert.domain.TimeFormat
+import ir.khanoomi.geofencealert.util.Permissions
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 /** پل ارتباطی جاوااسکریپت نقشه با کامپوز. */
 internal class MapBridge(private val onPick: (Double, Double) -> Unit) {
@@ -63,6 +76,9 @@ fun MapPickerScreen(
             else null
         )
     }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
     val bridge = remember {
         MapBridge { lat, lng -> selected = lat to lng }
     }
@@ -82,6 +98,52 @@ fun MapPickerScreen(
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
+                    }
+                },
+                actions = {
+                    TextButton(onClick = {
+                        if (!Permissions.hasAnyLocation(context)) {
+                            Toast.makeText(
+                                context,
+                                "برای این قابلیت مجوز مکان لازم است",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                            return@TextButton
+                        }
+                        scope.launch(Dispatchers.IO) {
+                            val loc = try {
+                                val client = LocationServices
+                                    .getFusedLocationProviderClient(context)
+                                Tasks.await(
+                                    client.getCurrentLocation(
+                                        Priority.PRIORITY_HIGH_ACCURACY,
+                                        CancellationTokenSource().token
+                                    ),
+                                    15,
+                                    TimeUnit.SECONDS
+                                )
+                            } catch (_: Exception) {
+                                null
+                            }
+                            withContext(Dispatchers.Main) {
+                                if (loc != null) {
+                                    val la = String.format(Locale.US, "%.6f", loc.latitude)
+                                    val ln = String.format(Locale.US, "%.6f", loc.longitude)
+                                    webViewRef?.evaluateJavascript(
+                                        "window.moveMap($la, $ln)",
+                                        null
+                                    )
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        "دریافت موقعیت ناموفق بود",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        }
+                    }) {
+                        Text("موقعیت فعلی", fontWeight = FontWeight.Bold)
                     }
                 }
             )
@@ -149,6 +211,7 @@ fun MapPickerScreen(
                     }
                     addJavascriptInterface(bridge, "Android")
                     loadUrl("file:///android_asset/map_picker.html")
+                    webViewRef = this
                 }
             }
         )

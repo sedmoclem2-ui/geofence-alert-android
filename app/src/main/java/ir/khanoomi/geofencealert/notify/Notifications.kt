@@ -56,7 +56,7 @@ object Notifications {
             "پایش دقیق محدوده",
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "پایش پیوسته محدوده‌های کوچک (هر ۲۰ ثانیه)"
+            description = "پایش دقیق محدوده‌های کوچک هنگام نزدیک شدن"
         }
         nm.createNotificationChannel(alert)
         nm.createNotificationChannel(status)
@@ -143,7 +143,7 @@ object Notifications {
         return NotificationCompat.Builder(context, PROXIMITY_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle("پایش دقیق محدوده فعال است")
-            .setContentText("بررسی موقعیت هر ۲۰ ثانیه")
+            .setContentText("فعال‌سازی هنگام نزدیک شدن به محدوده")
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(contentIntent)
