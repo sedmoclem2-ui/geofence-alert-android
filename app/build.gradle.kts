@@ -13,11 +13,28 @@ android {
         applicationId = "ir.khanoomi.geofencealert"
         minSdk = 26
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.6.0"
+        versionCode = 9
+        versionName = "1.6.1"
+    }
+
+    // امضای ثابت با کی‌استور ماندگار (GEOFENCE_DEBUG_KEYSTORE): دیباگ‌کی‌استور
+    // پیش‌فرض گریدل در ~/.android است که با تعویض VM پاک می‌شد و هر بیلد امضای
+    // متفاوتی می‌گرفت؛ در نتیجه نصب نسخه جدید روی نسخه قبلی ناممکن بود.
+    signingConfigs {
+        create("persistentDebug") {
+            val ksPath = System.getenv("GEOFENCE_DEBUG_KEYSTORE")
+                ?: "${System.getProperty("user.home")}/.android/debug.keystore"
+            storeFile = file(ksPath)
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("persistentDebug")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
