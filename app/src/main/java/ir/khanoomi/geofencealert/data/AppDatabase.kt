@@ -2,8 +2,19 @@ package ir.khanoomi.geofencealert.data
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [Zone::class], version = 1, exportSchema = false)
+/** مهاجرت ۱ به ۲: جدول تاریخچه رویدادها + ستون آخرین ورود در جدول محدوده‌ها. */
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS `events` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `zoneId` INTEGER NOT NULL, `zoneName` TEXT NOT NULL, `type` TEXT NOT NULL, `timestamp` INTEGER NOT NULL)")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `lastTriggeredAt` INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+@Database(entities = [Zone::class, EventLog::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun zoneDao(): ZoneDao
+    abstract fun eventDao(): EventDao
 }

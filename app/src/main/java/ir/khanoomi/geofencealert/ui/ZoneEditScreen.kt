@@ -271,6 +271,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             stopMode = vm.stopMode,
                             soundKey = vm.soundKey,
                             isAlerting = vm.existing?.isAlerting ?: false,
+                            lastTriggeredAt = vm.existing?.lastTriggeredAt ?: 0,
                             updatedAt = System.currentTimeMillis()
                         )
                         try {

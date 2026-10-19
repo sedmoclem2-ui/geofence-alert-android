@@ -1,19 +1,55 @@
 package ir.khanoomi.geofencealert.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import ir.khanoomi.geofencealert.GeofenceAlertApp
+import kotlinx.coroutines.launch
 
-/** ناوبری اصلی برنامه. */
+/** ناوبری اصلی برنامه؛ مقصد شروع به دیده‌شدن آموزش بستگی دارد. */
 @Composable
 fun AppNav() {
+    val context = LocalContext.current
+    val app = context.applicationContext as GeofenceAlertApp
+    val scope = rememberCoroutineScope()
     val navController = rememberNavController()
-    NavHost(navController = navController, startDestination = "home") {
+
+    val onboardingDone by app.prefs.onboardingDone
+        .collectAsStateWithLifecycle(initialValue = null)
+
+    // تا خوانده‌شدن تنظیمات، صفحه خالی تا پرش ناخواسته دیده نشود
+    if (onboardingDone == null) {
+        Box(Modifier.fillMaxSize())
+        return
+    }
+
+    NavHost(
+        navController = navController,
+        startDestination = if (onboardingDone == true) "home" else "onboarding"
+    ) {
+        composable("onboarding") {
+            OnboardingScreen(onFinish = {
+                scope.launch { app.prefs.setOnboardingDone(true) }
+                navController.navigate("home") {
+                    popUpTo("onboarding") { inclusive = true }
+                }
+            })
+        }
         composable("home") {
             HomeScreen(navController = navController)
+        }
+        composable("history") {
+            HistoryScreen(navController = navController)
         }
         composable(
             route = "edit?zoneId={zoneId}",

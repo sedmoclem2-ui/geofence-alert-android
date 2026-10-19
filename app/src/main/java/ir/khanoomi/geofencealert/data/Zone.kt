@@ -22,6 +22,8 @@ data class Zone(
     val soundKey: String = SOUND_ALARM,
     /** آیا هم‌اکنون هشدار این محدوده در حال پخش است */
     val isAlerting: Boolean = false,
+    /** زمان آخرین ورود ثبت‌شده به این محدوده (میلی‌ثانیه)؛ صفر یعنی هنوز ورود نشده */
+    val lastTriggeredAt: Long = 0,
     val updatedAt: Long = System.currentTimeMillis()
 ) {
     companion object {

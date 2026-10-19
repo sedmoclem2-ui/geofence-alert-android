@@ -8,6 +8,7 @@ import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingEvent
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.alert.AlertController
+import ir.khanoomi.geofencealert.data.EventLog
 import ir.khanoomi.geofencealert.domain.AlertDecider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -55,6 +56,23 @@ class GeofenceReceiver : BroadcastReceiver() {
                         Log.e(TAG, "getById failed for $id", e)
                         null
                     } ?: continue
+                    // ثبت رویداد در تاریخچه — برای هر ورود/خروج معتبر، حتی اگر هشدار
+                    // به‌خاطر تکراری بودن شروع نشود.
+                    if (zone.isActive) {
+                        try {
+                            val type = if (transition == Geofence.GEOFENCE_TRANSITION_ENTER)
+                                EventLog.TYPE_ENTER else EventLog.TYPE_EXIT
+                            app.db.eventDao().insert(
+                                EventLog(zoneId = id, zoneName = zone.name, type = type)
+                            )
+                            app.db.eventDao().trim()
+                            if (transition == Geofence.GEOFENCE_TRANSITION_ENTER) {
+                                app.zoneRepo.updateLastTriggered(id, System.currentTimeMillis())
+                            }
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Event log failed for zone $id", e)
+                        }
+                    }
                     when (transition) {
                         Geofence.GEOFENCE_TRANSITION_ENTER -> {
                             if (AlertDecider.shouldStartAlert(zone, zone.isAlerting)) {

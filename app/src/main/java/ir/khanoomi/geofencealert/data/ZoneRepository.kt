@@ -17,5 +17,7 @@ class ZoneRepository(private val dao: ZoneDao) {
 
     suspend fun setAlerting(id: Long, alerting: Boolean) = dao.setAlerting(id, alerting)
 
+    suspend fun updateLastTriggered(id: Long, ts: Long) = dao.updateLastTriggered(id, ts)
+
     suspend fun countActive(): Int = dao.countActive()
 }

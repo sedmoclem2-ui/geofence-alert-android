@@ -25,4 +25,15 @@ class PrefsRepository(private val context: Context) {
     suspend fun setMonitoringEnabled(enabled: Boolean) {
         context.prefsDataStore.edit { prefs -> prefs[KEY_MONITORING] = enabled }
     }
+
+    private val KEY_ONBOARDING = booleanPreferencesKey("onboarding_done")
+
+    /** آیا آموزش شروع به کار دیده شده است (پیش‌فرض: نه). */
+    val onboardingDone: Flow<Boolean> = context.prefsDataStore.data
+        .map { prefs -> prefs[KEY_ONBOARDING] ?: false }
+        .catch { emit(false) }
+
+    suspend fun setOnboardingDone(done: Boolean) {
+        context.prefsDataStore.edit { prefs -> prefs[KEY_ONBOARDING] = done }
+    }
 }

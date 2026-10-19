@@ -32,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -79,6 +80,7 @@ import androidx.navigation.NavController
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.alert.AlertController
 import ir.khanoomi.geofencealert.data.Zone
+import ir.khanoomi.geofencealert.domain.TimeFormat
 import ir.khanoomi.geofencealert.domain.formatRadiusFa
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.ui.theme.RedDeep
@@ -198,6 +200,9 @@ fun HomeScreen(navController: NavController) {
             TopAppBar(
                 title = { Text("هشدار محدوده", fontWeight = FontWeight.Bold) },
                 actions = {
+                    IconButton(onClick = { navController.navigate("history") }) {
+                        Icon(Icons.Filled.List, contentDescription = "تاریخچه")
+                    }
                     IconButton(onClick = { navController.navigate("settings") }) {
                         Icon(Icons.Default.Settings, contentDescription = "تنظیمات")
                     }
@@ -588,6 +593,13 @@ private fun ZoneCard(
                         )
                     }
                     StatusPill(zone = zone)
+                    if (zone.lastTriggeredAt > 0) {
+                        Text(
+                            "آخرین ورود: ${TimeFormat.formatRelativeTimeFa(zone.lastTriggeredAt)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant
+                        )
+                    }
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Switch(checked = zone.isActive, onCheckedChange = { onToggleActive() })

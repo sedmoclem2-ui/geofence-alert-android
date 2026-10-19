@@ -3,6 +3,7 @@ package ir.khanoomi.geofencealert
 import android.app.Application
 import androidx.room.Room
 import ir.khanoomi.geofencealert.data.AppDatabase
+import ir.khanoomi.geofencealert.data.MIGRATION_1_2
 import ir.khanoomi.geofencealert.data.PrefsRepository
 import ir.khanoomi.geofencealert.data.ZoneRepository
 import ir.khanoomi.geofencealert.notify.Notifications
@@ -15,7 +16,9 @@ class GeofenceAlertApp : Application() {
     }
 
     val db: AppDatabase by lazy {
-        Room.databaseBuilder(this, AppDatabase::class.java, "geofence_alert.db").build()
+        Room.databaseBuilder(this, AppDatabase::class.java, "geofence_alert.db")
+            .addMigrations(MIGRATION_1_2)
+            .build()
     }
 
     val zoneRepo: ZoneRepository by lazy { ZoneRepository(db.zoneDao()) }
