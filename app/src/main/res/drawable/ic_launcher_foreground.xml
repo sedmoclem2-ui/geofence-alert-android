@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Location pin with bell, white on transparent (background color comes from adaptive icon) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,14c-14.36,0 -26,11.64 -26,26c0,20.64 26,52 26,52s26,-31.36 26,-52c0,-14.36 -11.64,-26 -26,-26zM54,51.5c-6.35,0 -11.5,-5.15 -11.5,-11.5S47.65,28.5 54,28.5S65.5,33.65 65.5,40S60.35,51.5 54,51.5z" />
+</vector>
