@@ -19,5 +19,8 @@ class ZoneRepository(private val dao: ZoneDao) {
 
     suspend fun updateLastTriggered(id: Long, ts: Long) = dao.updateLastTriggered(id, ts)
 
+    suspend fun setAcknowledged(id: Long, v: Boolean) = dao.setAcknowledged(id, v)
+    suspend fun setActive(id: Long, v: Boolean) = dao.setActive(id, v)
+
     suspend fun countActive(): Int = dao.countActive()
 }

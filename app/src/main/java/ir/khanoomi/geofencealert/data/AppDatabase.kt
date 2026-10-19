@@ -31,7 +31,20 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
-@Database(entities = [Zone::class, EventLog::class], version = 4, exportSchema = false)
+/** مهاجرت ۴ به ۵: رفتار پس از خروج و تأیید دستی هشدار. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `alertAcknowledged` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `exitBehavior` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `postExitCount` INTEGER NOT NULL DEFAULT 3")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `postExitDurationSec` INTEGER NOT NULL DEFAULT 10")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `postExitGapSec` INTEGER NOT NULL DEFAULT 30")
+        // نگاشت سیاست قدیمی: توقف خودکار → توقف فوری (0)، توقف دستی → ادامه تا توقف دستی (2)
+        db.execSQL("UPDATE `zones` SET `exitBehavior` = CASE WHEN `stopMode` = 'MANUAL' THEN 2 ELSE 0 END")
+    }
+}
+
+@Database(entities = [Zone::class, EventLog::class], version = 5, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun zoneDao(): ZoneDao
     abstract fun eventDao(): EventDao

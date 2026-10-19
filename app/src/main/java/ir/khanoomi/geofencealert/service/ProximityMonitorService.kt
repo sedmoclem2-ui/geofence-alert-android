@@ -9,6 +9,7 @@ import android.content.pm.ServiceInfo
 import android.location.Location
 import android.os.IBinder
 import android.util.Log
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
@@ -20,6 +21,7 @@ import ir.khanoomi.geofencealert.data.Zone
 import ir.khanoomi.geofencealert.domain.GeoMath
 import ir.khanoomi.geofencealert.geofence.ZoneTransitionHandler
 import ir.khanoomi.geofencealert.notify.Notifications
+import ir.khanoomi.geofencealert.util.Permissions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,6 +33,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlin.math.max
 
 /**
  * سرویس پیش‌زمینه پایش دقیق محدوده‌های کوچک.
@@ -51,6 +54,7 @@ class ProximityMonitorService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var loopJob: Job? = null
+    private var tickerJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -160,6 +164,47 @@ class ProximityMonitorService : Service() {
                 delay(nextDelay)
             }
         }
+        ensureTickerRunning()
+    }
+
+    /**
+     * ثانیه‌شمار اعلان: هر ثانیه، نزدیک‌ترین موعد بررسی بعدی و نام محدوده‌اش
+     * روی اعلان پیش‌زمینه به‌روز می‌شود (دایره قرمز شمارش معکوس).
+     */
+    private fun ensureTickerRunning() {
+        if (tickerJob?.isActive == true) return
+        tickerJob = scope.launch {
+            val nm = NotificationManagerCompat.from(this@ProximityMonitorService)
+            while (isActive) {
+                try {
+                    if (armed.isEmpty()) break
+                    val now = System.currentTimeMillis()
+                    val next = armed.minByOrNull { it.value }
+                    if (next != null) {
+                        val remaining = max(0, ((next.value - now) / 1000).toInt())
+                        val app = applicationContext as GeofenceAlertApp
+                        val name = try {
+                            app.zoneRepo.getById(next.key)?.name
+                        } catch (_: Exception) {
+                            null
+                        }
+                        if (Permissions.hasNotifications(this@ProximityMonitorService)) {
+                            nm.notify(
+                                FOREGROUND_NOTIFICATION_ID,
+                                Notifications.proximityNotification(
+                                    this@ProximityMonitorService,
+                                    name ?: "محدوده",
+                                    remaining
+                                )
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "ticker failed", e)
+                }
+                delay(1000)
+            }
+        }
     }
 
     /**
@@ -234,6 +279,7 @@ class ProximityMonitorService : Service() {
 
     override fun onDestroy() {
         loopJob?.cancel()
+        tickerJob?.cancel()
         scope.cancel()
         Log.i(TAG, "ProximityMonitorService destroyed")
         super.onDestroy()
@@ -270,6 +316,10 @@ class ProximityMonitorService : Service() {
         fun armZone(context: Context, zoneId: Long, arm: Boolean) {
             if (arm) {
                 armed[zoneId] = System.currentTimeMillis() // بررسی فوری در دور بعد
+                // ورود تازه به دروازه یعنی عبور از مرز ۲۰۰ متری به داخل؛ پس در
+                // لحظه ورود، بیرونِ شعاع دقیق هستیم (شعاع < ۲۰۰ متر). مقداردهی
+                // false باعث می‌شود اولین تیکِ داخلِ شعاع، ورودِ تازه حساب شود.
+                preciseInside[zoneId] = false
                 try {
                     ContextCompat.startForegroundService(
                         context,

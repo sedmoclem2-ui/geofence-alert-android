@@ -7,9 +7,12 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.view.View
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import ir.khanoomi.geofencealert.MainActivity
 import ir.khanoomi.geofencealert.R
+import ir.khanoomi.geofencealert.domain.TimeFormat
 import ir.khanoomi.geofencealert.receiver.StopAlertReceiver
 import ir.khanoomi.geofencealert.service.AlertService
 import ir.khanoomi.geofencealert.util.Permissions
@@ -132,18 +135,39 @@ object Notifications {
         manager(context).cancel(STATUS_NOTIFICATION_ID)
     }
 
-    /** اعلان دائمی سرویس پیش‌زمینه پایش دقیق محدوده‌های کوچک. */
-    fun proximityNotification(context: Context): Notification {
+    /**
+     * اعلان دائمی سرویس پیش‌زمینه پایش دقیق محدوده‌های کوچک.
+     * اگر [zoneName] داده شود، نمای سفارشی با نام محدوده و ثانیه‌شمار
+     * دایره‌ای قرمزِ شمارش معکوس تا بررسی بعدی نمایش داده می‌شود؛
+     * در غیر این صورت نمای ساده بدون ثانیه‌شمار.
+     */
+    fun proximityNotification(
+        context: Context,
+        zoneName: String? = null,
+        countdownSec: Int? = null
+    ): Notification {
         val contentIntent = PendingIntent.getActivity(
             context,
             0,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val views = RemoteViews(context.packageName, R.layout.notification_proximity)
+        if (zoneName != null) {
+            views.setTextViewText(R.id.tv_prox_zone, zoneName)
+            views.setViewVisibility(R.id.tv_prox_countdown, View.VISIBLE)
+            views.setTextViewText(
+                R.id.tv_prox_countdown,
+                TimeFormat.toFaDigits((countdownSec ?: 0).toString())
+            )
+        } else {
+            views.setTextViewText(R.id.tv_prox_zone, "نزدیک شدن به محدوده‌های کوچک")
+            views.setViewVisibility(R.id.tv_prox_countdown, View.GONE)
+        }
         return NotificationCompat.Builder(context, PROXIMITY_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("پایش دقیق محدوده فعال است")
-            .setContentText("فعال‌سازی هنگام نزدیک شدن به محدوده")
+            .setCustomContentView(views)
+            .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setContentIntent(contentIntent)

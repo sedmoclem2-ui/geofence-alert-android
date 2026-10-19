@@ -9,11 +9,17 @@ import ir.khanoomi.geofencealert.audio.AlertPlayer
 import ir.khanoomi.geofencealert.data.Zone
 import ir.khanoomi.geofencealert.notify.Notifications
 import ir.khanoomi.geofencealert.service.AlertService
+import ir.khanoomi.geofencealert.widget.SingleZoneWidgetProvider
 import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * نقطه واحد شروع/توقف هشدارها.
@@ -29,6 +35,9 @@ import kotlinx.coroutines.launch
 object AlertController {
     private const val TAG = "AlertController"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** جاب‌های الگوی تکراری پس از خروج، یکی برای هر محدوده. */
+    private val sequenceJobs = ConcurrentHashMap<Long, Job>()
 
     /**
      * شروع هشدار برای یک محدوده (پس از رویداد ورود معتبر).
@@ -61,14 +70,24 @@ object AlertController {
         }
     }
 
-    /** توقف هشدار یک محدوده؛ محدوده فعال می‌ماند و برای ورود بعدی آماده است. */
-    fun stopAlert(context: Context, zoneId: Long) {
+    /**
+     * توقف هشدار یک محدوده؛ محدوده فعال می‌ماند و برای ورود بعدی آماده است.
+     * اگر [manual] درست باشد (توقف توسط کاربر)، هشدارِ «این سفر» تأییدشده
+     * ثبت می‌شود تا تا ورود تازه بعدی تکرار نشود؛ همچنین هر الگوی تکراری
+     * در حال اجرای همان محدوده لغو می‌گردد و آلارم‌های بعدی به صدا درنمی‌آید.
+     */
+    fun stopAlert(context: Context, zoneId: Long, manual: Boolean) {
+        // لغو الگوی تکراری پس از خروج (اگر در حال اجراست)
+        sequenceJobs.remove(zoneId)?.cancel()
         AlertPlayer.stop(zoneId)
         Notifications.cancelAlert(context, zoneId)
         refreshWidget(context)
         val app = context.applicationContext as GeofenceAlertApp
         scope.launch {
             try {
+                if (manual) {
+                    app.zoneRepo.setAcknowledged(zoneId, true)
+                }
                 app.zoneRepo.setAlerting(zoneId, false)
             } catch (e: Exception) {
                 Log.e(TAG, "setAlerting(false) failed for $zoneId", e)
@@ -87,7 +106,9 @@ object AlertController {
     }
 
     /** توقف همه هشدارهای فعال (دکمه ویجت). */
-    fun stopAllAlerts(context: Context) {
+    fun stopAllAlerts(context: Context, manual: Boolean) {
+        // لغو همه الگوهای تکراری در حال اجرا
+        sequenceJobs.keys.toList().forEach { sequenceJobs.remove(it)?.cancel() }
         AlertPlayer.stopAll()
         val app = context.applicationContext as GeofenceAlertApp
         scope.launch {
@@ -96,6 +117,9 @@ object AlertController {
                     .filter { it.isAlerting }
                     .forEach {
                         Notifications.cancelAlert(context, it.id)
+                        if (manual) {
+                            app.zoneRepo.setAcknowledged(it.id, true)
+                        }
                         app.zoneRepo.setAlerting(it.id, false)
                     }
             } catch (e: Exception) {
@@ -105,12 +129,69 @@ object AlertController {
         refreshWidget(context)
     }
 
-    /** به‌روزرسانی ویجت؛ خطا نادیده گرفته می‌شود تا هشدار مختل نشود. */
+    /**
+     * شروع «الگوی تکراری پس از خروج» برای یک محدوده:
+     * [Zone.postExitCount] بار، هر بار [Zone.postExitDurationSec] ثانیه پخش
+     * حلقه‌ای و سپس [Zone.postExitGapSec] ثانیه مکث. توقف دستی در هر لحظه،
+     * ادامه الگو را لغو می‌کند ([stopAlert] با manual=true).
+     */
+    fun startPostExitSequence(context: Context, zone: Zone) {
+        sequenceJobs.remove(zone.id)?.cancel()
+        val appContext = context.applicationContext
+        sequenceJobs[zone.id] = scope.launch {
+            try {
+                val app = appContext as GeofenceAlertApp
+                val count = zone.postExitCount.coerceIn(1, 20)
+                val durationMs = zone.postExitDurationSec.coerceIn(3, 120) * 1000L
+                val gapMs = zone.postExitGapSec.coerceIn(0, 600) * 1000L
+                try {
+                    app.zoneRepo.setAlerting(zone.id, true)
+                } catch (e: Exception) {
+                    Log.e(TAG, "setAlerting(true) failed for ${zone.id}", e)
+                }
+                refreshWidget(appContext)
+                Notifications.notifyAlert(appContext, zone.id, zone.name)
+                repeat(count) { i ->
+                    ensureActive()
+                    AlertPlayer.play(appContext, zone.id, zone.soundKey, zone.customSoundUri)
+                    delay(durationMs)
+                    AlertPlayer.stop(zone.id)
+                    if (i < count - 1) {
+                        ensureActive()
+                        delay(gapMs)
+                    }
+                }
+                Log.i(TAG, "Post-exit sequence completed for zone ${zone.id}")
+            } catch (e: CancellationException) {
+                Log.i(TAG, "Post-exit sequence cancelled for zone ${zone.id}")
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Post-exit sequence failed for zone ${zone.id}", e)
+            } finally {
+                try {
+                    AlertPlayer.stop(zone.id)
+                    Notifications.cancelAlert(appContext, zone.id)
+                    val app = appContext as GeofenceAlertApp
+                    app.zoneRepo.setAlerting(zone.id, false)
+                } catch (_: Exception) {
+                }
+                sequenceJobs.remove(zone.id)
+                refreshWidget(appContext)
+            }
+        }
+    }
+
+    /** به‌روزرسانی ویجت‌ها؛ خطا نادیده گرفته می‌شود تا هشدار مختل نشود. */
     private fun refreshWidget(context: Context) {
         try {
             ZoneWidgetProvider.updateAll(context)
         } catch (e: Exception) {
             Log.w(TAG, "Widget refresh failed", e)
+        }
+        try {
+            SingleZoneWidgetProvider.updateAll(context)
+        } catch (e: Exception) {
+            Log.w(TAG, "Single-zone widget refresh failed", e)
         }
     }
 }

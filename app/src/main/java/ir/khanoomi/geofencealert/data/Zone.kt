@@ -16,7 +16,8 @@ data class Zone(
     /** شعاع محدوده به متر */
     val radiusMeters: Double,
     val isActive: Boolean = true,
-    /** شیوه توقف هشدار: [STOP_AUTO] یا [STOP_MANUAL] */
+    /** شیوه توقف هشدار: [STOP_AUTO] یا [STOP_MANUAL]
+     * @deprecated با [exitBehavior] جایگزین شده؛ فقط برای سازگاری داده قدیمی نگه داشته شده است. */
     val stopMode: String = STOP_AUTO,
     /** کلید صدای هشدار: [SOUND_ALARM]، [SOUND_RINGTONE] یا [SOUND_NOTIFICATION] */
     val soundKey: String = SOUND_ALARM,
@@ -39,11 +40,32 @@ data class Zone(
      * هر چند ثانیه یک بار فاصله واقعی گوشی تا مرکز محدوده حساب شود.
      */
     val checkIntervalSec: Int = 20,
+    /**
+     * کاربر هشدارِ «این سفر» را دستی متوقف کرده است؛ تا ورود تازه بعدی
+     * (سفر جدید) هشدار این محدوده تکرار نمی‌شود.
+     */
+    val alertAcknowledged: Boolean = false,
+    /**
+     * رفتار پس از خروج از محدوده: [EXIT_STOP] توقف فوری،
+     * [EXIT_SEQUENCE] الگوی تکراری، [EXIT_CONTINUE] ادامه تا توقف دستی.
+     */
+    val exitBehavior: Int = EXIT_STOP,
+    /** تعداد دفعات آلارم در الگوی تکراری پس از خروج */
+    val postExitCount: Int = 3,
+    /** مدت هر آلارم در الگوی تکراری پس از خروج، به ثانیه */
+    val postExitDurationSec: Int = 10,
+    /** مکث بین آلارم‌ها در الگوی تکراری پس از خروج، به ثانیه */
+    val postExitGapSec: Int = 30,
     val updatedAt: Long = System.currentTimeMillis()
 ) {
     companion object {
         const val STOP_AUTO = "AUTO"
         const val STOP_MANUAL = "MANUAL"
+
+        /** رفتارهای پس از خروج از محدوده (جایگزین [stopMode]). */
+        const val EXIT_STOP = 0
+        const val EXIT_SEQUENCE = 1
+        const val EXIT_CONTINUE = 2
 
         const val SOUND_ALARM = "alarm"
         const val SOUND_RINGTONE = "ringtone"

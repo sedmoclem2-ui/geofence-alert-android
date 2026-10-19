@@ -1,8 +1,11 @@
 package ir.khanoomi.geofencealert.ui
 
+import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.location.LocationManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
@@ -88,6 +91,7 @@ import ir.khanoomi.geofencealert.ui.theme.RedDeep
 import ir.khanoomi.geofencealert.ui.theme.TealOnContainer
 import ir.khanoomi.geofencealert.ui.theme.TealPrimary
 import ir.khanoomi.geofencealert.util.Permissions
+import ir.khanoomi.geofencealert.util.promptEnableGpsIfNeeded
 import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
@@ -141,7 +145,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch(Dispatchers.IO) {
             // B1: اگر هنگام خاموش کردن محدوده، هشدارش فعال است، اول صدا را قطع کن.
             if (zone.isAlerting) {
-                AlertController.stopAlert(getApplication(), zone.id)
+                AlertController.stopAlert(getApplication(), zone.id, manual = true)
             }
             repo.upsert(
                 zone.copy(
@@ -155,7 +159,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun deleteZone(zone: Zone) {
         viewModelScope.launch(Dispatchers.IO) {
-            if (zone.isAlerting) AlertController.stopAlert(getApplication(), zone.id)
+            if (zone.isAlerting) AlertController.stopAlert(getApplication(), zone.id, manual = true)
             repo.delete(zone)
             GeofenceHelper.refreshRegistrations(getApplication())
         }
@@ -170,7 +174,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun stopAlert(zoneId: Long) {
-        AlertController.stopAlert(getApplication(), zoneId)
+        AlertController.stopAlert(getApplication(), zoneId, manual = true)
     }
 }
 
@@ -190,6 +194,11 @@ fun HomeScreen(navController: NavController) {
     var permBackground by remember { mutableStateOf(false) }
     var permNotif by remember { mutableStateOf(false) }
     var zoneToDelete by remember { mutableStateOf<Zone?>(null) }
+
+    // لانچر دیالوگ سیستمی روشن کردن GPS (هنگام فعال‌سازی پایش)
+    val gpsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { }
 
     fun refreshStatus() {
         val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -254,7 +263,16 @@ fun HomeScreen(navController: NavController) {
                     permLocation = permLocation,
                     permBackground = permBackground,
                     permNotif = permNotif,
-                    onMonitoringChange = vm::setMonitoring,
+                    // روشن شدن پایش → دیالوگ سیستمی روشن کردن GPS؛
+                    // خاموش شدن پایش هیچ کاری با GPS نمی‌کند.
+                    onMonitoringChange = { enabled ->
+                        vm.setMonitoring(enabled)
+                        if (enabled) {
+                            (context as? Activity)?.let { activity ->
+                                promptEnableGpsIfNeeded(activity, gpsLauncher)
+                            }
+                        }
+                    },
                     onOpenSettings = { navController.navigate("settings") }
                 )
             }
@@ -609,7 +627,11 @@ private fun ZoneCard(
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         TonalChip(formatRadiusFa(zone.radiusMeters))
                         TonalChip(
-                            if (zone.stopMode == Zone.STOP_AUTO) "توقف خودکار" else "توقف دستی"
+                            when (zone.exitBehavior) {
+                                Zone.EXIT_SEQUENCE -> "الگوی تکراری"
+                                Zone.EXIT_CONTINUE -> "تا توقف دستی"
+                                else -> "توقف فوری"
+                            }
                         )
                     }
                     StatusPill(zone = zone)

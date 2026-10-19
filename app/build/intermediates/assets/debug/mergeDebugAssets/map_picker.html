@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>انتخاب محدوده روی نقشه</title>
+<link rel="stylesheet" href="leaflet/leaflet.css">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  #map { width: 100%; height: 100%; min-height: 100%; background: #e5e3df; }
+  .hint {
+    position: absolute; top: 10px; right: 10px; left: 10px; z-index: 1000;
+    background: rgba(14, 107, 92, 0.92); color: #fff;
+    font-family: sans-serif; font-size: 13px; text-align: center;
+    padding: 8px 12px; border-radius: 12px; pointer-events: none;
+  }
+  .tile-error {
+    position: absolute; bottom: 14px; right: 10px; left: 10px; z-index: 1000;
+    background: rgba(178, 60, 60, 0.94); color: #fff;
+    font-family: sans-serif; font-size: 12px; text-align: center;
+    padding: 8px 12px; border-radius: 12px; pointer-events: none;
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="hint">نقطه موردنظر را روی نقشه لمس کنید</div>
+<div class="tile-error" id="tileError">بارگذاری تصویر نقشه ناموفق بود؛ اتصال اینترنت را بررسی کنید</div>
+<script src="leaflet/leaflet.js"></script>
+<script>
+(function () {
+  // نقطه پیش‌فرض: تهران (اگر مختصات معتبر داده نشود)
+  var FALLBACK_LAT = 35.6892;
+  var FALLBACK_LNG = 51.3890;
+
+  function validLat(v) { return typeof v === 'number' && isFinite(v) && v >= -90 && v <= 90 && v !== 0; }
+  function validLng(v) { return typeof v === 'number' && isFinite(v) && v >= -180 && v <= 180 && v !== 0; }
+
+  var TILE_SOURCES = [
+    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+    'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'
+  ];
+
+  /**
+   * ساخت نقشه — فقط یک بار اجرا می‌شود. از طریق evaluateJavascript صدا زده می‌شود،
+   * چون خواندن query-string از روی file:///android_asset در WebView قابل اعتماد نیست.
+   */
+  window.initMap = function (lat, lng, radius, zoom) {
+    if (window.__map) return;
+    if (!validLat(lat)) lat = FALLBACK_LAT;
+    if (!validLng(lng)) lng = FALLBACK_LNG;
+    if (!(radius > 0)) radius = 300;
+    zoom = zoom || 15;
+
+    var map = L.map('map', { zoomControl: true }).setView([lat, lng], zoom);
+    window.__map = map;
+
+    var tileIndex = 0;
+    var tileErrors = 0;
+    var tileLayer = null;
+
+    function addTiles() {
+      tileLayer = L.tileLayer(TILE_SOURCES[tileIndex], {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+      });
+      tileLayer.on('tileerror', function () {
+        tileErrors++;
+        if (tileErrors >= 6 && tileIndex < TILE_SOURCES.length - 1) {
+          tileIndex++;
+          tileErrors = 0;
+          map.removeLayer(tileLayer);
+          addTiles();
+        } else if (tileErrors >= 6) {
+          document.getElementById('tileError').style.display = 'block';
+        }
+      });
+      tileLayer.addTo(map);
+    }
+    addTiles();
+
+    var marker = L.circleMarker([lat, lng], {
+      radius: 8, color: '#0E6B5C', weight: 3, fillColor: '#0E6B5C', fillOpacity: 1
+    }).addTo(map);
+    var circle = L.circle([lat, lng], {
+      radius: radius, color: '#0E6B5C', weight: 2, fillColor: '#0E6B5C', fillOpacity: 0.15
+    }).addTo(map);
+    // دایره آبی شاخص ۲۰۰ متر: مرز شروع پایش دقیق برای شعاع‌های کوچک
+    var gateCircle = L.circle([lat, lng], {
+      radius: 200, color: '#3B82F6', weight: 2, fillColor: '#3B82F6', fillOpacity: 0.08
+    }).addTo(map);
+
+    function selectPoint(p) {
+      marker.setLatLng(p);
+      circle.setLatLng(p);
+      gateCircle.setLatLng(p);
+      if (window.Android && window.Android.onLocationSelected) {
+        window.Android.onLocationSelected(p.lat, p.lng);
+      }
+    }
+
+    /** جابه‌جایی نمایش نقشه به یک نقطه (مثلاً موقعیت فعلی کاربر). */
+    window.moveMap = function (mLat, mLng) {
+      if (window.__map && typeof mLat === 'number' && typeof mLng === 'number' &&
+          isFinite(mLat) && isFinite(mLng)) {
+        window.__map.setView([mLat, mLng], 16);
+      }
+    };
+
+    map.on('click', function (e) { selectPoint(e.latlng); });
+    // گزارش نقطه اولیه هم تا دکمه تأیید همیشه مقدار داشته باشد
+    selectPoint(L.latLng(lat, lng));
+
+    // در برخی WebViewها ارتفاع کانتینر نقشه صفر محاسبه می‌شود؛ اصلاح اجباری
+    function ensureSize() {
+      var el = document.getElementById('map');
+      if (el && el.clientHeight === 0) {
+        el.style.height = window.innerHeight + 'px';
+      }
+      map.invalidateSize();
+    }
+    setTimeout(ensureSize, 250);
+    setTimeout(ensureSize, 1000);
+    setTimeout(ensureSize, 2500);
+  };
+})();
+</script>
+</body>
+</html>

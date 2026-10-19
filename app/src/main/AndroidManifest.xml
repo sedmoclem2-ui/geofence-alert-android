@@ -90,6 +90,28 @@
                 android:resource="@xml/widget_info" />
         </receiver>
 
+        <!-- ویجت تک‌محدوده: هر نمونه به یک محدوده متصل می‌شود -->
+        <receiver
+            android:name=".widget.SingleZoneWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/single_zone_widget_info" />
+        </receiver>
+
+        <!-- صفحه انتخاب محدوده برای ویجت تک‌محدوده -->
+        <activity
+            android:name=".widget.ZoneWidgetConfigureActivity"
+            android:exported="true"
+            android:theme="@style/Theme.GeofenceAlert">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <!-- کاشی تنظیمات سریع: فعال/غیرفعال کردن پایش از سایه اعلان -->
         <service
             android:name=".tile.MonitorTileService"

@@ -19,12 +19,19 @@ object ZoneTransitionHandler {
     private const val TAG = "ZoneTransitionHandler"
 
     /**
-     * منطق ورود: ثبت رویداد در تاریخچه، به‌روزرسانی زمان آخرین ورود،
+     * منطق ورود: سفر تازه — تأیید دستی قبلی پاک می‌شود تا هشدار مثل اولین بار
+     * پخش شود؛ سپس ثبت رویداد در تاریخچه، به‌روزرسانی زمان آخرین ورود،
      * گیت زمان‌بندی، ساعات سکوت، و شروع هشدار.
      */
     suspend fun onEnter(context: Context, zone: Zone) {
         val app = context.applicationContext as GeofenceAlertApp
         val id = zone.id
+        // سفر جدید: هشدارِ دستیِ متوقف‌شده قبلی فراموش می‌شود.
+        try {
+            app.zoneRepo.setAcknowledged(id, false)
+        } catch (e: Exception) {
+            Log.e(TAG, "setAcknowledged(false) failed for zone $id", e)
+        }
         // ثبت رویداد در تاریخچه — حتی اگر هشدار به‌خاطر تکراری بودن شروع نشود.
         if (zone.isActive) {
             try {
@@ -76,8 +83,12 @@ object ZoneTransitionHandler {
     }
 
     /**
-     * منطق خروج: ثبت رویداد در تاریخچه و توقف هشدار
-     * در صورت سیاست «توقف خودکار با خروج».
+     * منطق خروج: ثبت رویداد در تاریخچه، سپس رفتارِ پس از خروجِ همان محدوده:
+     * - اگر کاربر هشدارِ این سفر را دستی متوقف کرده بود (تأییدشده)، فقط صدا
+     *   قطع می‌شود و هیچ آلارم پس از خروجی پخش نمی‌گردد.
+     * - توقف فوری: قطع هشدار.
+     * - الگوی تکراری: قطع صدای داخل محدوده و شروع الگوی پس از خروج.
+     * - ادامه تا توقف دستی: هیچ کاری (هشدار حلقه‌ای ادامه می‌یابد).
      */
     suspend fun onExit(context: Context, zone: Zone) {
         val app = context.applicationContext as GeofenceAlertApp
@@ -92,13 +103,31 @@ object ZoneTransitionHandler {
                 Log.e(TAG, "Event log failed for zone $id", e)
             }
         }
-        if (AlertDecider.shouldStopOnExit(zone, zone.isAlerting)) {
-            AlertController.stopAlert(context, id)
-        } else {
-            Log.i(
-                TAG,
-                "EXIT ignored for zone $id (mode=${zone.stopMode}, alerting=${zone.isAlerting})"
-            )
+        // وضعیت تازه از دیتابیس؛ ممکن است پس از بارگذاری شیء zone تغییر کرده باشد.
+        val fresh = try {
+            app.zoneRepo.getById(id)
+        } catch (e: Exception) {
+            Log.e(TAG, "getById failed for $id", e)
+            null
+        } ?: zone
+        if (fresh.alertAcknowledged) {
+            Log.i(TAG, "EXIT for zone $id: acknowledged by user, stopping silently")
+            AlertController.stopAlert(context, id, manual = false)
+            return
+        }
+        when (fresh.exitBehavior) {
+            Zone.EXIT_SEQUENCE -> {
+                Log.i(TAG, "EXIT for zone $id: starting post-exit sequence")
+                AlertController.stopAlert(context, id, manual = false)
+                AlertController.startPostExitSequence(context, fresh)
+            }
+            Zone.EXIT_CONTINUE -> {
+                Log.i(TAG, "EXIT for zone $id: continuing until manual stop")
+                // عمداً هیچ کاری نمی‌شود؛ هشدار حلقه‌ای ادامه می‌یابد.
+            }
+            else -> { // Zone.EXIT_STOP
+                AlertController.stopAlert(context, id, manual = false)
+            }
         }
     }
 }

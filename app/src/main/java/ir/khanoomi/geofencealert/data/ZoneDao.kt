@@ -31,6 +31,12 @@ interface ZoneDao {
     @Query("UPDATE zones SET lastTriggeredAt = :ts WHERE id = :id")
     suspend fun updateLastTriggered(id: Long, ts: Long)
 
+    @Query("UPDATE zones SET alertAcknowledged = :v WHERE id = :id")
+    suspend fun setAcknowledged(id: Long, v: Boolean)
+
+    @Query("UPDATE zones SET isActive = :v WHERE id = :id")
+    suspend fun setActive(id: Long, v: Boolean)
+
     @Query("SELECT COUNT(*) FROM zones WHERE isActive = 1")
     suspend fun countActive(): Int
 }

@@ -84,6 +84,7 @@ import ir.khanoomi.geofencealert.audio.AlertPlayer
 import ir.khanoomi.geofencealert.data.Zone
 import ir.khanoomi.geofencealert.domain.RadiusUnit
 import ir.khanoomi.geofencealert.domain.CheckInterval
+import ir.khanoomi.geofencealert.domain.ExitSequenceValidator
 import ir.khanoomi.geofencealert.domain.ZoneValidator
 import ir.khanoomi.geofencealert.domain.toMeters
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
@@ -102,7 +103,12 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
     var lngText by mutableStateOf("")
     var radiusText by mutableStateOf("200")
     var unit by mutableStateOf(RadiusUnit.METER)
-    var stopMode by mutableStateOf(Zone.STOP_AUTO)
+    /** رفتار پس از خروج از محدوده: [Zone.EXIT_STOP]، [Zone.EXIT_SEQUENCE] یا [Zone.EXIT_CONTINUE] */
+    var exitBehavior by mutableStateOf(Zone.EXIT_STOP)
+    /** ورودی‌های الگوی تکراری پس از خروج (فقط وقتی exitBehavior == EXIT_SEQUENCE) */
+    var postExitCountText by mutableStateOf("3")
+    var postExitDurationText by mutableStateOf("10")
+    var postExitGapText by mutableStateOf("30")
     var soundKey by mutableStateOf(Zone.SOUND_ALARM)
     var customSoundUri by mutableStateOf<String?>(null)
     var isActive by mutableStateOf(true)
@@ -139,7 +145,10 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
                         lngText = coordText(z.longitude)
                         radiusText = coordText(z.radiusMeters)
                         unit = RadiusUnit.METER // شعاع ذخیره‌شده همیشه به متر است
-                        stopMode = z.stopMode
+                        exitBehavior = z.exitBehavior
+                        postExitCountText = z.postExitCount.toString()
+                        postExitDurationText = z.postExitDurationSec.toString()
+                        postExitGapText = z.postExitGapSec.toString()
                         soundKey = z.soundKey
                         customSoundUri = z.customSoundUri
                         scheduleEnabled = z.scheduleEnabled
@@ -355,6 +364,12 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
             } else {
                 20
             }
+        // اعتبارسنجی الگوی تکراری پس از خروج
+        if (vm.exitBehavior == Zone.EXIT_SEQUENCE) {
+            ExitSequenceValidator.validateCount(vm.postExitCountText)?.let { allErrors += it }
+            ExitSequenceValidator.validateDuration(vm.postExitDurationText)?.let { allErrors += it }
+            ExitSequenceValidator.validateGap(vm.postExitGapText)?.let { allErrors += it }
+        }
         saving = true
         scope.launch(Dispatchers.IO) {
             try {
@@ -376,7 +391,6 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             longitude = lng!!,
                             radiusMeters = toMeters(radius!!, vm.unit),
                             isActive = vm.isActive,
-                            stopMode = vm.stopMode,
                             soundKey = vm.soundKey,
                             customSoundUri = vm.customSoundUri,
                             scheduleEnabled = vm.scheduleEnabled,
@@ -384,6 +398,14 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             scheduleStartMin = vm.scheduleStartMin,
                             scheduleEndMin = vm.scheduleEndMin,
                             checkIntervalSec = checkIntervalSec,
+                            alertAcknowledged = vm.existing?.alertAcknowledged ?: false,
+                            exitBehavior = vm.exitBehavior,
+                            postExitCount = ZoneValidator.parseDoubleFa(vm.postExitCountText)
+                                ?.toInt()?.coerceIn(1, 20) ?: 3,
+                            postExitDurationSec = ZoneValidator.parseDoubleFa(vm.postExitDurationText)
+                                ?.toInt()?.coerceIn(3, 120) ?: 10,
+                            postExitGapSec = ZoneValidator.parseDoubleFa(vm.postExitGapText)
+                                ?.toInt()?.coerceIn(0, 600) ?: 30,
                             isAlerting = vm.existing?.isAlerting ?: false,
                             lastTriggeredAt = vm.existing?.lastTriggeredAt ?: 0,
                             updatedAt = System.currentTimeMillis()
@@ -753,18 +775,25 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 }
             }
 
-            SectionCard(icon = Icons.Filled.Notifications, title = "شیوه توقف هشدار") {
+            SectionCard(icon = Icons.Filled.Notifications, title = "پس از خروج از محدوده") {
+                Text(
+                    "داخل محدوده، هشدار فقط با توقف دستی قطع می‌شود.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(
-                        Zone.STOP_AUTO to ("توقف خودکار" to "با خروج از محدوده، صدا قطع می‌شود."),
-                        Zone.STOP_MANUAL to ("توقف دستی" to "صدا تا زدن دکمه توقف ادامه دارد.")
-                    ).forEach { (mode, texts) ->
-                        val selected = vm.stopMode == mode
+                        Zone.EXIT_STOP to ("توقف فوری" to "با خروج از محدوده، هشدار قطع می‌شود."),
+                        Zone.EXIT_SEQUENCE to ("الگوی تکراری" to "پس از خروج، الگوی تکراری پخش می‌شود."),
+                        Zone.EXIT_CONTINUE to ("ادامه تا توقف دستی" to "هشدار تا زدن دکمه توقف ادامه دارد.")
+                    ).forEach { (behavior, texts) ->
+                        val selected = vm.exitBehavior == behavior
                         Card(
-                            onClick = { vm.stopMode = mode },
+                            onClick = { vm.exitBehavior = behavior },
                             modifier = Modifier.weight(1f),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
@@ -783,7 +812,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             ) {
                                 RadioButton(
                                     selected = selected,
-                                    onClick = { vm.stopMode = mode }
+                                    onClick = { vm.exitBehavior = behavior }
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Column {
@@ -800,6 +829,58 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                                 }
                             }
                         }
+                    }
+                }
+                // تنظیمات الگوی تکراری: تعداد دفعات، مدت هر آلارم، مکث بین آلارم‌ها
+                if (vm.exitBehavior == Zone.EXIT_SEQUENCE) {
+                    val countError = ExitSequenceValidator.validateCount(vm.postExitCountText)
+                    val durationError =
+                        ExitSequenceValidator.validateDuration(vm.postExitDurationText)
+                    val gapError = ExitSequenceValidator.validateGap(vm.postExitGapText)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = vm.postExitCountText,
+                            onValueChange = { vm.postExitCountText = it },
+                            label = { Text("تعداد دفعات") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            isError = countError != null,
+                            supportingText = countError?.let { { Text(it) } }
+                        )
+                        OutlinedTextField(
+                            value = vm.postExitDurationText,
+                            onValueChange = { vm.postExitDurationText = it },
+                            label = { Text("مدت هر آلارم (ثانیه)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            isError = durationError != null,
+                            supportingText = durationError?.let { { Text(it) } }
+                        )
+                        OutlinedTextField(
+                            value = vm.postExitGapText,
+                            onValueChange = { vm.postExitGapText = it },
+                            label = { Text("مکث بین آلارم‌ها (ثانیه)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            isError = gapError != null,
+                            supportingText = gapError?.let { { Text(it) } }
+                        )
+                        Text(
+                            "اگر هر کدام را دستی متوقف کنید، آلارم‌های بعدی این محدوده به صدا درنمی‌آید.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

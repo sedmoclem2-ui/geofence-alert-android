@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="ir.khanoomi.geofencealert"
+    android:versionCode="10"
+    android:versionName="1.7.0" >
+
+    <uses-sdk
+        android:minSdkVersion="26"
+        android:targetSdkVersion="34" />
+
+    <!-- موقعیت برای تشخیص ورود به محدوده -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- موقعیت پس‌زمینه برای ژئوفنسینگ وقتی برنامه باز نیست -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- نمایش اعلان هشدار (اندروید ۱۳ به بالا) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- سرویس پیش‌زمینه برای پخش ممتد هشدار -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- بازیابی محدوده‌ها پس از روشن شدن گوشی -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- نگه داشتن پردازنده بیدار هنگام پخش هشدار با صفحه خاموش -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- فقط برای کاشی‌های نقشه در صفحه «انتخاب روی نقشه» -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="false" />
+
+    <permission
+        android:name="ir.khanoomi.geofencealert.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        android:protectionLevel="signature" />
+
+    <uses-permission android:name="ir.khanoomi.geofencealert.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+
+    <application
+        android:name="ir.khanoomi.geofencealert.GeofenceAlertApp"
+        android:allowBackup="true"
+        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+        android:debuggable="true"
+        android:extractNativeLibs="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.GeofenceAlert" >
+        <activity
+            android:name="ir.khanoomi.geofencealert.MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.GeofenceAlert" >
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- دریافت رویدادهای ورود/خروج ژئوفنس -->
+        <receiver
+            android:name="ir.khanoomi.geofencealert.geofence.GeofenceReceiver"
+            android:exported="false" />
+
+        <!-- توقف هشدار از طریق دکمه اعلان -->
+        <receiver
+            android:name="ir.khanoomi.geofencealert.receiver.StopAlertReceiver"
+            android:exported="false" />
+
+        <!-- تغییر وضعیت پایش از ویجت -->
+        <receiver
+            android:name="ir.khanoomi.geofencealert.receiver.WidgetActionReceiver"
+            android:exported="false" />
+
+        <!-- ثبت مجدد محدوده‌ها پس از راه‌اندازی مجدد گوشی -->
+        <receiver
+            android:name="ir.khanoomi.geofencealert.receiver.BootReceiver"
+            android:exported="true" >
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- سرویس پیش‌زمینه پخش هشدار صوتی -->
+        <service
+            android:name="ir.khanoomi.geofencealert.service.AlertService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <!-- سرویس پیش‌زمینه پایش دقیق محدوده‌های کوچک (هر ۲۰ ثانیه) -->
+        <service
+            android:name="ir.khanoomi.geofencealert.service.ProximityMonitorService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <!-- ویجت صفحه اصلی -->
+        <receiver
+            android:name="ir.khanoomi.geofencealert.widget.ZoneWidgetProvider"
+            android:exported="false" >
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info" />
+        </receiver>
+
+        <!-- ویجت تک‌محدوده: هر نمونه به یک محدوده متصل می‌شود -->
+        <receiver
+            android:name="ir.khanoomi.geofencealert.widget.SingleZoneWidgetProvider"
+            android:exported="false" >
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/single_zone_widget_info" />
+        </receiver>
+
+        <!-- صفحه انتخاب محدوده برای ویجت تک‌محدوده -->
+        <activity
+            android:name="ir.khanoomi.geofencealert.widget.ZoneWidgetConfigureActivity"
+            android:exported="true"
+            android:theme="@style/Theme.GeofenceAlert" >
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <!-- کاشی تنظیمات سریع: فعال/غیرفعال کردن پایش از سایه اعلان -->
+        <service
+            android:name="ir.khanoomi.geofencealert.tile.MonitorTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_radar"
+            android:label="هشدار محدوده"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE" >
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <activity
+            android:name="com.google.android.gms.common.api.GoogleApiActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <meta-data
+            android:name="com.google.android.gms.version"
+            android:value="@integer/google_play_services_version" />
+
+        <activity
+            android:name="androidx.compose.ui.tooling.PreviewActivity"
+            android:exported="true" />
+
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="ir.khanoomi.geofencealert.androidx-startup"
+            android:exported="false" >
+            <meta-data
+                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+                android:value="androidx.startup" />
+            <meta-data
+                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+                android:value="androidx.startup" />
+            <meta-data
+                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+                android:value="androidx.startup" />
+        </provider>
+
+        <service
+            android:name="androidx.room.MultiInstanceInvalidationService"
+            android:directBootAware="true"
+            android:exported="false" />
+
+        <receiver
+            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            android:directBootAware="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.DUMP" >
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+            </intent-filter>
+        </receiver>
+    </application>
+
+</manifest>

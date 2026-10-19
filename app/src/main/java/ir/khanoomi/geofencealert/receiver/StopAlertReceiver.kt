@@ -19,12 +19,12 @@ class StopAlertReceiver : BroadcastReceiver() {
         scope.launch {
             try {
                 if (intent.action == ACTION_STOP_ALL) {
-                    AlertController.stopAllAlerts(context)
+                    AlertController.stopAllAlerts(context, manual = true)
                     return@launch
                 }
                 val zoneId = intent.getLongExtra(AlertService.EXTRA_ZONE_ID, -1L)
                 if (zoneId == -1L) return@launch
-                AlertController.stopAlert(context, zoneId)
+                AlertController.stopAlert(context, zoneId, manual = true)
             } finally {
                 pending.finish()
             }

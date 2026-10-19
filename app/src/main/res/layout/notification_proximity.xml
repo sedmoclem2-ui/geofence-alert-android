@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- نمای سفارشی اعلان پایش دقیق: نام محدوده + ثانیه‌شمار دایره‌ای قرمز -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="پایش دقیق فعال است"
+            android:textSize="12sp"
+            android:textColor="#757575" />
+
+        <TextView
+            android:id="@+id/tv_prox_zone"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="#212121" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tv_prox_countdown"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:background="@drawable/bg_countdown_circle"
+        android:gravity="center"
+        android:textColor="#FFFFFF"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+</LinearLayout>
