@@ -3,4 +3,5 @@
     <string name="app_name">هشدار محدوده</string>
     <string name="channel_alerts">هشدارها</string>
     <string name="channel_status">وضعیت پایش</string>
+    <string name="widget_desc">نمایش تعداد محدوده‌های فعال و توقف سریع هشدار</string>
 </resources>

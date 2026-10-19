@@ -24,6 +24,16 @@ data class Zone(
     val isAlerting: Boolean = false,
     /** زمان آخرین ورود ثبت‌شده به این محدوده (میلی‌ثانیه)؛ صفر یعنی هنوز ورود نشده */
     val lastTriggeredAt: Long = 0,
+    /** آیا زمان‌بندی برای این محدوده فعال است */
+    val scheduleEnabled: Boolean = false,
+    /** روزهای فعال زمان‌بندی به‌صورت CSV؛ ۱=شنبه … ۷=جمعه */
+    val scheduleDays: String = "1,2,3,4,5,6,7",
+    /** شروع بازه زمانی فعال به دقیقه از نیمه‌شب */
+    val scheduleStartMin: Int = 0,
+    /** پایان بازه زمانی فعال به دقیقه از نیمه‌شب */
+    val scheduleEndMin: Int = 1439,
+    /** URI صدای دلخواه انتخاب‌شده توسط کاربر؛ null یعنی صدای سیستمی انتخاب‌شده */
+    val customSoundUri: String? = null,
     val updatedAt: Long = System.currentTimeMillis()
 ) {
     companion object {

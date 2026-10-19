@@ -5,6 +5,9 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,7 +33,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.CheckCircle
@@ -40,9 +44,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -54,6 +60,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,6 +87,7 @@ import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.util.LocationUtil
 import ir.khanoomi.geofencealert.util.Permissions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -93,7 +101,13 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
     var unit by mutableStateOf(RadiusUnit.METER)
     var stopMode by mutableStateOf(Zone.STOP_AUTO)
     var soundKey by mutableStateOf(Zone.SOUND_ALARM)
+    var customSoundUri by mutableStateOf<String?>(null)
     var isActive by mutableStateOf(true)
+    // زمان‌بندی: ۱=شنبه … ۷=جمعه
+    var scheduleEnabled by mutableStateOf(false)
+    var scheduleDays by mutableStateOf("1,2,3,4,5,6,7")
+    var scheduleStartMin by mutableStateOf(0)
+    var scheduleEndMin by mutableStateOf(1439)
 
     var existing: Zone? by mutableStateOf(null)
         private set
@@ -121,6 +135,11 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
                         unit = RadiusUnit.METER // شعاع ذخیره‌شده همیشه به متر است
                         stopMode = z.stopMode
                         soundKey = z.soundKey
+                        customSoundUri = z.customSoundUri
+                        scheduleEnabled = z.scheduleEnabled
+                        scheduleDays = z.scheduleDays
+                        scheduleStartMin = z.scheduleStartMin
+                        scheduleEndMin = z.scheduleEndMin
                         isActive = z.isActive
                     }
                     loaded = true
@@ -133,6 +152,22 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
 
     private fun coordText(v: Double): String =
         if (v % 1.0 == 0.0) v.toLong().toString() else v.toString()
+
+    /** اعمال مختصات انتخاب‌شده روی نقشه. */
+    fun applyPickedLocation(lat: Double, lng: Double) {
+        latText = coordText(lat)
+        lngText = coordText(lng)
+    }
+
+    /** مجموعه روزهای فعال زمان‌بندی (۱=شنبه … ۷=جمعه). */
+    fun scheduleDaysSet(): Set<Int> =
+        scheduleDays.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()
+
+    fun toggleScheduleDay(day: Int) {
+        val set = scheduleDaysSet().toMutableSet()
+        if (day in set) set.remove(day) else set.add(day)
+        scheduleDays = set.sorted().joinToString(",")
+    }
 }
 
 private val SOUND_OPTIONS = listOf(
@@ -219,6 +254,55 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
         }
     }
 
+    // انتخاب فایل صوتی دلخواه از حافظه گوشی
+    val customSoundLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {
+            }
+            vm.customSoundUri = uri.toString()
+        }
+    }
+
+    // دریافت مختصات برگشتی از صفحه انتخاب روی نقشه
+    val mapResultHandle = navController.currentBackStackEntry?.savedStateHandle
+    LaunchedEffect(mapResultHandle) {
+        mapResultHandle?.getStateFlow("picked_lat", Double.NaN)?.collect { lat ->
+            if (!lat.isNaN()) {
+                val lng = mapResultHandle.get<Double>("picked_lng") ?: Double.NaN
+                if (!lng.isNaN()) {
+                    vm.applyPickedLocation(lat, lng)
+                    pasteError = null
+                }
+                mapResultHandle.remove<Double>("picked_lat")
+                mapResultHandle.remove<Double>("picked_lng")
+            }
+        }
+    }
+
+    /** نام نمایشی فایل صوتی انتخاب‌شده. */
+    fun customSoundName(uriString: String): String {
+        return try {
+            context.contentResolver.query(
+                Uri.parse(uriString),
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            } ?: "صدای انتخاب‌شده"
+        } catch (_: Exception) {
+            "صدای انتخاب‌شده"
+        }
+    }
+
     fun doPaste() {
         pasteError = null
         val text = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
@@ -270,6 +354,11 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             isActive = vm.isActive,
                             stopMode = vm.stopMode,
                             soundKey = vm.soundKey,
+                            customSoundUri = vm.customSoundUri,
+                            scheduleEnabled = vm.scheduleEnabled,
+                            scheduleDays = vm.scheduleDays.ifBlank { "1,2,3,4,5,6,7" },
+                            scheduleStartMin = vm.scheduleStartMin,
+                            scheduleEndMin = vm.scheduleEndMin,
                             isAlerting = vm.existing?.isAlerting ?: false,
                             lastTriggeredAt = vm.existing?.lastTriggeredAt ?: 0,
                             updatedAt = System.currentTimeMillis()
@@ -435,6 +524,24 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         modifier = Modifier.weight(1f)
                     ) { Text("الصاق") }
                 }
+                OutlinedButton(
+                    onClick = {
+                        val lat = ZoneValidator.parseDoubleFa(vm.latText) ?: 0.0
+                        val lng = ZoneValidator.parseDoubleFa(vm.lngText) ?: 0.0
+                        val radiusM = ZoneValidator.parseDoubleFa(vm.radiusText)
+                            ?.let { toMeters(it, vm.unit) } ?: 500.0
+                        navController.navigate("map_picker?lat=$lat&lng=$lng&radius=$radiusM")
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Filled.Place,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("انتخاب روی نقشه")
+                }
                 val errorColor = MaterialTheme.colorScheme.error
                 locError?.let {
                     Text(it, color = errorColor, style = MaterialTheme.typography.bodySmall)
@@ -471,6 +578,83 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         onClick = { vm.unit = RadiusUnit.KILOMETER },
                         shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                         label = { Text("کیلومتر") }
+                    )
+                }
+            }
+
+            SectionCard(icon = Icons.Filled.DateRange, title = "زمان‌بندی") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("فعال‌سازی زمان‌بندی", fontWeight = FontWeight.Bold)
+                        Text(
+                            "هشدار فقط در روزها و ساعات انتخاب‌شده فعال باشد.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = vm.scheduleEnabled,
+                        onCheckedChange = { vm.scheduleEnabled = it }
+                    )
+                }
+                if (vm.scheduleEnabled) {
+                    val dayNames = listOf(
+                        "شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه",
+                        "چهارشنبه", "پنجشنبه", "جمعه"
+                    )
+                    val selectedDays = vm.scheduleDaysSet()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        (1..4).forEach { day ->
+                            FilterChip(
+                                selected = day in selectedDays,
+                                onClick = { vm.toggleScheduleDay(day) },
+                                label = { Text(dayNames[day - 1]) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        (5..7).forEach { day ->
+                            FilterChip(
+                                selected = day in selectedDays,
+                                onClick = { vm.toggleScheduleDay(day) },
+                                label = { Text(dayNames[day - 1]) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                        Spacer(Modifier.weight(1f))
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TimePickerField(
+                            label = "از ساعت",
+                            minutes = vm.scheduleStartMin,
+                            onPick = { vm.scheduleStartMin = it },
+                            modifier = Modifier.weight(1f)
+                        )
+                        TimePickerField(
+                            label = "تا ساعت",
+                            minutes = vm.scheduleEndMin,
+                            onPick = { vm.scheduleEndMin = it },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    Text(
+                        "مثال: برای محل کار، شنبه تا چهارشنبه از ۸ تا ۱۸.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -556,6 +740,65 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             )
                         }
                     }
+                }
+                OutlinedButton(
+                    onClick = { customSoundLauncher.launch("audio/*") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Filled.PlayArrow,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("انتخاب صدای دلخواه از گوشی")
+                }
+                vm.customSoundUri?.let { uriString ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                customSoundName(uriString),
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            IconButton(
+                                onClick = {
+                                    AlertPlayer.preview(context, vm.soundKey, uriString)
+                                }
+                            ) {
+                                Icon(
+                                    Icons.Filled.PlayArrow,
+                                    contentDescription = "پیشنمایش صدای دلخواه",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            IconButton(onClick = { vm.customSoundUri = null }) {
+                                Icon(
+                                    Icons.Filled.Delete,
+                                    contentDescription = "حذف صدای دلخواه",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        "صدای دلخواه جایگزین صدای سیستمی بالا می‌شود.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 

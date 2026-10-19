@@ -51,6 +51,33 @@ fun AppNav() {
         composable("history") {
             HistoryScreen(navController = navController)
         }
+        composable("stats") {
+            StatsScreen(navController = navController)
+        }
+        composable(
+            route = "map_picker?lat={lat}&lng={lng}&radius={radius}",
+            arguments = listOf(
+                navArgument("lat") {
+                    type = NavType.StringType
+                    defaultValue = "0.0"
+                },
+                navArgument("lng") {
+                    type = NavType.StringType
+                    defaultValue = "0.0"
+                },
+                navArgument("radius") {
+                    type = NavType.StringType
+                    defaultValue = "500.0"
+                }
+            )
+        ) { backStackEntry ->
+            MapPickerScreen(
+                navController = navController,
+                initialLat = backStackEntry.arguments?.getString("lat")?.toDoubleOrNull() ?: 0.0,
+                initialLng = backStackEntry.arguments?.getString("lng")?.toDoubleOrNull() ?: 0.0,
+                initialRadiusM = backStackEntry.arguments?.getString("radius")?.toDoubleOrNull() ?: 500.0
+            )
+        }
         composable(
             route = "edit?zoneId={zoneId}",
             arguments = listOf(

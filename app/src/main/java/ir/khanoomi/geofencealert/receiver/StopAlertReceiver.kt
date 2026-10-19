@@ -15,15 +15,24 @@ class StopAlertReceiver : BroadcastReceiver() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onReceive(context: Context, intent: Intent) {
-        val zoneId = intent.getLongExtra(AlertService.EXTRA_ZONE_ID, -1L)
-        if (zoneId == -1L) return
         val pending = goAsync()
         scope.launch {
             try {
+                if (intent.action == ACTION_STOP_ALL) {
+                    AlertController.stopAllAlerts(context)
+                    return@launch
+                }
+                val zoneId = intent.getLongExtra(AlertService.EXTRA_ZONE_ID, -1L)
+                if (zoneId == -1L) return@launch
                 AlertController.stopAlert(context, zoneId)
             } finally {
                 pending.finish()
             }
         }
+    }
+
+    companion object {
+        /** توقف همه هشدارهای فعال (مثلاً از ویجت). */
+        const val ACTION_STOP_ALL = "ir.khanoomi.geofencealert.action.STOP_ALL_ALERTS"
     }
 }

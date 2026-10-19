@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.List
@@ -87,8 +88,10 @@ import ir.khanoomi.geofencealert.ui.theme.RedDeep
 import ir.khanoomi.geofencealert.ui.theme.TealOnContainer
 import ir.khanoomi.geofencealert.ui.theme.TealPrimary
 import ir.khanoomi.geofencealert.util.Permissions
+import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -120,6 +123,19 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     val alertingZones = zones.map { list -> list.filter { it.isAlerting } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    init {
+        // با هر تغییر محدوده‌ها، شمارنده ویجت به‌روز شود
+        viewModelScope.launch(Dispatchers.IO) {
+            zones.collect { list ->
+                try {
+                    prefs.setWidgetActiveCount(list.count { it.isActive })
+                } catch (_: Exception) {
+                }
+                ZoneWidgetProvider.updateAll(getApplication())
+            }
+        }
+    }
 
     fun toggleActive(zone: Zone) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -200,6 +216,9 @@ fun HomeScreen(navController: NavController) {
             TopAppBar(
                 title = { Text("هشدار محدوده", fontWeight = FontWeight.Bold) },
                 actions = {
+                    IconButton(onClick = { navController.navigate("stats") }) {
+                        Icon(Icons.Filled.DateRange, contentDescription = "آمار")
+                    }
                     IconButton(onClick = { navController.navigate("history") }) {
                         Icon(Icons.Filled.List, contentDescription = "تاریخچه")
                     }

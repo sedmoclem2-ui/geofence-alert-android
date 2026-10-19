@@ -20,4 +20,16 @@ interface EventDao {
     /** نگه‌داشتن حداکثر ۲۰۰ رکورد تازه؛ رکوردهای قدیمی‌تر حذف می‌شوند. */
     @Query("DELETE FROM events WHERE id NOT IN (SELECT id FROM events ORDER BY timestamp DESC LIMIT 200)")
     suspend fun trim()
+
+    /** آمار تعداد ورود/خروج هر محدوده از یک زمان مشخص به بعد. */
+    @Query("SELECT zoneId, zoneName, type, COUNT(*) AS count FROM events WHERE timestamp >= :since GROUP BY zoneId, zoneName, type")
+    fun statsSince(since: Long): Flow<List<ZoneStat>>
 }
+
+/** یک ردیف آمار: تعداد رویدادهای یک نوع برای یک محدوده. */
+data class ZoneStat(
+    val zoneId: Long,
+    val zoneName: String,
+    val type: String,
+    val count: Int
+)

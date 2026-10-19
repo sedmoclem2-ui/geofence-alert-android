@@ -46,9 +46,11 @@ object AlertPlayer {
     /**
      * شروع پخش حلقه‌ای هشدار برای یک محدوده.
      * اگر همین حالا در حال پخش باشد، هیچ پخش‌کننده جدیدی ساخته نمی‌شود.
+     * اگر [customUri] داده شود، اول همان امتحان می‌شود و در صورت خطا،
+     * صدای سیستمی [soundKey] پخش می‌گردد.
      */
     @Synchronized
-    fun play(context: Context, zoneId: Long, soundKey: String) {
+    fun play(context: Context, zoneId: Long, soundKey: String, customUri: String? = null) {
         // B2: پیش‌نمایش صدا هرگز نباید با هشدار واقعی هم‌پوشانی داشته باشد.
         stopPreviewInternal()
         if (players.containsKey(zoneId)) {
@@ -56,30 +58,38 @@ object AlertPlayer {
             return
         }
         val appContext = context.applicationContext
-        val uri = soundUri(appContext, soundKey)
-        val mp = MediaPlayer()
-        try {
-            mp.setDataSource(appContext, uri)
-            mp.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-            )
-            mp.setWakeMode(appContext, PowerManager.PARTIAL_WAKE_LOCK)
-            mp.isLooping = true
-            mp.prepare()
-            mp.start()
-            players[zoneId] = mp
-            Log.i(TAG, "Started alert loop for zone $zoneId")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to play alert for zone $zoneId", e)
+        val candidates = mutableListOf<Uri>()
+        customUri?.takeIf { it.isNotBlank() }?.let { runCatching { Uri.parse(it) }.getOrNull() }
+            ?.let { candidates += it }
+        candidates += soundUri(appContext, soundKey)
+        var lastError: Exception? = null
+        for (uri in candidates) {
+            val mp = MediaPlayer()
             try {
-                mp.release()
-            } catch (_: Exception) {
+                mp.setDataSource(appContext, uri)
+                mp.setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                mp.setWakeMode(appContext, PowerManager.PARTIAL_WAKE_LOCK)
+                mp.isLooping = true
+                mp.prepare()
+                mp.start()
+                players[zoneId] = mp
+                Log.i(TAG, "Started alert loop for zone $zoneId")
+                return
+            } catch (e: Exception) {
+                lastError = e
+                try {
+                    mp.release()
+                } catch (_: Exception) {
+                }
             }
-            players.remove(zoneId)
         }
+        Log.e(TAG, "Failed to play alert for zone $zoneId", lastError)
+        players.remove(zoneId)
     }
 
     /** توقف و آزادسازی پخش‌کننده یک محدوده. */
@@ -117,36 +127,45 @@ object AlertPlayer {
 
     /**
      * پیش‌نمایش صدا (غیر حلقه‌ای)؛ پیش‌نمایش قبلی متوقف و پس از ۳٫۵ ثانیه
-     * به‌طور خودکار قطع می‌شود.
+     * به‌طور خودکار قطع می‌شود. اگر [customUri] داده شود، همان پیش‌نمایش
+     * می‌شود وگرنه صدای سیستمی [soundKey].
      */
     @Synchronized
-    fun preview(context: Context, soundKey: String) {
+    fun preview(context: Context, soundKey: String, customUri: String? = null) {
         stopPreviewInternal()
         val appContext = context.applicationContext
-        val uri = soundUri(appContext, soundKey)
-        val mp = MediaPlayer()
-        try {
-            mp.setDataSource(appContext, uri)
-            mp.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
-            )
-            mp.isLooping = false
-            mp.prepare()
-            mp.start()
-            previewPlayer = mp
-            previewHandler.postDelayed(stopPreviewRunnable, PREVIEW_DURATION_MS)
-            mp.setOnCompletionListener { stopPreviewInternal() }
-        } catch (e: Exception) {
-            Log.e(TAG, "Preview failed", e)
+        val candidates = mutableListOf<Uri>()
+        customUri?.takeIf { it.isNotBlank() }?.let { runCatching { Uri.parse(it) }.getOrNull() }
+            ?.let { candidates += it }
+        candidates += soundUri(appContext, soundKey)
+        var ok = false
+        for (uri in candidates) {
+            val mp = MediaPlayer()
             try {
-                mp.release()
-            } catch (_: Exception) {
+                mp.setDataSource(appContext, uri)
+                mp.setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                )
+                mp.isLooping = false
+                mp.prepare()
+                mp.start()
+                previewPlayer = mp
+                previewHandler.postDelayed(stopPreviewRunnable, PREVIEW_DURATION_MS)
+                mp.setOnCompletionListener { stopPreviewInternal() }
+                ok = true
+                break
+            } catch (e: Exception) {
+                Log.e(TAG, "Preview failed for $uri", e)
+                try {
+                    mp.release()
+                } catch (_: Exception) {
+                }
             }
-            previewPlayer = null
         }
+        if (!ok) previewPlayer = null
     }
 
     @Synchronized

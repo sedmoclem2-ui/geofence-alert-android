@@ -16,6 +16,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- نگه داشتن پردازنده بیدار هنگام پخش هشدار با صفحه خاموش -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- فقط برای کاشی‌های نقشه در صفحه «انتخاب روی نقشه» -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <uses-feature
         android:name="android.hardware.location.gps"
@@ -64,6 +66,18 @@
             android:name=".service.AlertService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <!-- ویجت صفحه اصلی -->
+        <receiver
+            android:name=".widget.ZoneWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info" />
+        </receiver>
 
     </application>
 

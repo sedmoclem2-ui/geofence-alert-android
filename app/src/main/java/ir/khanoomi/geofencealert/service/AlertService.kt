@@ -53,6 +53,7 @@ class AlertService : Service() {
         val zoneId = intent.getLongExtra(EXTRA_ZONE_ID, -1L)
         val zoneName = intent.getStringExtra(EXTRA_ZONE_NAME) ?: "محدوده"
         val soundKey = intent.getStringExtra(EXTRA_SOUND_KEY) ?: "alarm"
+        val soundUri = intent.getStringExtra(EXTRA_SOUND_URI)
         if (zoneId == -1L) {
             Log.w(TAG, "ACTION_START without zone id")
             return
@@ -72,11 +73,11 @@ class AlertService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "startForeground failed", e)
             // مسیر جایگزین: پخش مستقیم + اعلان عادی تا کاربر بی‌خبر نماند
-            scope.launch { AlertPlayer.play(this@AlertService, zoneId, soundKey) }
+            scope.launch { AlertPlayer.play(this@AlertService, zoneId, soundKey, soundUri) }
             Notifications.notifyAlert(this, zoneId, zoneName)
             return
         }
-        scope.launch { AlertPlayer.play(this@AlertService, zoneId, soundKey) }
+        scope.launch { AlertPlayer.play(this@AlertService, zoneId, soundKey, soundUri) }
     }
 
     private fun handleStop(zoneId: Long) {
@@ -128,6 +129,7 @@ class AlertService : Service() {
         const val EXTRA_ZONE_ID = "zone_id"
         const val EXTRA_ZONE_NAME = "zone_name"
         const val EXTRA_SOUND_KEY = "sound_key"
+        const val EXTRA_SOUND_URI = "sound_uri"
 
         private const val FOREGROUND_NOTIFICATION_ID = 9001
 

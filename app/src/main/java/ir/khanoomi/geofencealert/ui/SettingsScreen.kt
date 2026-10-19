@@ -4,7 +4,11 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,7 +16,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
@@ -23,6 +29,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -30,23 +37,36 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
+import ir.khanoomi.geofencealert.GeofenceAlertApp
+import ir.khanoomi.geofencealert.ui.theme.AppPalette
 import ir.khanoomi.geofencealert.util.Permissions
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(navController: NavController) {
     val context = LocalContext.current
+    val app = context.applicationContext as GeofenceAlertApp
+    val scope = rememberCoroutineScope()
 
     var stLocation by remember { mutableStateOf(false) }
     var stBackground by remember { mutableStateOf(false) }
     var stNotif by remember { mutableStateOf(false) }
+
+    val quietEnabled by app.prefs.quietEnabled.collectAsStateWithLifecycle(initialValue = false)
+    val quietStart by app.prefs.quietStartMin.collectAsStateWithLifecycle(initialValue = 1380)
+    val quietEnd by app.prefs.quietEndMin.collectAsStateWithLifecycle(initialValue = 420)
+    val themeKey by app.prefs.themePalette.collectAsStateWithLifecycle(initialValue = "teal")
 
     fun refresh() {
         stLocation = Permissions.hasAnyLocation(context)
@@ -136,6 +156,22 @@ fun SettingsScreen(navController: NavController) {
                 }
             }
             item {
+                QuietHoursCard(
+                    enabled = quietEnabled,
+                    startMin = quietStart,
+                    endMin = quietEnd,
+                    onEnabledChange = { scope.launch { app.prefs.setQuietEnabled(it) } },
+                    onStartChange = { scope.launch { app.prefs.setQuietStartMin(it) } },
+                    onEndChange = { scope.launch { app.prefs.setQuietEndMin(it) } }
+                )
+            }
+            item {
+                ThemePaletteCard(
+                    selectedKey = themeKey,
+                    onSelect = { key -> scope.launch { app.prefs.setThemePalette(key) } }
+                )
+            }
+            item {
                 OutlinedButton(
                     onClick = { Permissions.openAppSettings(context) },
                     modifier = Modifier.fillMaxWidth()
@@ -151,10 +187,112 @@ fun SettingsScreen(navController: NavController) {
             item {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "هشدار محدوده — نسخه ۱٫۱٫۰",
+                    "هشدار محدوده — نسخه ۱٫۳٫۰",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuietHoursCard(
+    enabled: Boolean,
+    startMin: Int,
+    endMin: Int,
+    onEnabledChange: (Boolean) -> Unit,
+    onStartChange: (Int) -> Unit,
+    onEndChange: (Int) -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("ساعات سکوت", fontWeight = FontWeight.Bold)
+                    Text(
+                        "در این بازه، هشدار فقط با اعلان و بدون صدا نمایش داده می‌شود.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = enabled, onCheckedChange = onEnabledChange)
+            }
+            if (enabled) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TimePickerField(
+                        label = "از",
+                        minutes = startMin,
+                        onPick = onStartChange,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TimePickerField(
+                        label = "تا",
+                        minutes = endMin,
+                        onPick = onEndChange,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemePaletteCard(
+    selectedKey: String,
+    onSelect: (String) -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("تم رنگی", fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                AppPalette.entries.forEach { palette ->
+                    val selected = palette.key == selectedKey
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { onSelect(palette.key) }
+                            .padding(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(palette.light.primary)
+                                .then(
+                                    if (selected) Modifier.border(
+                                        3.dp,
+                                        MaterialTheme.colorScheme.onSurface,
+                                        CircleShape
+                                    ) else Modifier
+                                )
+                        )
+                        Text(
+                            palette.titleFa,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
             }
         }
     }

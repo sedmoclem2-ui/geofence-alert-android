@@ -10,6 +10,7 @@ import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.alert.AlertController
 import ir.khanoomi.geofencealert.data.EventLog
 import ir.khanoomi.geofencealert.domain.AlertDecider
+import ir.khanoomi.geofencealert.domain.ScheduleChecker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -19,6 +20,9 @@ import kotlinx.coroutines.launch
  * دریافت رویدادهای ورود/خروج از Geofencing API و هدایت به [AlertController].
  *
  * - ورود: فقط اگر محدوده فعال باشد و هم‌اکنون هشدارش پخش نشود → شروع هشدار.
+ *   اگر زمان‌بندی محدوده خارج از بازه فعال باشد، هشدار شروع نمی‌شود (ولی
+ *   رویداد در تاریخچه ثبت می‌گردد). در ساعات سکوت، هشدار بی‌صدا و فقط با
+ *   اعلان نمایش داده می‌شود.
  * - خروج: فقط اگر حالت محدوده «توقف خودکار» باشد و هشدار در حال پخش باشد → توقف هشدار.
  * - ثبت محدوده به‌تنهایی (بدون ورود جدید) هشدار تولید نمی‌کند.
  */
@@ -76,17 +80,35 @@ class GeofenceReceiver : BroadcastReceiver() {
                     when (transition) {
                         Geofence.GEOFENCE_TRANSITION_ENTER -> {
                             if (AlertDecider.shouldStartAlert(zone, zone.isAlerting)) {
-                                try {
-                                    app.zoneRepo.setAlerting(id, true)
-                                } catch (e: Exception) {
-                                    Log.e(TAG, "setAlerting failed", e)
+                                // زمان‌بندی محدوده: خارج از بازه فعال، هشدار شروع نمی‌شود
+                                // (رویداد ورود بالاتر در تاریخچه ثبت شده است).
+                                val inSchedule = ScheduleChecker.isInSchedule(
+                                    zone.scheduleEnabled,
+                                    zone.scheduleDays,
+                                    zone.scheduleStartMin,
+                                    zone.scheduleEndMin
+                                )
+                                if (!inSchedule) {
+                                    Log.i(TAG, "ENTER ignored for zone $id: outside schedule")
+                                } else {
+                                    try {
+                                        app.zoneRepo.setAlerting(id, true)
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "setAlerting failed", e)
+                                    }
+                                    val fresh = try {
+                                        app.zoneRepo.getById(id)
+                                    } catch (e: Exception) {
+                                        null
+                                    } ?: zone
+                                    val quiet = try {
+                                        app.prefs.isQuietNow()
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "isQuietNow failed", e)
+                                        false
+                                    }
+                                    AlertController.startAlert(context, fresh, silent = quiet)
                                 }
-                                val fresh = try {
-                                    app.zoneRepo.getById(id)
-                                } catch (e: Exception) {
-                                    null
-                                } ?: zone
-                                AlertController.startAlert(context, fresh)
                             } else {
                                 Log.i(
                                     TAG,
