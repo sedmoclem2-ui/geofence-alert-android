@@ -49,6 +49,8 @@ object AlertPlayer {
      */
     @Synchronized
     fun play(context: Context, zoneId: Long, soundKey: String) {
+        // B2: پیش‌نمایش صدا هرگز نباید با هشدار واقعی هم‌پوشانی داشته باشد.
+        stopPreviewInternal()
         if (players.containsKey(zoneId)) {
             Log.i(TAG, "Already playing for zone $zoneId; ignoring duplicate")
             return

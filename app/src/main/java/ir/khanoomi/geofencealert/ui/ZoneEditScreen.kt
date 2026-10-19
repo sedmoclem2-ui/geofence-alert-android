@@ -8,38 +8,50 @@ import android.content.Context
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -49,7 +61,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -65,7 +77,6 @@ import ir.khanoomi.geofencealert.domain.RadiusUnit
 import ir.khanoomi.geofencealert.domain.ZoneValidator
 import ir.khanoomi.geofencealert.domain.toMeters
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
-import ir.khanoomi.geofencealert.ui.theme.AlertRed
 import ir.khanoomi.geofencealert.util.LocationUtil
 import ir.khanoomi.geofencealert.util.Permissions
 import kotlinx.coroutines.Dispatchers
@@ -129,6 +140,42 @@ private val SOUND_OPTIONS = listOf(
     Zone.SOUND_RINGTONE to "زنگ",
     Zone.SOUND_NOTIFICATION to "اعلان"
 )
+
+/** کارت بخش‌بندی فرم با آیکون و عنوان. */
+@Composable
+private fun SectionCard(
+    icon: ImageVector,
+    title: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            content()
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -258,6 +305,30 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     }
                 }
             )
+        },
+        bottomBar = {
+            Surface(
+                tonalElevation = 3.dp,
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Button(
+                    onClick = { doSave() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    enabled = !saving
+                ) {
+                    if (saving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                    } else {
+                        Text("ذخیره محدوده", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     ) { padding ->
         if (!vm.loaded) {
@@ -280,274 +351,244 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            TextField(
-                value = vm.name,
-                onValueChange = { vm.name = it },
-                label = { Text("نام محدوده (مثلاً خانه)") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            TextField(
-                value = vm.latText,
-                onValueChange = { input ->
-                    // اگر کاربر یک جفت «عرض،طول» (مثل خروجی گوگل‌مپ) را الصاق کرد، خودکار جدا شود
-                    val parts = input.split(",").map { it.trim() }
-                    if (parts.size == 2 && parts.all { ZoneValidator.parseDoubleFa(it) != null }) {
-                        vm.latText = parts[0]
-                        vm.lngText = parts[1]
-                        pasteError = null
-                    } else {
-                        vm.latText = input
-                    }
-                },
-                label = { Text("عرض جغرافیایی") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-            )
-            TextField(
-                value = vm.lngText,
-                onValueChange = { vm.lngText = it },
-                label = { Text("طول جغرافیایی") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        if (Permissions.hasAnyLocation(context)) doFetchLocation()
-                        else locationPermissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION
-                            )
-                        )
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = !locLoading
-                ) {
-                    if (locLoading) {
-                        CircularProgressIndicator(
-                            modifier = Modifier
-                                .width(20.dp)
-                                .height(20.dp),
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text("موقعیت فعلی")
-                    }
-                }
-                OutlinedButton(
-                    onClick = {
-                        clipboard.setPrimaryClip(
-                            ClipData.newPlainText(
-                                "مختصات",
-                                "${vm.latText.trim()},${vm.lngText.trim()}"
-                            )
-                        )
-                        Toast.makeText(context, "مختصات کپی شد", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.weight(1f)
-                ) { Text("کپی مختصات") }
-                OutlinedButton(
-                    onClick = { doPaste() },
-                    modifier = Modifier.weight(1f)
-                ) { Text("الصاق") }
+            SectionCard(icon = Icons.Filled.Info, title = "مشخصات") {
+                OutlinedTextField(
+                    value = vm.name,
+                    onValueChange = { vm.name = it },
+                    label = { Text("نام محدوده (مثلاً خانه)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp)
+                )
             }
-            locError?.let { Text(it, color = AlertRed, style = MaterialTheme.typography.bodySmall) }
-            pasteError?.let { Text(it, color = AlertRed, style = MaterialTheme.typography.bodySmall) }
-            Text(
-                "راهنما: در گوگل‌مپ نقطه را لمس طولانی کنید تا مختصات نمایش داده شود؛ آن را کپی کنید (مثل 34.633719,50.886485) و با دکمه «الصاق» یا مستقیم در کادر عرض جغرافیایی بچسبانید.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                TextField(
+            SectionCard(icon = Icons.Filled.LocationOn, title = "مختصات") {
+                OutlinedTextField(
+                    value = vm.latText,
+                    onValueChange = { input ->
+                        // اگر کاربر یک جفت «عرض،طول» (مثل خروجی گوگل‌مپ) را الصاق کرد، خودکار جدا شود
+                        val parts = input.split(",").map { it.trim() }
+                        if (parts.size == 2 && parts.all { ZoneValidator.parseDoubleFa(it) != null }) {
+                            vm.latText = parts[0]
+                            vm.lngText = parts[1]
+                            pasteError = null
+                        } else {
+                            vm.latText = input
+                        }
+                    },
+                    label = { Text("عرض جغرافیایی") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                OutlinedTextField(
+                    value = vm.lngText,
+                    onValueChange = { vm.lngText = it },
+                    label = { Text("طول جغرافیایی") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilledTonalButton(
+                        onClick = {
+                            if (Permissions.hasAnyLocation(context)) doFetchLocation()
+                            else locationPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = !locLoading
+                    ) {
+                        if (locLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text("موقعیت فعلی")
+                        }
+                    }
+                    FilledTonalButton(
+                        onClick = {
+                            clipboard.setPrimaryClip(
+                                ClipData.newPlainText(
+                                    "مختصات",
+                                    "${vm.latText.trim()},${vm.lngText.trim()}"
+                                )
+                            )
+                            Toast.makeText(context, "مختصات کپی شد", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("کپی مختصات") }
+                    FilledTonalButton(
+                        onClick = { doPaste() },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("الصاق") }
+                }
+                val errorColor = MaterialTheme.colorScheme.error
+                locError?.let {
+                    Text(it, color = errorColor, style = MaterialTheme.typography.bodySmall)
+                }
+                pasteError?.let {
+                    Text(it, color = errorColor, style = MaterialTheme.typography.bodySmall)
+                }
+                Text(
+                    "راهنما: در گوگل‌مپ نقطه را لمس طولانی کنید تا مختصات نمایش داده شود؛ آن را کپی کنید (مثل 34.633719,50.886485) و با دکمه «الصاق» یا مستقیم در کادر عرض جغرافیایی بچسبانید.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            SectionCard(icon = Icons.Filled.Place, title = "شعاع") {
+                OutlinedTextField(
                     value = vm.radiusText,
                     onValueChange = { vm.radiusText = it },
                     label = { Text("شعاع") },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                 )
-                var unitExpanded by remember { mutableStateOf(false) }
-                ExposedDropdownMenuBox(
-                    expanded = unitExpanded,
-                    onExpandedChange = { unitExpanded = !unitExpanded },
-                    modifier = Modifier.weight(1f)
-                ) {
-                    TextField(
-                        value = if (vm.unit == RadiusUnit.METER) "متر" else "کیلومتر",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("واحد") },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = unitExpanded)
-                        },
-                        modifier = Modifier.menuAnchor()
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    SegmentedButton(
+                        selected = vm.unit == RadiusUnit.METER,
+                        onClick = { vm.unit = RadiusUnit.METER },
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                        label = { Text("متر") }
                     )
-                    ExposedDropdownMenu(
-                        expanded = unitExpanded,
-                        onDismissRequest = { unitExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("متر") },
-                            onClick = { vm.unit = RadiusUnit.METER; unitExpanded = false }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("کیلومتر") },
-                            onClick = { vm.unit = RadiusUnit.KILOMETER; unitExpanded = false }
-                        )
+                    SegmentedButton(
+                        selected = vm.unit == RadiusUnit.KILOMETER,
+                        onClick = { vm.unit = RadiusUnit.KILOMETER },
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                        label = { Text("کیلومتر") }
+                    )
+                }
+            }
+
+            SectionCard(icon = Icons.Filled.Notifications, title = "شیوه توقف هشدار") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        Zone.STOP_AUTO to ("توقف خودکار" to "با خروج از محدوده، صدا قطع می‌شود."),
+                        Zone.STOP_MANUAL to ("توقف دستی" to "صدا تا زدن دکمه توقف ادامه دارد.")
+                    ).forEach { (mode, texts) ->
+                        val selected = vm.stopMode == mode
+                        Card(
+                            onClick = { vm.stopMode = mode },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (selected)
+                                    MaterialTheme.colorScheme.primaryContainer
+                                else
+                                    MaterialTheme.colorScheme.surfaceVariant
+                            ),
+                            border = if (selected)
+                                BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                            else null
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = selected,
+                                    onClick = { vm.stopMode = mode }
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        texts.first,
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Text(
+                                        texts.second,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            Text("شیوه توقف هشدار", fontWeight = FontWeight.Bold)
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(8.dp)) {
+            SectionCard(icon = Icons.Filled.PlayArrow, title = "صدای هشدار") {
+                SOUND_OPTIONS.forEach { (key, label) ->
+                    val selected = vm.soundKey == key
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .selectable(
-                                selected = vm.stopMode == Zone.STOP_AUTO,
-                                onClick = { vm.stopMode = Zone.STOP_AUTO }
+                                selected = selected,
+                                onClick = { vm.soundKey = key }
                             )
-                            .padding(8.dp),
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
-                            selected = vm.stopMode == Zone.STOP_AUTO,
-                            onClick = { vm.stopMode = Zone.STOP_AUTO }
+                            selected = selected,
+                            onClick = { vm.soundKey = key }
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Column {
-                            Text("توقف خودکار هنگام خروج", fontWeight = FontWeight.Bold)
-                            Text(
-                                "با خروج از محدوده، صدا خودکار قطع می‌شود.",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = vm.stopMode == Zone.STOP_MANUAL,
-                                onClick = { vm.stopMode = Zone.STOP_MANUAL }
-                            )
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = vm.stopMode == Zone.STOP_MANUAL,
-                            onClick = { vm.stopMode = Zone.STOP_MANUAL }
+                        Text(
+                            label,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyLarge
                         )
-                        Spacer(Modifier.width(8.dp))
-                        Column {
-                            Text("توقف فقط دستی", fontWeight = FontWeight.Bold)
-                            Text(
-                                "صدا پس از خروج هم ادامه دارد تا دکمه توقف زده شود.",
-                                style = MaterialTheme.typography.bodySmall
+                        IconButton(onClick = { AlertPlayer.preview(context, key) }) {
+                            Icon(
+                                Icons.Filled.PlayArrow,
+                                contentDescription = "پیشنمایش $label",
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
                 }
             }
 
-            Text("صدای هشدار", fontWeight = FontWeight.Bold)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                var soundExpanded by remember { mutableStateOf(false) }
-                ExposedDropdownMenuBox(
-                    expanded = soundExpanded,
-                    onExpandedChange = { soundExpanded = !soundExpanded },
-                    modifier = Modifier.weight(1f)
+            SectionCard(icon = Icons.Filled.CheckCircle, title = "وضعیت") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    val currentLabel = SOUND_OPTIONS.first { it.first == vm.soundKey }.second
-                    TextField(
-                        value = currentLabel,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("صدا") },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = soundExpanded)
-                        },
-                        modifier = Modifier.menuAnchor()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = soundExpanded,
-                        onDismissRequest = { soundExpanded = false }
-                    ) {
-                        SOUND_OPTIONS.forEach { (key, label) ->
-                            DropdownMenuItem(
-                                text = { Text(label) },
-                                onClick = { vm.soundKey = key; soundExpanded = false }
-                            )
-                        }
-                    }
+                    Text("محدوده فعال باشد", fontWeight = FontWeight.Bold)
+                    Switch(checked = vm.isActive, onCheckedChange = { vm.isActive = it })
                 }
-                OutlinedButton(onClick = { AlertPlayer.preview(context, vm.soundKey) }) {
-                    Text("پیشنمایش")
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text("محدوده فعال باشد", fontWeight = FontWeight.Bold)
-                Switch(checked = vm.isActive, onCheckedChange = { vm.isActive = it })
             }
 
             if (errors.isNotEmpty()) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE))
+                    shape = MaterialTheme.shapes.medium,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
                 ) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        errors.forEach { Text(it, color = AlertRed) }
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        errors.forEach {
+                            Text(it, color = MaterialTheme.colorScheme.onErrorContainer)
+                        }
                     }
                 }
             }
 
-            Spacer(Modifier.height(4.dp))
-            Button(
-                onClick = { doSave() },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !saving
-            ) {
-                if (saving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .width(20.dp)
-                            .height(20.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                } else {
-                    Text("ذخیره")
-                }
-            }
-            OutlinedButton(
-                onClick = { navController.popBackStack() },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("انصراف") }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
         }
     }
 }

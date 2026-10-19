@@ -33,12 +33,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import ir.khanoomi.geofencealert.ui.theme.AlertRed
 import ir.khanoomi.geofencealert.util.Permissions
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -153,9 +151,9 @@ fun SettingsScreen(navController: NavController) {
             item {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "هشدار محدوده — نسخه ۱٫۰٫۰",
+                    "هشدار محدوده — نسخه ۱٫۱٫۰",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -179,10 +177,15 @@ private fun PermissionRow(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontWeight = FontWeight.Bold)
-                Text(desc, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                Text(
+                    desc,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Text(
                     if (granted) "داده شده" else "داده نشده",
-                    color = if (granted) Color(0xFF2E7D32) else AlertRed,
+                    color = if (granted) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.error,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.bodySmall
                 )

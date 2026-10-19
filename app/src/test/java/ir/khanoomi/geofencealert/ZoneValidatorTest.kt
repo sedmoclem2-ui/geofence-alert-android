@@ -92,6 +92,22 @@ class ZoneValidatorTest {
         assertFalse(result.isValid)
     }
 
+    @Test
+    fun `radius above 1000 km fails`() {
+        val tooBig = ZoneValidator.validate("x", 35.0, 51.0, 2000.0, RadiusUnit.KILOMETER)
+        assertFalse(tooBig.isValid)
+        assertTrue(tooBig.errors.any { it.contains("۱۰۰۰ کیلومتر") })
+
+        val tooBigMeters = ZoneValidator.validate("x", 35.0, 51.0, 1_000_001.0, RadiusUnit.METER)
+        assertFalse(tooBigMeters.isValid)
+    }
+
+    @Test
+    fun `radius at 999 km passes`() {
+        val ok = ZoneValidator.validate("x", 35.0, 51.0, 999.0, RadiusUnit.KILOMETER)
+        assertTrue(ok.isValid)
+    }
+
     // ---- parseDoubleFa ----
 
     @Test

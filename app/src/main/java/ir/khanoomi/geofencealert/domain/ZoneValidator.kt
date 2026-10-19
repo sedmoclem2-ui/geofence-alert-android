@@ -33,6 +33,9 @@ object ZoneValidator {
             val meters = toMeters(radius, unit)
             if (!meters.isFinite() || meters <= 0.0) {
                 errors += "شعاع باید عددی مثبت باشد."
+            } else if (meters > 1_000_000.0) {
+                // B3: سقف ۱۰۰۰ کیلومتر برای شعاع
+                errors += "شعاع نمی‌تواند بیشتر از ۱۰۰۰ کیلومتر باشد."
             }
         }
         return ValidationResult(errors)
