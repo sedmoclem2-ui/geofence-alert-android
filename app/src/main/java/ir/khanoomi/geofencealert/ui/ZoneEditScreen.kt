@@ -290,7 +290,17 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
 
             TextField(
                 value = vm.latText,
-                onValueChange = { vm.latText = it },
+                onValueChange = { input ->
+                    // اگر کاربر یک جفت «عرض،طول» (مثل خروجی گوگل‌مپ) را الصاق کرد، خودکار جدا شود
+                    val parts = input.split(",").map { it.trim() }
+                    if (parts.size == 2 && parts.all { ZoneValidator.parseDoubleFa(it) != null }) {
+                        vm.latText = parts[0]
+                        vm.lngText = parts[1]
+                        pasteError = null
+                    } else {
+                        vm.latText = input
+                    }
+                },
                 label = { Text("عرض جغرافیایی") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
@@ -352,6 +362,11 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
             }
             locError?.let { Text(it, color = AlertRed, style = MaterialTheme.typography.bodySmall) }
             pasteError?.let { Text(it, color = AlertRed, style = MaterialTheme.typography.bodySmall) }
+            Text(
+                "راهنما: در گوگل‌مپ نقطه را لمس طولانی کنید تا مختصات نمایش داده شود؛ آن را کپی کنید (مثل 34.633719,50.886485) و با دکمه «الصاق» یا مستقیم در کادر عرض جغرافیایی بچسبانید.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
