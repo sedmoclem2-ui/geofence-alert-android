@@ -72,6 +72,12 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
+        <!-- سرویس پیش‌زمینه پایش دقیق محدوده‌های کوچک (هر ۲۰ ثانیه) -->
+        <service
+            android:name=".service.ProximityMonitorService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
         <!-- ویجت صفحه اصلی -->
         <receiver
             android:name=".widget.ZoneWidgetProvider"

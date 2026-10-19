@@ -13,10 +13,15 @@ import com.google.android.gms.location.GeofencingRequest
 import com.google.android.gms.location.LocationServices
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.data.Zone
+import ir.khanoomi.geofencealert.service.ProximityMonitorService
 import kotlinx.coroutines.flow.first
 
 /**
  * ثبت و حذف ژئوفنس‌ها در Geofencing API.
+ *
+ * فقط برای محدوده‌های با شعاع ۲۰۰ متر یا بیشتر؛ محدوده‌های کوچک‌تر با
+ * پایش دقیق ۲۰ ثانیه‌ای ([ProximityMonitorService]) کنترل می‌شوند چون
+ * ژئوفنس سیستمی برای شعاع‌های کوچک دقیق نیست.
  *
  * نکته مهم: InitialTrigger تنظیم نمی‌شود، پس اگر گوشی هنگام ثبت، داخل محدوده باشد
  * هشداری فعال نمی‌شود؛ فقط «ورود جدید» رویداد ورود تولید می‌کند.
@@ -54,7 +59,9 @@ object GeofenceHelper {
     /**
      * همگام‌سازی ثبت ژئوفنس‌ها با وضعیت واقعی برنامه:
      * اگر پایش کلی فعال و مجوز مکان موجود باشد، همه حذف و محدوده‌های فعال
-     * (حداکثر ۱۰۰ عدد) ثبت می‌شوند؛ در غیر این صورت همه حذف می‌شوند.
+     * با شعاع ۲۰۰ متر یا بیشتر (حداکثر ۱۰۰ عدد) ثبت می‌شوند؛ در غیر این صورت
+     * همه حذف می‌شوند. محدوده‌های کوچک‌تر به سرویس پایش دقیق سپرده می‌شوند.
+     * در پایان، وضعیت سرویس پایش دقیق نیز همگام می‌شود.
      */
     suspend fun refreshRegistrations(context: Context) {
         val app = context.applicationContext as GeofenceAlertApp
@@ -74,7 +81,9 @@ object GeofenceHelper {
 
         if (monitoringEnabled && hasLocationPermission) {
             val zones = try {
-                app.zoneRepo.getActiveZones().take(MAX_GEOFENCES)
+                app.zoneRepo.getActiveZones()
+                    .filter { it.radiusMeters >= ProximityMonitorService.PRECISE_RADIUS_THRESHOLD_M }
+                    .take(MAX_GEOFENCES)
             } catch (e: Exception) {
                 Log.e(TAG, "Cannot load active zones", e)
                 emptyList()
@@ -88,6 +97,9 @@ object GeofenceHelper {
                 "Skipping registration (monitoring=$monitoringEnabled, permission=$hasLocationPermission)"
             )
         }
+
+        // همگام‌سازی سرویس پایش دقیق محدوده‌های کوچک (از هر نخی امن است)
+        ProximityMonitorService.sync(context)
     }
 
     fun addZones(context: Context, zones: List<Zone>) {

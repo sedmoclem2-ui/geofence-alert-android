@@ -23,6 +23,7 @@ import ir.khanoomi.geofencealert.util.Permissions
 object Notifications {
     const val ALERT_CHANNEL_ID = "alert_channel"
     const val STATUS_CHANNEL_ID = "status_channel"
+    const val PROXIMITY_CHANNEL_ID = "proximity_channel"
 
     private const val STATUS_NOTIFICATION_ID = 9002
 
@@ -50,8 +51,16 @@ object Notifications {
         ).apply {
             description = "وضعیت کلی پایش محدوده‌ها"
         }
+        val proximity = NotificationChannel(
+            PROXIMITY_CHANNEL_ID,
+            "پایش دقیق محدوده",
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = "پایش پیوسته محدوده‌های کوچک (هر ۲۰ ثانیه)"
+        }
         nm.createNotificationChannel(alert)
         nm.createNotificationChannel(status)
+        nm.createNotificationChannel(proximity)
     }
 
     /** اعلان هشدار یک محدوده (برای سرویس پیش‌زمینه و مسیر جایگزین). */
@@ -121,5 +130,23 @@ object Notifications {
 
     fun cancelStatus(context: Context) {
         manager(context).cancel(STATUS_NOTIFICATION_ID)
+    }
+
+    /** اعلان دائمی سرویس پیش‌زمینه پایش دقیق محدوده‌های کوچک. */
+    fun proximityNotification(context: Context): Notification {
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(context, PROXIMITY_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("پایش دقیق محدوده فعال است")
+            .setContentText("بررسی موقعیت هر ۲۰ ثانیه")
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setContentIntent(contentIntent)
+            .build()
     }
 }
