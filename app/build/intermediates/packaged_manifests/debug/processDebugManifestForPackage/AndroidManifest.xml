@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="ir.khanoomi.geofencealert"
-    android:versionCode="14"
-    android:versionName="1.9.2" >
+    android:versionCode="15"
+    android:versionName="2.0.0" >
 
     <uses-sdk
         android:minSdkVersion="26"
@@ -22,6 +22,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- نگه داشتن پردازنده بیدار هنگام پخش هشدار با صفحه خاموش -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- ارسال پیامک اطلاع‌رسانی ورود به محدوده (فقط شماره‌های تعریف‌شده کاربر) -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- فقط در اندروید ۹ و پایین‌تر: نوشتن پشتیبان خودکار در Documents عمومی -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
     <!-- فقط برای کاشی‌های نقشه در صفحه «انتخاب روی نقشه» -->
     <uses-permission android:name="android.permission.INTERNET" />
 
@@ -75,6 +81,11 @@
         <!-- خودترمیمی دوره‌ای پس‌زمینه (فقط از AlarmManager داخلی) -->
         <receiver
             android:name="ir.khanoomi.geofencealert.receiver.SelfHealReceiver"
+            android:exported="false" />
+
+        <!-- یادآور ماندن طولانی داخل محدوده (فقط از AlarmManager داخلی) -->
+        <receiver
+            android:name="ir.khanoomi.geofencealert.receiver.StayReminderReceiver"
             android:exported="false" />
 
         <!-- ثبت مجدد محدوده‌ها پس از راه‌اندازی مجدد گوشی -->

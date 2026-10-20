@@ -13,8 +13,8 @@ android {
         applicationId = "ir.khanoomi.geofencealert"
         minSdk = 26
         targetSdk = 34
-        versionCode = 14
-        versionName = "1.9.2"
+        versionCode = 15
+        versionName = "2.0.0"
     }
 
     // امضای ثابت با کی‌استور ماندگار (GEOFENCE_DEBUG_KEYSTORE): دیباگ‌کی‌استور

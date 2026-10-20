@@ -41,6 +41,12 @@ object Permissions {
         ) == PackageManager.PERMISSION_GRANTED
     }
 
+    /** آیا مجوز ارسال پیامک داده شده است. */
+    fun hasSendSms(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(
+            context, Manifest.permission.SEND_SMS
+        ) == PackageManager.PERMISSION_GRANTED
+
     /** باز کردن صفحه تنظیمات همین برنامه برای اعطای دستی مجوزها. */
     fun openAppSettings(context: Context) {
         val intent = Intent(

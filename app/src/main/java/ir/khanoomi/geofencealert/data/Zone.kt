@@ -56,6 +56,31 @@ data class Zone(
     val postExitDurationSec: Int = 10,
     /** مکث بین آلارم‌ها در الگوی تکراری پس از خروج، به ثانیه */
     val postExitGapSec: Int = 30,
+    /** فاصله هشدار «نزدیک شدن» به متر؛ صفر یعنی خاموش. */
+    val approachDistanceM: Int = 0,
+    /** یادآور ماندن داخل محدوده به دقیقه؛ صفر یعنی خاموش. */
+    val stayReminderMin: Int = 0,
+    /**
+     * نوع هشدار: [ALERT_BOTH] صدا و لرزش، [ALERT_SOUND] فقط صدا،
+     * [ALERT_VIBRATE] فقط لرزش، [ALERT_NONE] هیچ‌کدام (فقط اعلان).
+     */
+    val alertMode: Int = ALERT_BOTH,
+    /** اعلام صوتی نام محدوده هنگام ورود (TTS خود گوشی، بدون هوش مصنوعی). */
+    val voiceAnnounce: Boolean = false,
+    /** شماره‌های مقصد پیامک اطلاع‌رسانی، جداشده با خط جدید؛ خالی یعنی بدون پیامک. */
+    val smsNumbers: String = "",
+    /** متن مشترک پیامک اطلاع‌رسانی ورود به محدوده. */
+    val smsMessage: String = "",
+    /** آیا بازه «اعلان بی‌صدا» برای این محدوده فعال است. */
+    val silentEnabled: Boolean = false,
+    /** شروع بازه اعلان بی‌صدا به دقیقه از نیمه‌شب (پیش‌فرض ۲۲:۰۰). */
+    val silentStartMin: Int = 1320,
+    /** پایان بازه اعلان بی‌صدا به دقیقه از نیمه‌شب (پیش‌فرض ۰۶:۰۰). */
+    val silentEndMin: Int = 360,
+    /** زمان ورود فعلی به محدوده (میلی‌ثانیه)؛ صفر یعنی هم‌اکنون داخل نیستیم. */
+    val insideSince: Long = 0,
+    /** آیا یادآور ماندنِ این اقامت قبلاً ارسال شده است. */
+    val stayReminded: Boolean = false,
     val updatedAt: Long = System.currentTimeMillis()
 ) {
     companion object {
@@ -66,6 +91,12 @@ data class Zone(
         const val EXIT_STOP = 0
         const val EXIT_SEQUENCE = 1
         const val EXIT_CONTINUE = 2
+
+        /** انواع هشدار هنگام ورود به محدوده. */
+        const val ALERT_BOTH = 0
+        const val ALERT_SOUND = 1
+        const val ALERT_VIBRATE = 2
+        const val ALERT_NONE = 3
 
         const val SOUND_ALARM = "alarm"
         const val SOUND_RINGTONE = "ringtone"

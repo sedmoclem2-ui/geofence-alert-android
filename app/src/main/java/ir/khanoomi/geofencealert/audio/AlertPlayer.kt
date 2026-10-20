@@ -48,9 +48,16 @@ object AlertPlayer {
      * اگر همین حالا در حال پخش باشد، هیچ پخش‌کننده جدیدی ساخته نمی‌شود.
      * اگر [customUri] داده شود، اول همان امتحان می‌شود و در صورت خطا،
      * صدای سیستمی [soundKey] پخش می‌گردد.
+     * [volume01]: بلندی صدا بین ۰ و ۱ (پیش‌فرض: کامل).
      */
     @Synchronized
-    fun play(context: Context, zoneId: Long, soundKey: String, customUri: String? = null) {
+    fun play(
+        context: Context,
+        zoneId: Long,
+        soundKey: String,
+        customUri: String? = null,
+        volume01: Float = 1f
+    ) {
         // B2: پیش‌نمایش صدا هرگز نباید با هشدار واقعی هم‌پوشانی داشته باشد.
         stopPreviewInternal()
         if (players.containsKey(zoneId)) {
@@ -63,6 +70,7 @@ object AlertPlayer {
             ?.let { candidates += it }
         candidates += soundUri(appContext, soundKey)
         var lastError: Exception? = null
+        val volume = volume01.coerceIn(0f, 1f)
         for (uri in candidates) {
             val mp = MediaPlayer()
             try {
@@ -76,9 +84,10 @@ object AlertPlayer {
                 mp.setWakeMode(appContext, PowerManager.PARTIAL_WAKE_LOCK)
                 mp.isLooping = true
                 mp.prepare()
+                mp.setVolume(volume, volume)
                 mp.start()
                 players[zoneId] = mp
-                Log.i(TAG, "Started alert loop for zone $zoneId")
+                Log.i(TAG, "Started alert loop for zone $zoneId (volume=$volume)")
                 return
             } catch (e: Exception) {
                 lastError = e

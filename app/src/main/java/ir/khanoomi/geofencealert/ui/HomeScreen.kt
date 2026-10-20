@@ -137,6 +137,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (_: Exception) {
                 }
                 ZoneWidgetProvider.updateAll(getApplication())
+                // تازه‌سازی پشتیبان خودکار بعد از هر تغییر مجموعه محدوده‌ها
+                ir.khanoomi.geofencealert.data.BackupManager
+                    .writeAutoBackup(getApplication())
             }
         }
     }
@@ -224,7 +227,7 @@ fun HomeScreen(navController: NavController) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("محدوده هشدار", fontWeight = FontWeight.Bold) },
+                title = { Text(LocalStrings.current.appTitle, fontWeight = FontWeight.Bold) },
                 actions = {
                     IconButton(onClick = { navController.navigate("stats") }) {
                         Icon(Icons.Filled.DateRange, contentDescription = "آمار")
@@ -243,7 +246,7 @@ fun HomeScreen(navController: NavController) {
             ExtendedFloatingActionButton(
                 onClick = { navController.navigate("edit") },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("محدوده جدید") },
+                text = { Text(LocalStrings.current.addZone) },
                 modifier = Modifier.background(
                     Brush.horizontalGradient(listOf(scheme.primary, scheme.secondary)),
                     CircleShape
@@ -318,7 +321,7 @@ fun HomeScreen(navController: NavController) {
         AlertDialog(
             onDismissRequest = { zoneToDelete = null },
             containerColor = MaterialTheme.colorScheme.surface,
-            title = { Text("حذف محدوده", fontWeight = FontWeight.Bold) },
+            title = { Text(LocalStrings.current.deleteZoneTitle, fontWeight = FontWeight.Bold) },
             text = { Text("«${zone.name}» حذف شود؟") },
             confirmButton = {
                 TextButton(onClick = {
@@ -433,7 +436,8 @@ private fun RadarHeroCard(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = if (monitoring) "پایش فعال است" else "پایش متوقف است",
+                            text = if (monitoring) LocalStrings.current.monitoringOn
+                            else LocalStrings.current.monitoringOff,
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                             color = scheme.onPrimary,
@@ -453,7 +457,8 @@ private fun RadarHeroCard(
                         )
                     }
                     Text(
-                        "$activeCount محدوده فعال • $alertingCount هشدار فعال",
+                        "$activeCount ${LocalStrings.current.activeZonesSuffix} • " +
+                            "$alertingCount ${LocalStrings.current.activeAlertsSuffix}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = scheme.onPrimary.copy(alpha = 0.85f)
                     )
@@ -473,7 +478,7 @@ private fun RadarHeroCard(
                             colors = ButtonDefaults.textButtonColors(contentColor = scheme.onPrimary),
                             contentPadding = PaddingValues(0.dp)
                         ) {
-                            Text("رفع مشکل", fontWeight = FontWeight.Bold)
+                            Text(LocalStrings.current.fixIssue, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -552,7 +557,7 @@ private fun AlertBanner(zoneName: String, onStop: () -> Unit) {
                             .background(Color.White.copy(alpha = dotAlpha), CircleShape)
                     )
                     Text(
-                        "هشدار فعال: $zoneName",
+                        "${LocalStrings.current.alertActive}: $zoneName",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         style = MaterialTheme.typography.titleMedium
@@ -566,7 +571,7 @@ private fun AlertBanner(zoneName: String, onStop: () -> Unit) {
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("توقف هشدار", fontWeight = FontWeight.Bold)
+                    Text(LocalStrings.current.stopAlert, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -611,10 +616,11 @@ private fun TonalChip(text: String) {
 @Composable
 private fun StatusPill(zone: Zone) {
     val scheme = MaterialTheme.colorScheme
+    val strings = LocalStrings.current
     val (bg, fg, label) = when {
-        zone.isAlerting -> Triple(scheme.errorContainer, scheme.onErrorContainer, "هشدار فعال")
-        !zone.isActive -> Triple(scheme.surfaceVariant, scheme.onSurfaceVariant, "غیرفعال")
-        else -> Triple(scheme.primaryContainer, scheme.onPrimaryContainer, "در انتظار ورود")
+        zone.isAlerting -> Triple(scheme.errorContainer, scheme.onErrorContainer, strings.alertActive)
+        !zone.isActive -> Triple(scheme.surfaceVariant, scheme.onSurfaceVariant, strings.inactive)
+        else -> Triple(scheme.primaryContainer, scheme.onPrimaryContainer, strings.waitingEntry)
     }
     Surface(color = bg, shape = CircleShape) {
         Text(
@@ -675,7 +681,8 @@ private fun ZoneCard(
                     StatusPill(zone = zone)
                     if (zone.lastTriggeredAt > 0) {
                         Text(
-                            "آخرین ورود: ${TimeFormat.formatRelativeTimeFa(zone.lastTriggeredAt)}",
+                            "${LocalStrings.current.lastEntry}: " +
+                                TimeFormat.formatRelativeTimeFa(zone.lastTriggeredAt),
                             style = MaterialTheme.typography.bodySmall,
                             color = scheme.onSurfaceVariant
                         )
@@ -708,7 +715,7 @@ private fun ZoneCard(
                         .fillMaxWidth()
                         .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
                 ) {
-                    Text("توقف هشدار", fontWeight = FontWeight.Bold)
+                    Text(LocalStrings.current.stopAlert, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -753,12 +760,12 @@ private fun EmptyState(onAdd: () -> Unit) {
             )
         }
         Text(
-            "هنوز محدوده‌ای نساختی",
+            LocalStrings.current.noZonesYet,
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
         )
         Text(
-            "اولین محدوده‌ات را بساز تا ورود به آن را به تو خبر بدهم",
+            LocalStrings.current.noZonesYetSub,
             style = MaterialTheme.typography.bodyMedium,
             color = scheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

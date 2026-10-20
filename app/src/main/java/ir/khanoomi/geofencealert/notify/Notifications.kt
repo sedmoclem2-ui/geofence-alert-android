@@ -33,6 +33,12 @@ object Notifications {
     /** شناسه یکتای اعلان هر محدوده. */
     fun alertNotificationId(zoneId: Long): Int = (1000 + (zoneId % 100000)).toInt()
 
+    /** شناسه اعلان نزدیک شدن هر محدوده. */
+    fun approachNotificationId(zoneId: Long): Int = (3000 + (zoneId % 100000)).toInt()
+
+    /** شناسه اعلان یادآور ماندن هر محدوده. */
+    fun stayNotificationId(zoneId: Long): Int = (5000 + (zoneId % 100000)).toInt()
+
     private fun manager(context: Context): NotificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -109,6 +115,56 @@ object Notifications {
 
     fun cancelAlert(context: Context, zoneId: Long) {
         manager(context).cancel(alertNotificationId(zoneId))
+    }
+
+    /**
+     * اعلان «نزدیک شدن به محدوده»؛ در ساعات سکوت عمومی، بی‌صدا نمایش داده
+     * می‌شود ([silent]). این اعلان اطلاعات‌محور است و دکمه توقف ندارد.
+     */
+    fun approachNotification(context: Context, zoneId: Long, zoneName: String, silent: Boolean) {
+        if (!Permissions.hasNotifications(context)) return
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            approachNotificationId(zoneId),
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val builder = NotificationCompat.Builder(context, STATUS_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("نزدیک شدن به محدوده")
+            .setContentText(zoneName)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(contentIntent)
+        if (silent) {
+            builder.setSilent(true)
+        }
+        manager(context).notify(approachNotificationId(zoneId), builder.build())
+    }
+
+    /**
+     * اعلان «یادآور ماندن» برای اقامت طولانی داخل یک محدوده.
+     * [minutes] مدت ماندن تنظیم‌شده توسط کاربر (به دقیقه) است.
+     */
+    fun stayReminderNotification(context: Context, zoneId: Long, zoneName: String, minutes: Int) {
+        if (!Permissions.hasNotifications(context)) return
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            stayNotificationId(zoneId),
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(context, STATUS_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("یادآور ماندن")
+            .setContentText(
+                "بیش از ${TimeFormat.toFaDigits(minutes.toString())} دقیقه است که در محدودهٔ $zoneName هستید."
+            )
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(contentIntent)
+            .build()
+        manager(context).notify(stayNotificationId(zoneId), notification)
     }
 
     /** اعلان کم‌اهمیت وضعیت پایش (اختیاری). */

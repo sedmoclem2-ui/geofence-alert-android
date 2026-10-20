@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,6 +34,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,11 +59,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import ir.khanoomi.geofencealert.GeofenceAlertApp
+import ir.khanoomi.geofencealert.data.BackupManager
 import ir.khanoomi.geofencealert.domain.ColorMath.complementArgb
 import ir.khanoomi.geofencealert.domain.TimeFormat
+import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.ui.theme.AppPalette
 import ir.khanoomi.geofencealert.ui.theme.CUSTOM_THEME_KEY
 import ir.khanoomi.geofencealert.util.Permissions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import android.content.pm.PackageManager
 
@@ -67,8 +74,10 @@ import android.content.pm.PackageManager
 @Composable
 fun SettingsScreen(navController: NavController) {
     val context = LocalContext.current
+    val strings = LocalStrings.current
     val app = context.applicationContext as GeofenceAlertApp
     val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var stLocation by remember { mutableStateOf(false) }
     var stBackground by remember { mutableStateOf(false) }
@@ -80,7 +89,42 @@ fun SettingsScreen(navController: NavController) {
     val themeKey by app.prefs.themePalette.collectAsStateWithLifecycle(initialValue = "deepblue")
     val customArgb by app.prefs.customPrimaryArgb.collectAsStateWithLifecycle(initialValue = 0xFF0E6B5CL)
     val customDarkVal by app.prefs.customDark.collectAsStateWithLifecycle(initialValue = false)
+    val languageKey by app.prefs.appLanguage.collectAsStateWithLifecycle(initialValue = "fa")
+    val alertVolumeVal by app.prefs.alertVolume.collectAsStateWithLifecycle(initialValue = 80)
+    val vibrationIntensityVal by app.prefs.vibrationIntensity
+        .collectAsStateWithLifecycle(initialValue = 70)
     var showCustomTheme by remember { mutableStateOf(false) }
+
+    // خروجی پشتیبان دستی (SAF): نوشتن JSON همه محدوده‌ها
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                val ok = BackupManager.writeBackupToUri(context, uri)
+                snackbarHostState.showSnackbar(
+                    if (ok) strings.backupDone else strings.backupFailed
+                )
+            }
+        }
+    }
+    // ورودی پشتیبان دستی (SAF): جایگزینی همه محدوده‌ها
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                val ok = BackupManager.importFromUri(context, uri)
+                if (ok) {
+                    GeofenceHelper.refreshRegistrations(context)
+                    BackupManager.writeAutoBackup(context)
+                    snackbarHostState.showSnackbar(strings.backupDone)
+                } else {
+                    snackbarHostState.showSnackbar(strings.backupFailed)
+                }
+            }
+        }
+    }
 
     fun refresh() {
         stLocation = Permissions.hasAnyLocation(context)
@@ -102,9 +146,10 @@ fun SettingsScreen(navController: NavController) {
     LaunchedEffect(Unit) { refresh() }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("تنظیمات و مجوزها") },
+                title = { Text(strings.settingsTitle) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
@@ -187,6 +232,26 @@ fun SettingsScreen(navController: NavController) {
                 )
             }
             item {
+                LanguageCard(
+                    selectedKey = languageKey,
+                    onSelect = { key -> scope.launch { app.prefs.setAppLanguage(key) } }
+                )
+            }
+            item {
+                SoundVibrationCard(
+                    volume = alertVolumeVal,
+                    vibration = vibrationIntensityVal,
+                    onVolumeChange = { v -> scope.launch { app.prefs.setAlertVolume(v) } },
+                    onVibrationChange = { v -> scope.launch { app.prefs.setVibrationIntensity(v) } }
+                )
+            }
+            item {
+                BackupCard(
+                    onExport = { exportLauncher.launch("mahdoode-hoshdar-backup.json") },
+                    onImport = { importLauncher.launch(arrayOf("application/json")) }
+                )
+            }
+            item {
                 OutlinedButton(
                     onClick = { Permissions.openAppSettings(context) },
                     modifier = Modifier.fillMaxWidth()
@@ -196,7 +261,7 @@ fun SettingsScreen(navController: NavController) {
                 Button(
                     onClick = { navController.navigate("battery") },
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("راهنمای مصرف باتری (سامسونگ)") }
+                ) { Text(strings.batteryGuide) }
             }
             item { LimitationsCard() }
             item {
@@ -222,7 +287,7 @@ fun SettingsScreen(navController: NavController) {
                     ""
                 }
                 Text(
-                    "$appLabel — نسخه ${TimeFormat.toFaDigits(versionName)}",
+                    "$appLabel — ${strings.version} ${TimeFormat.toFaDigits(versionName)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -268,7 +333,7 @@ private fun QuietHoursCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("ساعات سکوت", fontWeight = FontWeight.Bold)
+                    Text(LocalStrings.current.quietHours, fontWeight = FontWeight.Bold)
                     Text(
                         "در این بازه، هشدار فقط با اعلان و بدون صدا نمایش داده می‌شود.",
                         style = MaterialTheme.typography.bodySmall,
@@ -317,7 +382,7 @@ private fun ThemePaletteCard(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("تم رنگی", fontWeight = FontWeight.Bold)
+            Text(LocalStrings.current.theme, fontWeight = FontWeight.Bold)
             val choices: List<ThemeChoice> =
                 AppPalette.entries.map { ThemeChoice.Preset(it) } + ThemeChoice.Custom
             choices.chunked(4).forEach { rowChoices ->
@@ -334,7 +399,7 @@ private fun ThemePaletteCard(
                                 onClick = { onSelect(choice.palette.key) }
                             )
                             ThemeChoice.Custom -> PaletteTile(
-                                title = "شخصی‌سازی",
+                                title = LocalStrings.current.customizeTheme,
                                 selected = selectedKey == CUSTOM_THEME_KEY,
                                 circleModifier = Modifier.background(
                                     Brush.sweepGradient(
@@ -553,7 +618,7 @@ private fun LimitationsCard() {
             Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("محدودیت‌های شناخته‌شده", fontWeight = FontWeight.Bold)
+            Text(LocalStrings.current.limitations, fontWeight = FontWeight.Bold)
             val items = listOf(
                 "حداکثر ۱۰۰ ژئوفنس هم‌زمان توسط اندروید پشتیبانی می‌شود.",
                 "پس از «Force Stop» کردن برنامه از تنظیمات، ژئوفنس‌ها توسط سیستم حذف می‌شوند و تا باز شدن دوباره برنامه کار نمی‌کنند.",
@@ -564,6 +629,157 @@ private fun LimitationsCard() {
                 "خاموش بودن گوشی یا لغو مجوزها، تشخیص ورود را متوقف می‌کند؛ برنامه چنین چیزی را تضمین نمی‌کند."
             )
             items.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
+        }
+    }
+}
+
+
+/** ردیف گزینه انتخابی (هم‌خانواده PrettyOptionRow صفحه ویرایش، مستقل برای این فایل). */
+@Composable
+private fun SettingsPrettyOptionRow(
+    selected: Boolean,
+    title: String,
+    subtitle: String?,
+    onClick: () -> Unit
+) {
+    val bg = if (selected) MaterialTheme.colorScheme.primary
+    else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (selected) MaterialTheme.colorScheme.onPrimary
+    else MaterialTheme.colorScheme.onSurface
+    val sg = if (selected) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f)
+    else MaterialTheme.colorScheme.onSurfaceVariant
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(containerColor = bg)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.Bold, color = fg)
+                if (subtitle != null) {
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = sg
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** کارت انتخاب زبان برنامه: فقط فارسی، انگلیسی و عربی. */
+@Composable
+private fun LanguageCard(
+    selectedKey: String,
+    onSelect: (String) -> Unit
+) {
+    val strings = LocalStrings.current
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(strings.language, fontWeight = FontWeight.Bold)
+            SettingsPrettyOptionRow(
+                selected = selectedKey == "fa",
+                title = "فارسی",
+                subtitle = "Persian",
+                onClick = { onSelect("fa") }
+            )
+            SettingsPrettyOptionRow(
+                selected = selectedKey == "en",
+                title = "English",
+                subtitle = "English",
+                onClick = { onSelect("en") }
+            )
+            SettingsPrettyOptionRow(
+                selected = selectedKey == "ar",
+                title = "العربية",
+                subtitle = "Arabic",
+                onClick = { onSelect("ar") }
+            )
+        }
+    }
+}
+
+/** کارت تنظیم سراسری بلندی صدای هشدار و شدت لرزش. */
+@Composable
+private fun SoundVibrationCard(
+    volume: Int,
+    vibration: Int,
+    onVolumeChange: (Int) -> Unit,
+    onVibrationChange: (Int) -> Unit
+) {
+    val strings = LocalStrings.current
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(strings.soundAndVibration, fontWeight = FontWeight.Bold)
+            Text(
+                "${strings.volume}: ٪${TimeFormat.toFaDigits(volume.toString())}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Slider(
+                value = volume.toFloat(),
+                onValueChange = { onVolumeChange(it.toInt().coerceIn(0, 100)) },
+                valueRange = 0f..100f,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Text(
+                "${strings.vibrationIntensity}: ٪${TimeFormat.toFaDigits(vibration.toString())}",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Slider(
+                value = vibration.toFloat(),
+                onValueChange = { onVibrationChange(it.toInt().coerceIn(0, 100)) },
+                valueRange = 0f..100f,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+/** کارت پشتیبان‌گیری دستی (خروجی/ورودی از طریق SAF) + توضیح پشتیبان خودکار. */
+@Composable
+private fun BackupCard(
+    onExport: () -> Unit,
+    onImport: () -> Unit
+) {
+    val strings = LocalStrings.current
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(strings.backup, fontWeight = FontWeight.Bold)
+            Text(
+                "برنامه به‌طور خودکار از محدوده‌ها در پوشه Documents گوشی پشتیبان می‌گیرد؛ " +
+                    "اگر برنامه را حذف و دوباره نصب کنید، محدوده‌ها خودبه‌خود برمی‌گردند.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = onExport,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(strings.backupExport) }
+            OutlinedButton(
+                onClick = onImport,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(strings.backupImport) }
+            Text(
+                "ورودی پشتیبان همه محدوده‌های فعلی را با محتوای فایل جایگزین می‌کند.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
         }
     }
 }

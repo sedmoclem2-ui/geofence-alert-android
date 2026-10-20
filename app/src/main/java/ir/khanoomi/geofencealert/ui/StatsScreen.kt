@@ -136,7 +136,7 @@ fun StatsScreen(navController: NavController) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("آمار", fontWeight = FontWeight.Bold) },
+                title = { Text(LocalStrings.current.statistics, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
@@ -155,7 +155,7 @@ fun StatsScreen(navController: NavController) {
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    "در این بازه رویدادی ثبت نشده است.",
+                    LocalStrings.current.statsEmpty,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -178,7 +178,7 @@ fun StatsScreen(navController: NavController) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            "آمار هفته",
+                            LocalStrings.current.weeklyStats,
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
                         )
@@ -196,12 +196,12 @@ fun StatsScreen(navController: NavController) {
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             StatTotalCard(
-                                title = "مجموع ورودها",
+                                title = LocalStrings.current.totalEntries,
                                 value = totalEnters,
                                 modifier = Modifier.weight(1f)
                             )
                             StatTotalCard(
-                                title = "مجموع خروج‌ها",
+                                title = LocalStrings.current.totalExits,
                                 value = totalExits,
                                 modifier = Modifier.weight(1f)
                             )
@@ -209,7 +209,7 @@ fun StatsScreen(navController: NavController) {
                     }
                     item {
                         Text(
-                            "ورودها به تفکیک محدوده",
+                            LocalStrings.current.entriesPerZone,
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold
                         )
@@ -236,7 +236,7 @@ fun StatsScreen(navController: NavController) {
                 item {
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "آمار ماهانه",
+                        LocalStrings.current.monthlyStats,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )

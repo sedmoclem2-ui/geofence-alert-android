@@ -161,7 +161,7 @@ fun MapPickerScreen(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
                 }
                 Text(
-                    "انتخاب روی نقشه",
+                    LocalStrings.current.mapPickerTitle,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f)
@@ -170,7 +170,7 @@ fun MapPickerScreen(
                     onClick = { confirm() },
                     enabled = selected != null
                 ) {
-                    Text("تأیید", fontWeight = FontWeight.Bold)
+                    Text(LocalStrings.current.confirm, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -214,7 +214,7 @@ fun MapPickerScreen(
             ) {
                 // در چیدمان راست‌به‌چپ، اولین عنصر در سمت راست قرار می‌گیرد
                 TextButton(onClick = { fetchLocation() }) {
-                    Text("موقعیت فعلی", fontWeight = FontWeight.Bold)
+                    Text(LocalStrings.current.currentLocation, fontWeight = FontWeight.Bold)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalIconButton(
@@ -233,12 +233,16 @@ fun MapPickerScreen(
                 val (lat, lng) = selected ?: (0.0 to 0.0)
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        "عرض: ${TimeFormat.toFaDigits(String.format(Locale.US, "%.5f", lat))}",
+                        "${LocalStrings.current.latitude}: ${
+                            TimeFormat.toFaDigits(String.format(Locale.US, "%.5f", lat))
+                        }",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "طول: ${TimeFormat.toFaDigits(String.format(Locale.US, "%.5f", lng))}",
+                        "${LocalStrings.current.longitude}: ${
+                            TimeFormat.toFaDigits(String.format(Locale.US, "%.5f", lng))
+                        }",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold
                     )

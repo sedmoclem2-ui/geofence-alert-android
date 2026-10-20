@@ -45,8 +45,9 @@ class GeofenceReceiver : BroadcastReceiver() {
         }
         val triggering = event.triggeringGeofences.orEmpty()
         val gateIds = triggering.mapNotNull { GeofenceHelper.parseGateId(it.requestId) }
+        val approachIds = triggering.mapNotNull { GeofenceHelper.parseApproachId(it.requestId) }
         val ids = triggering.mapNotNull { GeofenceHelper.parseId(it.requestId) }
-        if (gateIds.isEmpty() && ids.isEmpty()) return
+        if (gateIds.isEmpty() && ids.isEmpty() && approachIds.isEmpty()) return
 
         val pending = goAsync()
         scope.launch {
@@ -65,6 +66,20 @@ class GeofenceReceiver : BroadcastReceiver() {
                     }
                 }
                 val app = context.applicationContext as GeofenceAlertApp
+                // نزدیک شدن: فقط ورود به حلقه بیرونی رویداد دارد.
+                if (transition == Geofence.GEOFENCE_TRANSITION_ENTER) {
+                    for (approachId in approachIds) {
+                        val zone = try {
+                            app.zoneRepo.getById(approachId)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "getById failed for approach $approachId", e)
+                            null
+                        } ?: continue
+                        if (!zone.isActive || zone.approachDistanceM <= 0) continue
+                        Log.i(TAG, "APPROACH for zone $approachId")
+                        ZoneTransitionHandler.onApproach(context, zone)
+                    }
+                }
                 for (id in ids) {
                     val zone = try {
                         app.zoneRepo.getById(id)

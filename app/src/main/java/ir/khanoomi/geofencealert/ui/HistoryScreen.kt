@@ -1,6 +1,8 @@
 package ir.khanoomi.geofencealert.ui
 
 import android.app.Application
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,7 +26,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,15 +80,41 @@ class HistoryViewModel(app: Application) : AndroidViewModel(app) {
 @Composable
 fun HistoryScreen(navController: NavController) {
     val context = LocalContext.current
+    val strings = LocalStrings.current
     val app = context.applicationContext as GeofenceAlertApp
     val vm: HistoryViewModel = viewModel { HistoryViewModel(app) }
     val events by vm.events.collectAsStateWithLifecycle()
     var showDeleteDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // خروجی CSV تاریخچه (انتخاب مسیر با SAF)
+    val csvLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch(Dispatchers.IO) {
+                try {
+                    context.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                        out.write(
+                            ir.khanoomi.geofencealert.domain.CsvExport
+                                .eventsToCsv(events)
+                                .toByteArray(Charsets.UTF_8)
+                        )
+                    }
+                    snackbarHostState.showSnackbar(strings.csvExportDone)
+                } catch (e: Exception) {
+                    android.util.Log.e("History", "CSV export failed", e)
+                }
+            }
+        }
+    }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("تاریخچه رویدادها", fontWeight = FontWeight.Bold) },
+                title = { Text(strings.history, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
@@ -127,6 +159,14 @@ fun HistoryScreen(navController: NavController) {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                item {
+                    OutlinedButton(
+                        onClick = { csvLauncher.launch("mahdoode-hoshdar-history.csv") },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(strings.csvExport)
+                    }
+                }
                 items(events, key = { it.id }) { event ->
                     EventRow(event = event)
                 }
@@ -156,8 +196,14 @@ fun HistoryScreen(navController: NavController) {
 
 @Composable
 private fun EventRow(event: EventLog) {
+    val strings = LocalStrings.current
     val isEnter = event.type == EventLog.TYPE_ENTER
-    val dotColor = if (isEnter) Color(0xFF2E7D32) else MaterialTheme.colorScheme.secondary
+    val isApproach = event.type == EventLog.TYPE_APPROACH
+    val dotColor = when {
+        isApproach -> MaterialTheme.colorScheme.tertiary
+        isEnter -> Color(0xFF2E7D32)
+        else -> MaterialTheme.colorScheme.secondary
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -185,7 +231,11 @@ private fun EventRow(event: EventLog) {
                     color = dotColor.copy(alpha = 0.14f)
                 ) {
                     Text(
-                        if (isEnter) "ورود به محدوده" else "خروج از محدوده",
+                        when {
+                            isApproach -> strings.approachEvent
+                            isEnter -> strings.enterZone
+                            else -> strings.exitZone
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = dotColor,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)

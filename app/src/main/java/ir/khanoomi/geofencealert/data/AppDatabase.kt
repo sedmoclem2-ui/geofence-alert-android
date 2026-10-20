@@ -44,7 +44,24 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
     }
 }
 
-@Database(entities = [Zone::class, EventLog::class], version = 5, exportSchema = false)
+/** مهاجرت ۵ به ۶: هشدار نزدیک شدن، یادآور ماندن، نوع هشدار، اعلام صوتی، پیامک و بازه بی‌صدا. */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `approachDistanceM` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `stayReminderMin` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `alertMode` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `voiceAnnounce` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `smsNumbers` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `smsMessage` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `silentEnabled` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `silentStartMin` INTEGER NOT NULL DEFAULT 1320")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `silentEndMin` INTEGER NOT NULL DEFAULT 360")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `insideSince` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `stayReminded` INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+@Database(entities = [Zone::class, EventLog::class], version = 6, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun zoneDao(): ZoneDao
     abstract fun eventDao(): EventDao

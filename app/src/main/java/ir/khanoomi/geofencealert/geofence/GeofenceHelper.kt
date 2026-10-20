@@ -41,12 +41,17 @@ object GeofenceHelper {
      */
     const val GATE_PREFIX = "gate_"
 
+    /** پیشوند شناسه ژئوفنس «حلقه نزدیک شدن» برای هشدار قبل از ورود. */
+    const val APPROACH_PREFIX = "approach_"
+
     /** سقف تعداد ژئوفنس هم‌زمان در Geofencing API. */
     const val MAX_GEOFENCES = 100
 
     fun requestId(id: Long): String = "$REQUEST_PREFIX$id"
 
     fun gateRequestId(id: Long): String = "$GATE_PREFIX$id"
+
+    fun approachRequestId(id: Long): String = "$APPROACH_PREFIX$id"
 
     fun parseId(requestId: String): Long? =
         if (requestId.startsWith(REQUEST_PREFIX)) {
@@ -58,6 +63,13 @@ object GeofenceHelper {
     fun parseGateId(requestId: String): Long? =
         if (requestId.startsWith(GATE_PREFIX)) {
             requestId.removePrefix(GATE_PREFIX).toLongOrNull()
+        } else {
+            null
+        }
+
+    fun parseApproachId(requestId: String): Long? =
+        if (requestId.startsWith(APPROACH_PREFIX)) {
+            requestId.removePrefix(APPROACH_PREFIX).toLongOrNull()
         } else {
             null
         }
@@ -124,6 +136,16 @@ object GeofenceHelper {
             if (gated.isNotEmpty()) {
                 addGateZones(context, gated)
             }
+            // ژئوفنس‌های «نزدیک شدن»: حلقه بیرونی برای محدوده‌هایی که هشدار
+            // نزدیک شدن فعال کرده‌اند (فاصله بیشتر از شعاع خود محدوده).
+            // این ژئوفنس‌ها هم در سقف ۱۰۰تایی اندروید حساب می‌شوند.
+            val approach = zones.filter {
+                it.approachDistanceM > 0 &&
+                    it.approachDistanceM.toDouble() > it.radiusMeters
+            }
+            if (approach.isNotEmpty()) {
+                addApproachZones(context, approach)
+            }
         } else {
             Log.i(
                 TAG,
@@ -170,6 +192,28 @@ object GeofenceHelper {
                 .setTransitionTypes(
                     Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT
                 )
+                .build()
+        }
+        registerGeofences(context, geofences)
+    }
+
+    /**
+     * ثبت ژئوفنس‌های «نزدیک شدن»: حلقه بیرونی به شعاع دلخواه کاربر.
+     * ورود به این حلقه در [GeofenceReceiver] به هشدار «نزدیک شدن» همان
+     * محدوده ترجمه می‌شود؛ فقط رویداد ورود مهم است.
+     */
+    fun addApproachZones(context: Context, zones: List<Zone>) {
+        if (zones.isEmpty()) return
+        val geofences = zones.map { zone ->
+            Geofence.Builder()
+                .setRequestId(approachRequestId(zone.id))
+                .setCircularRegion(
+                    zone.latitude,
+                    zone.longitude,
+                    zone.approachDistanceM.toFloat().coerceAtLeast(1f)
+                )
+                .setExpirationDuration(Geofence.NEVER_EXPIRE)
+                .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER)
                 .build()
         }
         registerGeofences(context, geofences)

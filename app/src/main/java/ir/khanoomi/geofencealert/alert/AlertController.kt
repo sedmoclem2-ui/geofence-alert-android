@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.audio.AlertPlayer
+import ir.khanoomi.geofencealert.audio.AlertVibrator
 import ir.khanoomi.geofencealert.data.Zone
 import ir.khanoomi.geofencealert.notify.Notifications
 import ir.khanoomi.geofencealert.service.AlertService
@@ -18,7 +19,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -38,6 +41,34 @@ object AlertController {
 
     /** جاب‌های الگوی تکراری پس از خروج، یکی برای هر محدوده. */
     private val sequenceJobs = ConcurrentHashMap<Long, Job>()
+
+    /** آیا نوع هشدار محدوده، پخش صدا را اجازه می‌دهد. */
+    fun soundAllowed(mode: Int): Boolean =
+        mode == Zone.ALERT_BOTH || mode == Zone.ALERT_SOUND
+
+    /** آیا نوع هشدار محدوده، لرزش را اجازه می‌دهد. */
+    fun vibrationAllowed(mode: Int): Boolean =
+        mode == Zone.ALERT_BOTH || mode == Zone.ALERT_VIBRATE
+
+    /** بلندی صدای تنظیم‌شده در تنظیمات (۰ تا ۱)؛ پیش‌فرض ۰٫۸. */
+    fun volume01(context: Context): Float = try {
+        runBlocking(Dispatchers.IO) {
+            (context.applicationContext as GeofenceAlertApp).prefs.alertVolume.first()
+        } / 100f
+    } catch (e: Exception) {
+        Log.w(TAG, "Cannot read alert volume, using 0.8", e)
+        0.8f
+    }
+
+    /** شدت لرزش تنظیم‌شده در تنظیمات (۰ تا ۱)؛ پیش‌فرض ۰٫۷. */
+    fun vibration01(context: Context): Float = try {
+        runBlocking(Dispatchers.IO) {
+            (context.applicationContext as GeofenceAlertApp).prefs.vibrationIntensity.first()
+        } / 100f
+    } catch (e: Exception) {
+        Log.w(TAG, "Cannot read vibration intensity, using 0.7", e)
+        0.7f
+    }
 
     /**
      * شروع هشدار برای یک محدوده (پس از رویداد ورود معتبر).
@@ -65,7 +96,15 @@ object AlertController {
             ContextCompat.startForegroundService(context, intent)
         } catch (e: Exception) {
             Log.w(TAG, "Foreground service start failed; using fallback playback", e)
-            AlertPlayer.play(context, zone.id, zone.soundKey, zone.customSoundUri)
+            // مسیر جایگزین هم نوع هشدار (صدا/لرزش) و بلندی صدا را رعایت می‌کند.
+            if (soundAllowed(zone.alertMode)) {
+                AlertPlayer.play(
+                    context, zone.id, zone.soundKey, zone.customSoundUri, volume01(context)
+                )
+            }
+            if (vibrationAllowed(zone.alertMode)) {
+                AlertVibrator.start(context, zone.id, vibration01(context))
+            }
             Notifications.notifyAlert(context, zone.id, zone.name)
         }
     }
@@ -80,6 +119,7 @@ object AlertController {
         // لغو الگوی تکراری پس از خروج (اگر در حال اجراست)
         sequenceJobs.remove(zoneId)?.cancel()
         AlertPlayer.stop(zoneId)
+        AlertVibrator.stop(context, zoneId)
         Notifications.cancelAlert(context, zoneId)
         refreshWidget(context)
         val app = context.applicationContext as GeofenceAlertApp
@@ -110,6 +150,7 @@ object AlertController {
         // لغو همه الگوهای تکراری در حال اجرا
         sequenceJobs.keys.toList().forEach { sequenceJobs.remove(it)?.cancel() }
         AlertPlayer.stopAll()
+        AlertVibrator.stopAll(context)
         val app = context.applicationContext as GeofenceAlertApp
         scope.launch {
             try {
@@ -151,11 +192,25 @@ object AlertController {
                 }
                 refreshWidget(appContext)
                 Notifications.notifyAlert(appContext, zone.id, zone.name)
+                // نوع هشدار و شدت‌ها در الگوی تکراری هم رعایت می‌شوند:
+                // صدا اگر مجاز باشد، لرزش به‌اندازه مدت هر نوبت.
+                val volume = volume01(appContext)
+                val vibIntensity = vibration01(appContext)
+                val soundOk = soundAllowed(zone.alertMode)
+                val vibOk = vibrationAllowed(zone.alertMode)
                 repeat(count) { i ->
                     ensureActive()
-                    AlertPlayer.play(appContext, zone.id, zone.soundKey, zone.customSoundUri)
+                    if (soundOk) {
+                        AlertPlayer.play(
+                            appContext, zone.id, zone.soundKey, zone.customSoundUri, volume
+                        )
+                    }
+                    if (vibOk) {
+                        AlertVibrator.start(appContext, zone.id, vibIntensity)
+                    }
                     delay(durationMs)
                     AlertPlayer.stop(zone.id)
+                    AlertVibrator.stop(appContext, zone.id)
                     if (i < count - 1) {
                         ensureActive()
                         delay(gapMs)
@@ -170,6 +225,7 @@ object AlertController {
             } finally {
                 try {
                     AlertPlayer.stop(zone.id)
+                    AlertVibrator.stop(appContext, zone.id)
                     Notifications.cancelAlert(appContext, zone.id)
                     val app = appContext as GeofenceAlertApp
                     app.zoneRepo.setAlerting(zone.id, false)

@@ -22,5 +22,6 @@ data class EventLog(
     companion object {
         const val TYPE_ENTER = "ENTER"
         const val TYPE_EXIT = "EXIT"
+        const val TYPE_APPROACH = "APPROACH"
     }
 }

@@ -37,6 +37,18 @@ interface ZoneDao {
     @Query("UPDATE zones SET isActive = :v WHERE id = :id")
     suspend fun setActive(id: Long, v: Boolean)
 
+    @Query("UPDATE zones SET insideSince = :v WHERE id = :id")
+    suspend fun setInsideSince(id: Long, v: Long)
+
+    @Query("UPDATE zones SET stayReminded = :v WHERE id = :id")
+    suspend fun setStayReminded(id: Long, v: Boolean)
+
+    @Query("SELECT * FROM zones ORDER BY updatedAt DESC")
+    suspend fun getAll(): List<Zone>
+
+    @Query("DELETE FROM zones")
+    suspend fun deleteAll()
+
     @Query("SELECT COUNT(*) FROM zones WHERE isActive = 1")
     suspend fun countActive(): Int
 }

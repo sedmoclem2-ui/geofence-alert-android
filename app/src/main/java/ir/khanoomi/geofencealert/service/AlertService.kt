@@ -7,12 +7,16 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.ServiceCompat
 import ir.khanoomi.geofencealert.GeofenceAlertApp
+import ir.khanoomi.geofencealert.alert.AlertController
 import ir.khanoomi.geofencealert.audio.AlertPlayer
+import ir.khanoomi.geofencealert.audio.AlertVibrator
+import ir.khanoomi.geofencealert.data.Zone
 import ir.khanoomi.geofencealert.notify.Notifications
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -73,16 +77,41 @@ class AlertService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "startForeground failed", e)
             // مسیر جایگزین: پخش مستقیم + اعلان عادی تا کاربر بی‌خبر نماند
-            scope.launch { AlertPlayer.play(this@AlertService, zoneId, soundKey, soundUri) }
             Notifications.notifyAlert(this, zoneId, zoneName)
-            return
         }
-        scope.launch { AlertPlayer.play(this@AlertService, zoneId, soundKey, soundUri) }
+        // نوع هشدار، بلندی صدا و شدت لرزش از دیتابیس/تنظیمات خوانده می‌شود
+        // تا حالت‌های «فقط لرزش» و «هیچ‌کدام» هم درست کار کنند.
+        scope.launch {
+            val app = applicationContext as GeofenceAlertApp
+            val mode = try {
+                app.zoneRepo.getById(zoneId)?.alertMode
+            } catch (e: Exception) {
+                Log.e(TAG, "getById failed for $zoneId", e)
+                null
+            } ?: Zone.ALERT_BOTH
+            val volume = try {
+                app.prefs.alertVolume.first() / 100f
+            } catch (e: Exception) {
+                0.8f
+            }
+            val vibIntensity = try {
+                app.prefs.vibrationIntensity.first() / 100f
+            } catch (e: Exception) {
+                0.7f
+            }
+            if (AlertController.soundAllowed(mode)) {
+                AlertPlayer.play(this@AlertService, zoneId, soundKey, soundUri, volume)
+            }
+            if (AlertController.vibrationAllowed(mode)) {
+                AlertVibrator.start(this@AlertService, zoneId, vibIntensity)
+            }
+        }
     }
 
     private fun handleStop(zoneId: Long) {
         if (zoneId == -1L) return
         AlertPlayer.stop(zoneId)
+        AlertVibrator.stop(this, zoneId)
         Notifications.cancelAlert(this, zoneId)
         val app = applicationContext as GeofenceAlertApp
         scope.launch {
@@ -108,6 +137,8 @@ class AlertService : Service() {
     override fun onDestroy() {
         // اگر سیستم سرویس را از بین برد، برای هشدارهای باقی‌مانده اعلان
         // عادی می‌گذاریم تا کاربر همچنان دکمه توقف را داشته باشد.
+        // لرزش همه هشدارها هم متوقف می‌شود.
+        AlertVibrator.stopAll(this)
         val remaining: Map<Long, String> = synchronized(activeIds) {
             activeNames.toMap()
         }

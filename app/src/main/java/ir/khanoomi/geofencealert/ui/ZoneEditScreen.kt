@@ -132,6 +132,23 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
     var scheduleStartMin by mutableStateOf(0)
     var scheduleEndMin by mutableStateOf(1439)
 
+    // نوع هشدار و اعلام صوتی
+    var alertMode by mutableStateOf(Zone.ALERT_BOTH)
+    var voiceAnnounce by mutableStateOf(false)
+    // هشدار نزدیک شدن
+    var approachEnabled by mutableStateOf(false)
+    var approachDistanceText by mutableStateOf("500")
+    // یادآور ماندن
+    var stayEnabled by mutableStateOf(false)
+    var stayMinutesText by mutableStateOf("60")
+    // پیامک اطلاع‌رسانی
+    var smsNumbersText by mutableStateOf("")
+    var smsMessageText by mutableStateOf("")
+    // بازه اعلان بی‌صدا
+    var silentEnabled by mutableStateOf(false)
+    var silentStartMin by mutableStateOf(1320)
+    var silentEndMin by mutableStateOf(360)
+
     var existing: Zone? by mutableStateOf(null)
         private set
     var wasActive = false
@@ -167,6 +184,19 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
                         scheduleStartMin = z.scheduleStartMin
                         scheduleEndMin = z.scheduleEndMin
                         isActive = z.isActive
+                        alertMode = z.alertMode
+                        voiceAnnounce = z.voiceAnnounce
+                        approachEnabled = z.approachDistanceM > 0
+                        approachDistanceText =
+                            (if (z.approachDistanceM > 0) z.approachDistanceM else 500).toString()
+                        stayEnabled = z.stayReminderMin > 0
+                        stayMinutesText =
+                            (if (z.stayReminderMin > 0) z.stayReminderMin else 60).toString()
+                        smsNumbersText = z.smsNumbers
+                        smsMessageText = z.smsMessage
+                        silentEnabled = z.silentEnabled
+                        silentStartMin = z.silentStartMin
+                        silentEndMin = z.silentEndMin
                         // نمایش فاصله بررسی ذخیره‌شده: «مداوم» برای ۰؛ دقیقه اگر مضرب ۶۰ و دست‌کم ۶۰ ثانیه
                         if (z.checkIntervalSec == CheckInterval.CONTINUOUS) {
                             checkIntervalContinuous = true
@@ -391,6 +421,7 @@ private fun PrettySegmentedControl(
 @Composable
 fun ZoneEditScreen(navController: NavController, zoneId: Long) {
     val context = LocalContext.current
+    val strings = LocalStrings.current
     val app = context.applicationContext as GeofenceAlertApp
     val vm: ZoneEditViewModel = viewModel { ZoneEditViewModel(app, zoneId) }
     val scope = rememberCoroutineScope()
@@ -428,6 +459,11 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
             locError = "برای دریافت موقعیت فعلی، مجوز مکان لازم است."
         }
     }
+
+    // درخواست مجوز پیامک هنگام ذخیره محدوده دارای شماره پیامک
+    val smsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* نتیجه مهم نیست؛ ارسال پیامک بدون مجوز در سکوت رد می‌شود */ }
 
     // انتخاب فایل صوتی دلخواه از حافظه گوشی
     val customSoundLauncher = rememberLauncherForActivityResult(
@@ -526,6 +562,30 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
             ExitSequenceValidator.validateDuration(vm.postExitDurationText)?.let { allErrors += it }
             ExitSequenceValidator.validateGap(vm.postExitGapText)?.let { allErrors += it }
         }
+        // اعتبارسنجی هشدار نزدیک شدن و یادآور ماندن
+        val approachDistanceM: Int = if (vm.approachEnabled) {
+            val v = ZoneValidator.parseDoubleFa(vm.approachDistanceText)?.toInt()
+            if (v == null || v !in 100..5000) {
+                allErrors += "فاصله هشدار نزدیک شدن باید عددی بین ۱۰۰ تا ۵۰۰۰ متر باشد."
+            }
+            v ?: 0
+        } else {
+            0
+        }
+        val stayReminderMin: Int = if (vm.stayEnabled) {
+            val v = ZoneValidator.parseDoubleFa(vm.stayMinutesText)?.toInt()
+            if (v == null || v !in 5..1440) {
+                allErrors += "مدت یادآور ماندن باید عددی بین ۵ تا ۱۴۴۰ دقیقه باشد."
+            }
+            v ?: 0
+        } else {
+            0
+        }
+        // اگر شماره پیامک وارد شده و مجوز نیست، درخواست شود (ذخیره متوقف نمی‌شود
+        // و پیامک تا زمان داده شدن مجوز، در سکوت ارسال نمی‌شود).
+        if (vm.smsNumbersText.isNotBlank() && !Permissions.hasSendSms(context)) {
+            smsPermissionLauncher.launch(Manifest.permission.SEND_SMS)
+        }
         saving = true
         scope.launch(Dispatchers.IO) {
             try {
@@ -556,6 +616,17 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             checkIntervalSec = checkIntervalSec,
                             alertAcknowledged = vm.existing?.alertAcknowledged ?: false,
                             exitBehavior = vm.exitBehavior,
+                            approachDistanceM = approachDistanceM,
+                            stayReminderMin = stayReminderMin,
+                            alertMode = vm.alertMode,
+                            voiceAnnounce = vm.voiceAnnounce,
+                            smsNumbers = vm.smsNumbersText.trim(),
+                            smsMessage = vm.smsMessageText.trim(),
+                            silentEnabled = vm.silentEnabled,
+                            silentStartMin = vm.silentStartMin,
+                            silentEndMin = vm.silentEndMin,
+                            insideSince = vm.existing?.insideSince ?: 0,
+                            stayReminded = vm.existing?.stayReminded ?: false,
                             postExitCount = ZoneValidator.parseDoubleFa(vm.postExitCountText)
                                 ?.toInt()?.coerceIn(1, 20) ?: 3,
                             postExitDurationSec = ZoneValidator.parseDoubleFa(vm.postExitDurationText)
@@ -569,6 +640,12 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         try {
                             app.zoneRepo.upsert(zone)
                             GeofenceHelper.refreshRegistrations(context)
+                            // تازه‌سازی پشتیبان خودکار پس از هر تغییر محدوده
+                            try {
+                                ir.khanoomi.geofencealert.data.BackupManager
+                                    .writeAutoBackup(context)
+                            } catch (_: Exception) {
+                            }
                         } catch (e: Exception) {
                             withContext(Dispatchers.Main) {
                                 saving = false
@@ -591,7 +668,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (zoneId == -1L) "محدوده جدید" else "ویرایش محدوده") },
+                title = { Text(if (zoneId == -1L) strings.newZone else strings.editZone) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
@@ -618,7 +695,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             color = MaterialTheme.colorScheme.onPrimary
                         )
                     } else {
-                        Text("ذخیره محدوده", fontWeight = FontWeight.Bold)
+                        Text(strings.saveZone, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -644,7 +721,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            SectionCard(icon = Icons.Filled.Info, title = "مشخصات") {
+            SectionCard(icon = Icons.Filled.Info, title = strings.specifications) {
                 OutlinedTextField(
                     value = vm.name,
                     onValueChange = { vm.name = it },
@@ -655,7 +732,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 )
             }
 
-            SectionCard(icon = Icons.Filled.LocationOn, title = "مختصات") {
+            SectionCard(icon = Icons.Filled.LocationOn, title = strings.coordinates) {
                 OutlinedTextField(
                     value = vm.latText,
                     onValueChange = { input ->
@@ -743,7 +820,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         tint = MaterialTheme.colorScheme.primary
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("انتخاب روی نقشه")
+                    Text(strings.selectOnMap)
                 }
                 val errorColor = MaterialTheme.colorScheme.error
                 locError?.let {
@@ -759,7 +836,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 )
             }
 
-            SectionCard(icon = Icons.Filled.Place, title = "شعاع") {
+            SectionCard(icon = Icons.Filled.Place, title = strings.radius) {
                 OutlinedTextField(
                     value = vm.radiusText,
                     onValueChange = { vm.radiusText = it },
@@ -863,7 +940,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 }
             }
 
-            SectionCard(icon = Icons.Filled.DateRange, title = "زمان‌بندی") {
+            SectionCard(icon = Icons.Filled.DateRange, title = strings.schedule) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -940,7 +1017,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 }
             }
 
-            SectionCard(icon = Icons.Filled.Notifications, title = "پس از خروج از محدوده") {
+            SectionCard(icon = Icons.Filled.Notifications, title = strings.exitBehaviorTitle) {
                 Text(
                     "داخل محدوده، هشدار فقط با توقف دستی قطع می‌شود.",
                     style = MaterialTheme.typography.bodySmall,
@@ -1018,7 +1095,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 }
             }
 
-            SectionCard(icon = Icons.Filled.PlayArrow, title = "صدای هشدار") {
+            SectionCard(icon = Icons.Filled.PlayArrow, title = strings.alertSound) {
                 SOUND_OPTIONS.forEach { (key, label) ->
                     val selected = vm.soundKey == key
                     Row(
@@ -1110,13 +1187,211 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 }
             }
 
-            SectionCard(icon = Icons.Filled.CheckCircle, title = "وضعیت") {
+            SectionCard(icon = Icons.Filled.Notifications, title = strings.alertType) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    PrettyOptionRow(
+                        selected = vm.alertMode == Zone.ALERT_BOTH,
+                        title = "صدا و لرزش",
+                        subtitle = "صدای هشدار به‌همراه لرزش پخش می‌شود.",
+                        onClick = { vm.alertMode = Zone.ALERT_BOTH }
+                    )
+                    PrettyOptionRow(
+                        selected = vm.alertMode == Zone.ALERT_SOUND,
+                        title = "فقط صدا",
+                        subtitle = "فقط صدای هشدار، بدون لرزش.",
+                        onClick = { vm.alertMode = Zone.ALERT_SOUND }
+                    )
+                    PrettyOptionRow(
+                        selected = vm.alertMode == Zone.ALERT_VIBRATE,
+                        title = "فقط لرزش",
+                        subtitle = "فقط لرزش، بدون صدا.",
+                        onClick = { vm.alertMode = Zone.ALERT_VIBRATE }
+                    )
+                    PrettyOptionRow(
+                        selected = vm.alertMode == Zone.ALERT_NONE,
+                        title = "هیچ‌کدام",
+                        subtitle = "فقط اعلان نمایش داده می‌شود؛ بدون صدا و لرزش.",
+                        onClick = { vm.alertMode = Zone.ALERT_NONE }
+                    )
+                }
+            }
+
+            SectionCard(icon = Icons.Filled.Notifications, title = strings.voiceAnnounce) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text("محدوده فعال باشد", fontWeight = FontWeight.Bold)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("خواندن نام محدوده", fontWeight = FontWeight.Bold)
+                        Text(
+                            "هنگام ورود، نام محدوده با صدای خود گوشی خوانده می‌شود.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = vm.voiceAnnounce,
+                        onCheckedChange = { vm.voiceAnnounce = it }
+                    )
+                }
+            }
+
+            SectionCard(icon = Icons.Filled.LocationOn, title = strings.approachAlert) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("هشدار قبل از رسیدن", fontWeight = FontWeight.Bold)
+                        Text(
+                            "وقتی به فاصله مشخصی از محدوده رسیدید، یک اعلان نزدیک شدن می‌آید.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = vm.approachEnabled,
+                        onCheckedChange = { vm.approachEnabled = it }
+                    )
+                }
+                if (vm.approachEnabled) {
+                    val approachError = if (vm.approachDistanceText.isNotBlank()) {
+                        val v = ZoneValidator.parseDoubleFa(vm.approachDistanceText)?.toInt()
+                        if (v == null || v !in 100..5000) {
+                            "فاصله باید عددی بین ۱۰۰ تا ۵۰۰۰ متر باشد."
+                        } else null
+                    } else null
+                    OutlinedTextField(
+                        value = vm.approachDistanceText,
+                        onValueChange = { vm.approachDistanceText = it },
+                        label = { Text("فاصله هشدار (متر)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = approachError != null,
+                        supportingText = approachError?.let { { Text(it) } }
+                    )
+                }
+            }
+
+            SectionCard(icon = Icons.Filled.DateRange, title = strings.stayReminder) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("یادآوری ماندن طولانی", fontWeight = FontWeight.Bold)
+                        Text(
+                            "اگر بیشتر از مدت تعیین‌شده داخل محدوده ماندید، یک اعلان یادآوری می‌آید.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = vm.stayEnabled,
+                        onCheckedChange = { vm.stayEnabled = it }
+                    )
+                }
+                if (vm.stayEnabled) {
+                    val stayError = if (vm.stayMinutesText.isNotBlank()) {
+                        val v = ZoneValidator.parseDoubleFa(vm.stayMinutesText)?.toInt()
+                        if (v == null || v !in 5..1440) {
+                            "مدت باید عددی بین ۵ تا ۱۴۴۰ دقیقه باشد."
+                        } else null
+                    } else null
+                    OutlinedTextField(
+                        value = vm.stayMinutesText,
+                        onValueChange = { vm.stayMinutesText = it },
+                        label = { Text("بعد از چند دقیقه یادآوری شود") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = stayError != null,
+                        supportingText = stayError?.let { { Text(it) } }
+                    )
+                }
+            }
+
+            SectionCard(icon = Icons.Filled.Notifications, title = strings.sms) {
+                OutlinedTextField(
+                    value = vm.smsNumbersText,
+                    onValueChange = { vm.smsNumbersText = it },
+                    label = { Text("شماره‌های تلفن (هر خط یک شماره)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    shape = RoundedCornerShape(16.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                )
+                OutlinedTextField(
+                    value = vm.smsMessageText,
+                    onValueChange = { vm.smsMessageText = it },
+                    label = { Text("متن پیامک") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                    shape = RoundedCornerShape(16.dp)
+                )
+                Text(
+                    "با ورود به محدوده، این پیام برای شماره‌ها پیامک می‌شود.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            SectionCard(icon = Icons.Filled.DateRange, title = strings.silentWindow) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("بازه بی‌صدا", fontWeight = FontWeight.Bold)
+                        Text(
+                            "در این بازه، ورود به محدوده فقط با اعلان (بدون صدا و لرزش) اطلاع داده می‌شود.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = vm.silentEnabled,
+                        onCheckedChange = { vm.silentEnabled = it }
+                    )
+                }
+                if (vm.silentEnabled) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TimePickerField(
+                            label = "از",
+                            minutes = vm.silentStartMin,
+                            onPick = { vm.silentStartMin = it },
+                            modifier = Modifier.weight(1f)
+                        )
+                        TimePickerField(
+                            label = "تا",
+                            minutes = vm.silentEndMin,
+                            onPick = { vm.silentEndMin = it },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+            }
+
+            SectionCard(icon = Icons.Filled.CheckCircle, title = strings.status) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(strings.zoneActive, fontWeight = FontWeight.Bold)
                     Switch(checked = vm.isActive, onCheckedChange = { vm.isActive = it })
                 }
             }

@@ -16,6 +16,12 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- نگه داشتن پردازنده بیدار هنگام پخش هشدار با صفحه خاموش -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- ارسال پیامک اطلاع‌رسانی ورود به محدوده (فقط شماره‌های تعریف‌شده کاربر) -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- فقط در اندروید ۹ و پایین‌تر: نوشتن پشتیبان خودکار در Documents عمومی -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
     <!-- فقط برای کاشی‌های نقشه در صفحه «انتخاب روی نقشه» -->
     <uses-permission android:name="android.permission.INTERNET" />
 
@@ -61,6 +67,11 @@
         <!-- خودترمیمی دوره‌ای پس‌زمینه (فقط از AlarmManager داخلی) -->
         <receiver
             android:name=".receiver.SelfHealReceiver"
+            android:exported="false" />
+
+        <!-- یادآور ماندن طولانی داخل محدوده (فقط از AlarmManager داخلی) -->
+        <receiver
+            android:name=".receiver.StayReminderReceiver"
             android:exported="false" />
 
         <!-- ثبت مجدد محدوده‌ها پس از راه‌اندازی مجدد گوشی -->

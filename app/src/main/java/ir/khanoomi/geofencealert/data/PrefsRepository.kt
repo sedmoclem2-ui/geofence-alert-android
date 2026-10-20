@@ -125,4 +125,41 @@ class PrefsRepository(private val context: Context) {
     suspend fun setWidgetActiveCount(count: Int) {
         context.prefsDataStore.edit { prefs -> prefs[KEY_WIDGET_ACTIVE] = count }
     }
+
+    private val KEY_ALERT_VOLUME = intPreferencesKey("alert_volume")
+
+    /** بلندی صدای هشدار، درصد (۰ تا ۱۰۰؛ پیش‌فرض: ۸۰). */
+    val alertVolume: Flow<Int> = context.prefsDataStore.data
+        .map { prefs -> prefs[KEY_ALERT_VOLUME] ?: 80 }
+        .catch { emit(80) }
+
+    suspend fun setAlertVolume(v: Int) {
+        context.prefsDataStore.edit { prefs -> prefs[KEY_ALERT_VOLUME] = v.coerceIn(0, 100) }
+    }
+
+    private val KEY_VIBRATION_INTENSITY = intPreferencesKey("vibration_intensity")
+
+    /** شدت لرزش هشدار، درصد (۰ تا ۱۰۰؛ پیش‌فرض: ۷۰). */
+    val vibrationIntensity: Flow<Int> = context.prefsDataStore.data
+        .map { prefs -> prefs[KEY_VIBRATION_INTENSITY] ?: 70 }
+        .catch { emit(70) }
+
+    suspend fun setVibrationIntensity(v: Int) {
+        context.prefsDataStore.edit { prefs -> prefs[KEY_VIBRATION_INTENSITY] = v.coerceIn(0, 100) }
+    }
+
+    private val KEY_APP_LANGUAGE = stringPreferencesKey("app_language")
+
+    /** زبان برنامه: «fa» (پیش‌فرض)، «en» یا «ar». */
+    val appLanguage: Flow<String> = context.prefsDataStore.data
+        .map { prefs -> prefs[KEY_APP_LANGUAGE] ?: "fa" }
+        .catch { emit("fa") }
+
+    suspend fun setAppLanguage(lang: String) {
+        val normalized = when (lang) {
+            "en", "ar" -> lang
+            else -> "fa"
+        }
+        context.prefsDataStore.edit { prefs -> prefs[KEY_APP_LANGUAGE] = normalized }
+    }
 }
