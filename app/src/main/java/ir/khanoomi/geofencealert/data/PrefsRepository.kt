@@ -85,10 +85,10 @@ class PrefsRepository(private val context: Context) {
 
     private val KEY_THEME = stringPreferencesKey("theme_palette")
 
-    /** پالت رنگی انتخاب‌شده: "teal" | "indigo" | "rose" (پیش‌فرض: teal). */
+    /** پالت رنگی انتخاب‌شده (پیش‌فرض: آبی عمیق «deepblue»، هماهنگ با آیکن برنامه). */
     val themePalette: Flow<String> = context.prefsDataStore.data
-        .map { prefs -> prefs[KEY_THEME] ?: "teal" }
-        .catch { emit("teal") }
+        .map { prefs -> prefs[KEY_THEME] ?: "deepblue" }
+        .catch { emit("deepblue") }
 
     suspend fun setThemePalette(key: String) {
         context.prefsDataStore.edit { prefs -> prefs[KEY_THEME] = key }

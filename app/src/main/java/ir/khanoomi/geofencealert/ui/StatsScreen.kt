@@ -45,7 +45,6 @@ import androidx.navigation.NavController
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.data.EventLog
 import ir.khanoomi.geofencealert.domain.TimeFormat
-import ir.khanoomi.geofencealert.ui.theme.AmberSecondary
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
@@ -320,7 +319,7 @@ private fun ZoneBarRow(
                     .clip(RoundedCornerShape(7.dp))
                     .background(
                         if (isMax) Brush.horizontalGradient(
-                            listOf(AmberSecondary, scheme.secondary)
+                            listOf(scheme.tertiary, scheme.secondary)
                         )
                         else Brush.horizontalGradient(
                             listOf(scheme.primary, scheme.secondary)

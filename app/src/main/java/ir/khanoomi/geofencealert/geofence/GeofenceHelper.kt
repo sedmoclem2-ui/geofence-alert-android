@@ -1,10 +1,12 @@
 package ir.khanoomi.geofencealert.geofence
 
 import android.Manifest
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.Geofence
@@ -13,6 +15,7 @@ import com.google.android.gms.location.GeofencingRequest
 import com.google.android.gms.location.LocationServices
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.data.Zone
+import ir.khanoomi.geofencealert.receiver.SelfHealReceiver
 import ir.khanoomi.geofencealert.service.ProximityMonitorService
 import kotlinx.coroutines.flow.first
 
@@ -97,6 +100,13 @@ object GeofenceHelper {
         removeAll(context)
         // وضعیت پایش دقیق قبلی با ثبت‌های جدید ناهماهنگ است؛ پاک شود
         ProximityMonitorService.clearArmed()
+
+        // خودترمیمی دوره‌ای: وقتی پایش روشن است زمان‌بندی و وقتی خاموش است لغو شود
+        if (monitoringEnabled) {
+            scheduleSelfHeal(context)
+        } else {
+            cancelSelfHeal(context)
+        }
 
         if (monitoringEnabled && hasLocationPermission) {
             val zones = try {
@@ -189,6 +199,50 @@ object GeofenceHelper {
                 .addOnFailureListener { e -> Log.e(TAG, "removeGeofences failed", e) }
         } catch (e: Exception) {
             Log.e(TAG, "removeGeofences error", e)
+        }
+    }
+
+    // ---- خودترمیمی پس‌زمینه (AlarmManager) ----
+
+    private const val SELF_HEAL_REQUEST_CODE = 7701
+
+    private fun selfHealPendingIntent(context: Context): PendingIntent {
+        val intent = Intent(context, SelfHealReceiver::class.java)
+        return PendingIntent.getBroadcast(
+            context,
+            SELF_HEAL_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    /**
+     * زمان‌بندی بررسی دوره‌ای خودترمیمی (هر نیم‌روز، غیر دقیق و کم‌مصرف).
+     * وقتی پایش روشن است صدا زده می‌شود.
+     */
+    fun scheduleSelfHeal(context: Context) {
+        try {
+            val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            am.setInexactRepeating(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + AlarmManager.INTERVAL_HALF_DAY,
+                AlarmManager.INTERVAL_HALF_DAY,
+                selfHealPendingIntent(context)
+            )
+            Log.i(TAG, "Self-heal alarm scheduled")
+        } catch (e: Exception) {
+            Log.e(TAG, "scheduleSelfHeal failed", e)
+        }
+    }
+
+    /** لغو بررسی دوره‌ای خودترمیمی (وقتی پایش خاموش می‌شود). */
+    fun cancelSelfHeal(context: Context) {
+        try {
+            val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            am.cancel(selfHealPendingIntent(context))
+            Log.i(TAG, "Self-heal alarm cancelled")
+        } catch (e: Exception) {
+            Log.e(TAG, "cancelSelfHeal failed", e)
         }
     }
 }

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="ir.khanoomi.geofencealert"
-    android:versionCode="11"
-    android:versionName="1.8.0" >
+    android:versionCode="12"
+    android:versionName="1.9.0" >
 
     <uses-sdk
         android:minSdkVersion="26"
@@ -41,9 +41,9 @@
         android:appComponentFactory="androidx.core.app.CoreComponentFactory"
         android:debuggable="true"
         android:extractNativeLibs="false"
-        android:icon="@drawable/ic_transparent"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@drawable/ic_transparent"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.GeofenceAlert" >
         <activity
@@ -70,6 +70,11 @@
         <!-- تغییر وضعیت پایش از ویجت -->
         <receiver
             android:name="ir.khanoomi.geofencealert.receiver.WidgetActionReceiver"
+            android:exported="false" />
+
+        <!-- خودترمیمی دوره‌ای پس‌زمینه (فقط از AlarmManager داخلی) -->
+        <receiver
+            android:name="ir.khanoomi.geofencealert.receiver.SelfHealReceiver"
             android:exported="false" />
 
         <!-- ثبت مجدد محدوده‌ها پس از راه‌اندازی مجدد گوشی -->

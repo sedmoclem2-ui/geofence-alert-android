@@ -25,6 +25,32 @@ enum class AppPalette(
     val light: PaletteColors,
     val dark: PaletteColors
 ) {
+    DEEP_BLUE(
+        key = "deepblue",
+        titleFa = "آبی عمیق",
+        light = PaletteColors(
+            primary = Color(0xFF0B2A52),
+            onPrimary = Color.White,
+            primaryContainer = Color(0xFFC9DCF2),
+            onPrimaryContainer = Color(0xFF06203E),
+            secondary = Color(0xFF00B4F0),
+            tertiary = Color(0xFF9FB3C8),
+            background = Color(0xFFEDF2F8),
+            surface = Color.White,
+            surfaceVariant = Color(0xFFDCE6F2)
+        ),
+        dark = PaletteColors(
+            primary = Color(0xFF4FC3F7),
+            onPrimary = Color(0xFF06203A),
+            primaryContainer = Color(0xFF123A63),
+            onPrimaryContainer = Color(0xFFCDE9FF),
+            secondary = Color(0xFF29B6F6),
+            tertiary = Color(0xFF9FB3C8),
+            background = Color(0xFF060D1A),
+            surface = Color(0xFF0D1B2E),
+            surfaceVariant = Color(0xFF16283F)
+        )
+    ),
     TEAL(
         key = "teal",
         titleFa = "سبزآبی",
@@ -288,12 +314,12 @@ enum class AppPalette(
 
     companion object {
         fun fromKey(key: String): AppPalette =
-            entries.firstOrNull { it.key == key } ?: TEAL
+            entries.firstOrNull { it.key == key } ?: DEEP_BLUE
     }
 }
 
 /** ترکیب خطی دو رنگ (ratio = سهم رنگ دوم). */
-private fun mixColor(a: Color, b: Color, ratio: Float): Color {
+internal fun mixColor(a: Color, b: Color, ratio: Float): Color {
     val r = ratio.coerceIn(0f, 1f)
     return Color(
         red = a.red * (1 - r) + b.red * r,

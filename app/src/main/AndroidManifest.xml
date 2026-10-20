@@ -26,8 +26,8 @@
     <application
         android:name=".GeofenceAlertApp"
         android:label="@string/app_name"
-        android:icon="@drawable/ic_transparent"
-        android:roundIcon="@drawable/ic_transparent"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.GeofenceAlert"
         android:allowBackup="true"
         android:supportsRtl="true"
@@ -56,6 +56,11 @@
         <!-- تغییر وضعیت پایش از ویجت -->
         <receiver
             android:name=".receiver.WidgetActionReceiver"
+            android:exported="false" />
+
+        <!-- خودترمیمی دوره‌ای پس‌زمینه (فقط از AlarmManager داخلی) -->
+        <receiver
+            android:name=".receiver.SelfHealReceiver"
             android:exported="false" />
 
         <!-- ثبت مجدد محدوده‌ها پس از راه‌اندازی مجدد گوشی -->

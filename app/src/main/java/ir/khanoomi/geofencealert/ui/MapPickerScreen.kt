@@ -14,18 +14,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,7 +61,6 @@ internal class MapBridge(private val onPick: (Double, Double) -> Unit) {
 }
 
 /** انتخاب نقطه محدوده روی نقشه (OpenStreetMap). */
-@OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun MapPickerScreen(
@@ -93,130 +90,96 @@ fun MapPickerScreen(
         "window.initMap($la, $ln, $r, 15)"
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("انتخاب روی نقشه", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
-                    }
-                },
-                actions = {
-                    TextButton(onClick = {
-                        if (!Permissions.hasAnyLocation(context)) {
-                            Toast.makeText(
-                                context,
-                                "برای این قابلیت مجوز مکان لازم است",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                            return@TextButton
-                        }
-                        scope.launch(Dispatchers.IO) {
-                            val loc = try {
-                                val client = LocationServices
-                                    .getFusedLocationProviderClient(context)
-                                Tasks.await(
-                                    client.getCurrentLocation(
-                                        Priority.PRIORITY_HIGH_ACCURACY,
-                                        CancellationTokenSource().token
-                                    ),
-                                    15,
-                                    TimeUnit.SECONDS
-                                )
-                            } catch (_: Exception) {
-                                null
-                            }
-                            withContext(Dispatchers.Main) {
-                                if (loc != null) {
-                                    val la = String.format(Locale.US, "%.6f", loc.latitude)
-                                    val ln = String.format(Locale.US, "%.6f", loc.longitude)
-                                    webViewRef?.evaluateJavascript(
-                                        "window.moveMap($la, $ln)",
-                                        null
-                                    )
-                                } else {
-                                    Toast.makeText(
-                                        context,
-                                        "دریافت موقعیت ناموفق بود",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                }
-                            }
-                        }
-                    }) {
-                        Text("موقعیت فعلی", fontWeight = FontWeight.Bold)
-                    }
-                }
-            )
-        },
-        bottomBar = {
-            Surface(
-                tonalElevation = 3.dp,
-                color = MaterialTheme.colorScheme.surface
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    val (lat, lng) = selected ?: (0.0 to 0.0)
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "عرض: ${TimeFormat.toFaDigits(String.format(Locale.US, "%.5f", lat))}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "طول: ${TimeFormat.toFaDigits(String.format(Locale.US, "%.5f", lng))}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    GradientButton(
-                        onClick = {
-                            val (la, ln) = selected ?: return@GradientButton
-                            navController.previousBackStackEntry
-                                ?.savedStateHandle
-                                ?.set("picked_lat", la)
-                            navController.previousBackStackEntry
-                                ?.savedStateHandle
-                                ?.set("picked_lng", ln)
-                            navController.popBackStack()
-                        },
-                        enabled = selected != null
-                    ) {
-                        Text("تأیید", fontWeight = FontWeight.Bold)
-                    }
-                    // دکمه‌های زوم از بالای نقشه به نوار پایین منتقل شدند
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalIconButton(
-                            onClick = {
-                                webViewRef?.evaluateJavascript("window.zoomIn()", null)
-                            },
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            Text("+", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        }
-                        FilledTonalIconButton(
-                            onClick = {
-                                webViewRef?.evaluateJavascript("window.zoomOut()", null)
-                            },
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            Text("−", fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                        }
-                    }
+    fun fetchLocation() {
+        if (!Permissions.hasAnyLocation(context)) {
+            Toast.makeText(
+                context,
+                "برای این قابلیت مجوز مکان لازم است",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        scope.launch(Dispatchers.IO) {
+            val loc = try {
+                val client = LocationServices
+                    .getFusedLocationProviderClient(context)
+                Tasks.await(
+                    client.getCurrentLocation(
+                        Priority.PRIORITY_HIGH_ACCURACY,
+                        CancellationTokenSource().token
+                    ),
+                    15,
+                    TimeUnit.SECONDS
+                )
+            } catch (_: Exception) {
+                null
+            }
+            withContext(Dispatchers.Main) {
+                if (loc != null) {
+                    val la = String.format(Locale.US, "%.6f", loc.latitude)
+                    val ln = String.format(Locale.US, "%.6f", loc.longitude)
+                    webViewRef?.evaluateJavascript(
+                        "window.moveMap($la, $ln)",
+                        null
+                    )
+                } else {
+                    Toast.makeText(
+                        context,
+                        "دریافت موقعیت ناموفق بود",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             }
         }
-    ) { padding ->
+    }
+
+    fun confirm() {
+        val (la, ln) = selected ?: return
+        navController.previousBackStackEntry
+            ?.savedStateHandle
+            ?.set("picked_lat", la)
+        navController.previousBackStackEntry
+            ?.savedStateHandle
+            ?.set("picked_lng", ln)
+        navController.popBackStack()
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // ── نوار بالا (بیرون از نقشه): بازگشت و عنوان در سمت راست، تأیید در گوشه بالا سمت چپ ──
+        Surface(
+            tonalElevation = 3.dp,
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = { navController.popBackStack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
+                }
+                Text(
+                    "انتخاب روی نقشه",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                GradientButton(
+                    onClick = { confirm() },
+                    enabled = selected != null
+                ) {
+                    Text("تأیید", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        // ── نقشه (تمام فضای میانی) ──
         AndroidView(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+                .fillMaxWidth()
+                .weight(1f),
             factory = { ctx ->
                 WebView(ctx).apply {
                     settings.javaScriptEnabled = true
@@ -236,5 +199,51 @@ fun MapPickerScreen(
                 }
             }
         )
+
+        // ── نوار پایین (بیرون از نقشه): موقعیت فعلی (راست) | زوم (وسط) | مختصات (چپ) ──
+        Surface(
+            tonalElevation = 3.dp,
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // در چیدمان راست‌به‌چپ، اولین عنصر در سمت راست قرار می‌گیرد
+                TextButton(onClick = { fetchLocation() }) {
+                    Text("موقعیت فعلی", fontWeight = FontWeight.Bold)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalIconButton(
+                        onClick = { webViewRef?.evaluateJavascript("window.zoomIn()", null) },
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Text("+", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    }
+                    FilledTonalIconButton(
+                        onClick = { webViewRef?.evaluateJavascript("window.zoomOut()", null) },
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Text("−", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                    }
+                }
+                val (lat, lng) = selected ?: (0.0 to 0.0)
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        "عرض: ${TimeFormat.toFaDigits(String.format(Locale.US, "%.5f", lat))}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "طول: ${TimeFormat.toFaDigits(String.format(Locale.US, "%.5f", lng))}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
     }
 }

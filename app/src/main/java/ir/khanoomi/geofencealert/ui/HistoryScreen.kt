@@ -48,7 +48,6 @@ import androidx.navigation.NavController
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.data.EventLog
 import ir.khanoomi.geofencealert.domain.TimeFormat
-import ir.khanoomi.geofencealert.ui.theme.AmberSecondary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -158,7 +157,7 @@ fun HistoryScreen(navController: NavController) {
 @Composable
 private fun EventRow(event: EventLog) {
     val isEnter = event.type == EventLog.TYPE_ENTER
-    val dotColor = if (isEnter) Color(0xFF2E7D32) else AmberSecondary
+    val dotColor = if (isEnter) Color(0xFF2E7D32) else MaterialTheme.colorScheme.secondary
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

@@ -22,7 +22,7 @@ class MainActivity : ComponentActivity() {
         val app = application as GeofenceAlertApp
         setContent {
             val paletteKey by app.prefs.themePalette
-                .collectAsStateWithLifecycle(initialValue = "teal")
+                .collectAsStateWithLifecycle(initialValue = "deepblue")
             val customArgb by app.prefs.customPrimaryArgb
                 .collectAsStateWithLifecycle(initialValue = 0xFF0E6B5CL)
             val customDark by app.prefs.customDark

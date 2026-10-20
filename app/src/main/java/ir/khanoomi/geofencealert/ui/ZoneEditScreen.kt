@@ -11,8 +11,13 @@ import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -39,6 +44,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -70,6 +76,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -237,6 +246,143 @@ private fun SectionCard(
                 )
             }
             content()
+        }
+    }
+}
+
+/**
+ * ردیف گزینه انتخابی شیک (کپسولی ۲۰dp):
+ * انتخاب‌شده = پس‌زمینه گرادیانی تم (primary → secondary) + متن سفید پررنگ + تیک؛
+ * انتخاب‌نشده = سطح نرم تم + حاشیه ظریف. رنگ‌ها متحرک‌اند و از تم فعال می‌آیند.
+ */
+@Composable
+private fun PrettyOptionRow(
+    selected: Boolean,
+    title: String,
+    subtitle: String? = null,
+    onClick: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val gradStart by animateColorAsState(
+        targetValue = if (selected) scheme.primary else scheme.surfaceVariant,
+        label = "optStart"
+    )
+    val gradEnd by animateColorAsState(
+        targetValue = if (selected) scheme.secondary else scheme.surfaceVariant,
+        label = "optEnd"
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) Color.White else scheme.onSurface,
+        label = "optContent"
+    )
+    val subColor by animateColorAsState(
+        targetValue = if (selected) Color.White.copy(alpha = 0.85f) else scheme.onSurfaceVariant,
+        label = "optSub"
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Brush.horizontalGradient(listOf(gradStart, gradEnd)))
+            .border(
+                BorderStroke(1.dp, if (selected) Color.Transparent else scheme.outlineVariant),
+                RoundedCornerShape(20.dp)
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        if (selected) {
+            Icon(
+                Icons.Filled.CheckCircle,
+                contentDescription = null,
+                tint = Color.White
+            )
+        } else {
+            RadioButton(selected = false, onClick = onClick)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                title,
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium,
+                color = contentColor,
+                softWrap = true
+            )
+            if (subtitle != null) {
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = subColor,
+                    softWrap = true
+                )
+            }
+        }
+    }
+}
+
+/**
+ * کنترل سگمنتی کپسولی شیک: سگمنت انتخاب‌شده گرادیانی (primary → secondary)
+ * با متن سفید پررنگ و تیک؛ بقیه روی سطح نرم تم قرار می‌گیرند.
+ */
+@Composable
+private fun PrettySegmentedControl(
+    options: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(scheme.surfaceVariant)
+            .border(
+                BorderStroke(1.dp, scheme.outlineVariant),
+                RoundedCornerShape(20.dp)
+            )
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        options.forEachIndexed { index, label ->
+            val sel = index == selectedIndex
+            val gradStart by animateColorAsState(
+                targetValue = if (sel) scheme.primary else Color.Transparent,
+                label = "segStart$index"
+            )
+            val gradEnd by animateColorAsState(
+                targetValue = if (sel) scheme.secondary else Color.Transparent,
+                label = "segEnd$index"
+            )
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Brush.horizontalGradient(listOf(gradStart, gradEnd)))
+                    .clickable { onSelect(index) }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    if (sel) {
+                        Icon(
+                            Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Text(
+                        label,
+                        fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal,
+                        color = if (sel) Color.White else scheme.onSurface
+                    )
+                }
+            }
         }
     }
 }
@@ -684,32 +830,18 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         shape = RoundedCornerShape(16.dp),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        SegmentedButton(
-                            selected = !vm.checkIntervalContinuous && !vm.checkIntervalIsMinutes,
-                            onClick = {
-                                vm.checkIntervalContinuous = false
-                                vm.checkIntervalIsMinutes = false
-                            },
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
-                            label = { Text("ثانیه") }
-                        )
-                        SegmentedButton(
-                            selected = !vm.checkIntervalContinuous && vm.checkIntervalIsMinutes,
-                            onClick = {
-                                vm.checkIntervalContinuous = false
-                                vm.checkIntervalIsMinutes = true
-                            },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
-                            label = { Text("دقیقه") }
-                        )
-                        SegmentedButton(
-                            selected = vm.checkIntervalContinuous,
-                            onClick = { vm.checkIntervalContinuous = true },
-                            shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
-                            label = { Text("مداوم") }
-                        )
-                    }
+                    PrettySegmentedControl(
+                        options = listOf("ثانیه", "دقیقه", "مداوم"),
+                        selectedIndex = when {
+                            vm.checkIntervalContinuous -> 2
+                            vm.checkIntervalIsMinutes -> 1
+                            else -> 0
+                        },
+                        onSelect = { index ->
+                            vm.checkIntervalContinuous = index == 2
+                            vm.checkIntervalIsMinutes = index == 1
+                        }
+                    )
                     if (vm.checkIntervalContinuous) {
                         Text(
                             "در حالت مداوم، موقعیت تقریباً هر لحظه (هر ۲ ثانیه) بررسی می‌شود؛ مصرف باتری بیشتر است.",
@@ -824,48 +956,12 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         Zone.EXIT_SEQUENCE to ("الگوی تکراری" to "پس از خروج، الگوی تکراری پخش می‌شود."),
                         Zone.EXIT_CONTINUE to ("ادامه تا توقف دستی" to "هشدار تا توقف دستی ادامه دارد.")
                     ).forEach { (behavior, texts) ->
-                        val selected = vm.exitBehavior == behavior
-                        Card(
-                            onClick = { vm.exitBehavior = behavior },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (selected)
-                                    MaterialTheme.colorScheme.primaryContainer
-                                else
-                                    MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                            border = if (selected)
-                                BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
-                            else null
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                RadioButton(
-                                    selected = selected,
-                                    onClick = { vm.exitBehavior = behavior }
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        texts.first,
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        softWrap = true
-                                    )
-                                    Text(
-                                        texts.second,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        softWrap = true
-                                    )
-                                }
-                            }
-                        }
+                        PrettyOptionRow(
+                            selected = vm.exitBehavior == behavior,
+                            title = texts.first,
+                            subtitle = texts.second,
+                            onClick = { vm.exitBehavior = behavior }
+                        )
                     }
                 }
                 // تنظیمات الگوی تکراری: تعداد دفعات، مدت هر آلارم، مکث بین آلارم‌ها

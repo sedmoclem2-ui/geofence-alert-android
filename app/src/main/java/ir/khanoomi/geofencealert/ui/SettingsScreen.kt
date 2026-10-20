@@ -40,6 +40,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -76,7 +77,7 @@ fun SettingsScreen(navController: NavController) {
     val quietEnabled by app.prefs.quietEnabled.collectAsStateWithLifecycle(initialValue = false)
     val quietStart by app.prefs.quietStartMin.collectAsStateWithLifecycle(initialValue = 1380)
     val quietEnd by app.prefs.quietEndMin.collectAsStateWithLifecycle(initialValue = 420)
-    val themeKey by app.prefs.themePalette.collectAsStateWithLifecycle(initialValue = "teal")
+    val themeKey by app.prefs.themePalette.collectAsStateWithLifecycle(initialValue = "deepblue")
     val customArgb by app.prefs.customPrimaryArgb.collectAsStateWithLifecycle(initialValue = 0xFF0E6B5CL)
     val customDarkVal by app.prefs.customDark.collectAsStateWithLifecycle(initialValue = false)
     var showCustomTheme by remember { mutableStateOf(false) }
@@ -230,19 +231,23 @@ fun SettingsScreen(navController: NavController) {
     }
 
     if (showCustomTheme) {
-        CustomThemeDialog(
-            initialArgb = customArgb,
-            initialDark = customDarkVal,
-            onDismiss = { showCustomTheme = false },
-            onSave = { argb, dark ->
-                scope.launch {
-                    app.prefs.setCustomPrimaryArgb(argb)
-                    app.prefs.setCustomDark(dark)
-                    app.prefs.setThemePalette(CUSTOM_THEME_KEY)
+        // کلید روی مقادیر ذخیره‌شده: هر بار که دیالوگ باز می‌شود،
+        // وضعیت اولیه از آخرین ذخیره‌سازی خوانده می‌شود (نه از باز شدن قبلی).
+        key(customArgb, customDarkVal) {
+            CustomThemeDialog(
+                initialArgb = customArgb,
+                initialDark = customDarkVal,
+                onDismiss = { showCustomTheme = false },
+                onSave = { argb, dark ->
+                    scope.launch {
+                        app.prefs.setCustomPrimaryArgb(argb)
+                        app.prefs.setCustomDark(dark)
+                        app.prefs.setThemePalette(CUSTOM_THEME_KEY)
+                    }
+                    showCustomTheme = false
                 }
-                showCustomTheme = false
-            }
-        )
+            )
+        }
     }
 }
 
@@ -298,6 +303,12 @@ private fun QuietHoursCard(
     }
 }
 
+/** یک گزینه در شبکه انتخاب تم: یا پالت آماده، یا شخصی‌سازی. */
+private sealed interface ThemeChoice {
+    data class Preset(val palette: AppPalette) : ThemeChoice
+    data object Custom : ThemeChoice
+}
+
 @Composable
 private fun ThemePaletteCard(
     selectedKey: String,
@@ -310,7 +321,8 @@ private fun ThemePaletteCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text("تم رنگی", fontWeight = FontWeight.Bold)
-            val choices: List<Any> = AppPalette.entries + CUSTOM_THEME_KEY
+            val choices: List<ThemeChoice> =
+                AppPalette.entries.map { ThemeChoice.Preset(it) } + ThemeChoice.Custom
             choices.chunked(4).forEach { rowChoices ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -318,13 +330,13 @@ private fun ThemePaletteCard(
                 ) {
                     rowChoices.forEach { choice ->
                         when (choice) {
-                            is AppPalette -> PaletteTile(
-                                title = choice.titleFa,
-                                selected = choice.key == selectedKey,
-                                circleModifier = Modifier.background(choice.light.primary),
-                                onClick = { onSelect(choice.key) }
+                            is ThemeChoice.Preset -> PaletteTile(
+                                title = choice.palette.titleFa,
+                                selected = choice.palette.key == selectedKey,
+                                circleModifier = Modifier.background(choice.palette.light.primary),
+                                onClick = { onSelect(choice.palette.key) }
                             )
-                            else -> PaletteTile(
+                            ThemeChoice.Custom -> PaletteTile(
                                 title = "شخصی‌سازی",
                                 selected = selectedKey == CUSTOM_THEME_KEY,
                                 circleModifier = Modifier.background(
