@@ -10,34 +10,44 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import ir.khanoomi.geofencealert.domain.ColorMath.complementArgb
 
-private fun lightScheme(p: PaletteColors): ColorScheme = lightColorScheme(
-    primary = p.primary,
-    onPrimary = p.onPrimary,
-    primaryContainer = p.primaryContainer,
-    onPrimaryContainer = p.onPrimaryContainer,
-    secondary = p.secondary,
-    onSecondary = if (p.secondary.luminance() > 0.55f) Color(0xFF1A1A1A) else Color.White,
-    secondaryContainer = mixColor(p.secondary, Color.White, 0.78f),
-    onSecondaryContainer = mixColor(p.secondary, Color.Black, 0.6f),
-    tertiary = p.tertiary,
-    background = p.background,
-    onBackground = InkOnBackground,
-    surface = p.surface,
-    onSurface = InkOnBackground,
-    surfaceVariant = p.surfaceVariant,
-    onSurfaceVariant = SandOnSurfaceVariant,
-    error = CoralError,
-    onError = Color.White,
-    errorContainer = CoralErrorContainer,
-    onErrorContainer = CoralOnErrorContainer,
-    outline = SandOutline,
-    outlineVariant = Color(0xFFE7E1D3)
-)
+/** لهجه برنامه (رنگ تأکیدی): همیشه رنگ مکملِ رنگ اصلی است، نه رنگی دیگر. */
+private fun complementAccent(primary: Color): Color =
+    Color(complementArgb(primary.toArgb().toLong() and 0xFFFFFFFFL).toInt())
+
+private fun lightScheme(p: PaletteColors): ColorScheme {
+    val accent = complementAccent(p.primary)
+    return lightColorScheme(
+        primary = p.primary,
+        onPrimary = p.onPrimary,
+        primaryContainer = p.primaryContainer,
+        onPrimaryContainer = p.onPrimaryContainer,
+        secondary = accent,
+        onSecondary = if (accent.luminance() > 0.55f) Color(0xFF1A1A1A) else Color.White,
+        secondaryContainer = mixColor(accent, Color.White, 0.78f),
+        onSecondaryContainer = mixColor(accent, Color.Black, 0.6f),
+        tertiary = p.tertiary,
+        background = p.background,
+        onBackground = InkOnBackground,
+        surface = p.surface,
+        onSurface = InkOnBackground,
+        surfaceVariant = p.surfaceVariant,
+        onSurfaceVariant = SandOnSurfaceVariant,
+        error = CoralError,
+        onError = Color.White,
+        errorContainer = CoralErrorContainer,
+        onErrorContainer = CoralOnErrorContainer,
+        outline = SandOutline,
+        outlineVariant = Color(0xFFE7E1D3)
+    )
+}
 
 private fun darkScheme(palette: AppPalette): ColorScheme {
     val p = palette.dark
+    val accent = complementAccent(p.primary)
     val onDark = when (palette) {
         AppPalette.DEEP_BLUE -> Color(0xFFE6F0FA)
         AppPalette.TEAL -> NightOnSurface
@@ -82,10 +92,10 @@ private fun darkScheme(palette: AppPalette): ColorScheme {
         onPrimary = p.onPrimary,
         primaryContainer = p.primaryContainer,
         onPrimaryContainer = p.onPrimaryContainer,
-        secondary = p.secondary,
-        onSecondary = if (p.secondary.luminance() > 0.55f) Color(0xFF1A1A1A) else Color.White,
-        secondaryContainer = mixColor(p.secondary, Color.Black, 0.55f),
-        onSecondaryContainer = mixColor(p.secondary, Color.White, 0.8f),
+        secondary = accent,
+        onSecondary = if (accent.luminance() > 0.55f) Color(0xFF1A1A1A) else Color.White,
+        secondaryContainer = mixColor(accent, Color.Black, 0.55f),
+        onSecondaryContainer = mixColor(accent, Color.White, 0.8f),
         tertiary = p.tertiary,
         background = p.background,
         onBackground = onDark,
@@ -103,29 +113,32 @@ private fun darkScheme(palette: AppPalette): ColorScheme {
 }
 
 /** طرح تیره برای پالت شخصی‌سازی‌شده (رنگ‌های رویی خنثی). */
-private fun darkSchemeCustom(p: PaletteColors): ColorScheme = darkColorScheme(
-    primary = p.primary,
-    onPrimary = p.onPrimary,
-    primaryContainer = p.primaryContainer,
-    onPrimaryContainer = p.onPrimaryContainer,
-    secondary = p.secondary,
-    onSecondary = if (p.secondary.luminance() > 0.55f) Color(0xFF1A1A1A) else Color.White,
-    secondaryContainer = mixColor(p.secondary, Color.Black, 0.55f),
-    onSecondaryContainer = mixColor(p.secondary, Color.White, 0.8f),
-    tertiary = p.tertiary,
-    background = p.background,
-    onBackground = Color(0xFFF5F5F5),
-    surface = p.surface,
-    onSurface = Color(0xFFF5F5F5),
-    surfaceVariant = p.surfaceVariant,
-    onSurfaceVariant = Color(0xFFBDBDBD),
-    error = SalmonErrorDark,
-    onError = NightOnError,
-    errorContainer = NightErrorContainer,
-    onErrorContainer = NightOnErrorContainer,
-    outline = Color(0xFF424242),
-    outlineVariant = Color(0xFF424242)
-)
+private fun darkSchemeCustom(p: PaletteColors): ColorScheme {
+    val accent = complementAccent(p.primary)
+    return darkColorScheme(
+        primary = p.primary,
+        onPrimary = p.onPrimary,
+        primaryContainer = p.primaryContainer,
+        onPrimaryContainer = p.onPrimaryContainer,
+        secondary = accent,
+        onSecondary = if (accent.luminance() > 0.55f) Color(0xFF1A1A1A) else Color.White,
+        secondaryContainer = mixColor(accent, Color.Black, 0.55f),
+        onSecondaryContainer = mixColor(accent, Color.White, 0.8f),
+        tertiary = p.tertiary,
+        background = p.background,
+        onBackground = Color(0xFFF5F5F5),
+        surface = p.surface,
+        onSurface = Color(0xFFF5F5F5),
+        surfaceVariant = p.surfaceVariant,
+        onSurfaceVariant = Color(0xFFBDBDBD),
+        error = SalmonErrorDark,
+        onError = NightOnError,
+        errorContainer = NightErrorContainer,
+        onErrorContainer = NightOnErrorContainer,
+        outline = Color(0xFF424242),
+        outlineVariant = Color(0xFF424242)
+    )
+}
 
 private val AppShapes = Shapes(
     small = RoundedCornerShape(12.dp),

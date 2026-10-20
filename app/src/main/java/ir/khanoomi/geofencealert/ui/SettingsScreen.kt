@@ -40,7 +40,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import ir.khanoomi.geofencealert.GeofenceAlertApp
+import ir.khanoomi.geofencealert.domain.ColorMath.complementArgb
 import ir.khanoomi.geofencealert.domain.TimeFormat
 import ir.khanoomi.geofencealert.ui.theme.AppPalette
 import ir.khanoomi.geofencealert.ui.theme.CUSTOM_THEME_KEY
@@ -231,23 +231,20 @@ fun SettingsScreen(navController: NavController) {
     }
 
     if (showCustomTheme) {
-        // کلید روی مقادیر ذخیره‌شده: هر بار که دیالوگ باز می‌شود،
-        // وضعیت اولیه از آخرین ذخیره‌سازی خوانده می‌شود (نه از باز شدن قبلی).
-        key(customArgb, customDarkVal) {
-            CustomThemeDialog(
-                initialArgb = customArgb,
-                initialDark = customDarkVal,
-                onDismiss = { showCustomTheme = false },
-                onSave = { argb, dark ->
-                    scope.launch {
-                        app.prefs.setCustomPrimaryArgb(argb)
-                        app.prefs.setCustomDark(dark)
-                        app.prefs.setThemePalette(CUSTOM_THEME_KEY)
-                    }
-                    showCustomTheme = false
+        // مقادیر اولیه مستقیم پاس داده می‌شوند؛ وضعیت دیالوگ با remember(initial…) ساخته می‌شود.
+        CustomThemeDialog(
+            initialArgb = customArgb,
+            initialDark = customDarkVal,
+            onDismiss = { showCustomTheme = false },
+            onSave = { argb, dark ->
+                scope.launch {
+                    app.prefs.setCustomPrimaryArgb(argb)
+                    app.prefs.setCustomDark(dark)
+                    app.prefs.setThemePalette(CUSTOM_THEME_KEY)
                 }
-            )
-        }
+                showCustomTheme = false
+            }
+        )
     }
 }
 
@@ -413,8 +410,10 @@ private fun CustomThemeDialog(
     onDismiss: () -> Unit,
     onSave: (Long, Boolean) -> Unit
 ) {
-    var picked by remember { mutableStateOf(initialArgb) }
-    var dark by remember { mutableStateOf(initialDark) }
+    var picked by remember(initialArgb) { mutableStateOf(initialArgb) }
+    var dark by remember(initialDark) { mutableStateOf(initialDark) }
+    // رنگ مکمل به‌صورت خودکار از رنگ اصلی ساخته می‌شود (قانون رنگ مکمل).
+    val complement = complementArgb(picked)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("شخصی‌سازی تم", fontWeight = FontWeight.Bold) },
@@ -431,7 +430,9 @@ private fun CustomThemeDialog(
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(CircleShape)
-                                    .background(Color(argb.toULong()))
+                                    // تبدیل از مسیر @ColorInt؛ Color(argb.toULong()) رنگ
+                                    // نامعتبر می‌ساخت و همین‌جا کرش می‌کرد.
+                                    .background(Color(argb.toInt()))
                                     .border(
                                         if (picked == argb) 3.dp else 1.dp,
                                         if (picked == argb) MaterialTheme.colorScheme.onSurface
@@ -441,6 +442,43 @@ private fun CustomThemeDialog(
                                     .clickable { picked = argb }
                             )
                         }
+                    }
+                }
+                Text("پیش‌نمایش", fontWeight = FontWeight.Bold)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(picked.toInt()), Color(complement.toInt()))
+                            )
+                        )
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color(picked.toInt()))
+                                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                        )
+                        Text("رنگ اصلی", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color(complement.toInt()))
+                                .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                        )
+                        Text("رنگ مکمل (خودکار)", style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 Text("تم پایه", fontWeight = FontWeight.Bold)

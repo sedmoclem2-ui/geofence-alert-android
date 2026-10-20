@@ -89,8 +89,7 @@ import ir.khanoomi.geofencealert.domain.TimeFormat
 import ir.khanoomi.geofencealert.domain.formatRadiusFa
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.ui.theme.RedDeep
-import ir.khanoomi.geofencealert.ui.theme.TealOnContainer
-import ir.khanoomi.geofencealert.ui.theme.TealPrimary
+import ir.khanoomi.geofencealert.ui.theme.mixColor
 import ir.khanoomi.geofencealert.util.Permissions
 import ir.khanoomi.geofencealert.util.promptEnableGpsIfNeeded
 import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
@@ -378,8 +377,16 @@ private fun RadarHeroCard(
     onMonitoringChange: (Boolean) -> Unit,
     onOpenSettings: () -> Unit
 ) {
-    // گرادیان همیشه تیره می‌ماند تا متن سفید در هر دو تم خوانا باشد.
-    val gradient = Brush.verticalGradient(listOf(TealPrimary, TealOnContainer))
+    // گرادیان از تم فعال ساخته می‌شود (دیگر همیشه سبز نیست):
+    // بالای کارت تیره‌تر از رنگ اصلی و پایین آن آمیخته با رنگ مکمل (لهجه).
+    val scheme = MaterialTheme.colorScheme
+    val gradient = Brush.verticalGradient(
+        listOf(
+            mixColor(scheme.primary, Color.Black, 0.25f),
+            scheme.primary,
+            mixColor(scheme.primary, scheme.secondary, 0.45f)
+        )
+    )
     val hasIssue = !monitoring || !locationOn || !permLocation || !permBackground || !permNotif
     // درخشش متحرک روی لبه کارت: حس آینده‌نگرانه، با هزینه کم (فقط همین کارت بازسازی می‌شود)
     val shimmerTransition = rememberInfiniteTransition(label = "heroShimmer")
@@ -429,18 +436,18 @@ private fun RadarHeroCard(
                             text = if (monitoring) "پایش فعال است" else "پایش متوقف است",
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White,
+                            color = scheme.onPrimary,
                             modifier = Modifier.weight(1f)
                         )
                         Switch(
                             checked = monitoring,
                             onCheckedChange = onMonitoringChange,
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = Color.White.copy(alpha = 0.35f),
+                                checkedThumbColor = scheme.onPrimary,
+                                checkedTrackColor = scheme.onPrimary.copy(alpha = 0.35f),
                                 checkedBorderColor = Color.Transparent,
-                                uncheckedThumbColor = Color.White.copy(alpha = 0.75f),
-                                uncheckedTrackColor = Color.White.copy(alpha = 0.18f),
+                                uncheckedThumbColor = scheme.onPrimary.copy(alpha = 0.75f),
+                                uncheckedTrackColor = scheme.onPrimary.copy(alpha = 0.18f),
                                 uncheckedBorderColor = Color.Transparent
                             )
                         )
@@ -448,7 +455,7 @@ private fun RadarHeroCard(
                     Text(
                         "$activeCount محدوده فعال • $alertingCount هشدار فعال",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.85f)
+                        color = scheme.onPrimary.copy(alpha = 0.85f)
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -463,7 +470,7 @@ private fun RadarHeroCard(
                     if (hasIssue) {
                         TextButton(
                             onClick = onOpenSettings,
-                            colors = ButtonDefaults.textButtonColors(contentColor = Color.White),
+                            colors = ButtonDefaults.textButtonColors(contentColor = scheme.onPrimary),
                             contentPadding = PaddingValues(0.dp)
                         ) {
                             Text("رفع مشکل", fontWeight = FontWeight.Bold)
@@ -472,7 +479,7 @@ private fun RadarHeroCard(
                 }
                 RadarPulse(
                     modifier = Modifier.size(96.dp),
-                    pulseColor = Color.White,
+                    pulseColor = scheme.secondary,
                     dotColor = Color.White
                 )
             }
@@ -482,8 +489,9 @@ private fun RadarHeroCard(
 
 @Composable
 private fun HeroPermChip(label: String, ok: Boolean) {
+    val onGradient = MaterialTheme.colorScheme.onPrimary
     Surface(
-        color = Color.White.copy(alpha = 0.16f),
+        color = onGradient.copy(alpha = 0.16f),
         shape = CircleShape
     ) {
         Row(
@@ -502,7 +510,7 @@ private fun HeroPermChip(label: String, ok: Boolean) {
             Text(
                 label,
                 style = MaterialTheme.typography.labelMedium,
-                color = Color.White
+                color = onGradient
             )
         }
     }

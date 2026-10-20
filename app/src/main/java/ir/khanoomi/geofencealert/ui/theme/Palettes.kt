@@ -1,6 +1,7 @@
 package ir.khanoomi.geofencealert.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import ir.khanoomi.geofencealert.domain.ColorMath.complementArgb
 
 /** زیرمجموعه رنگ‌های یک پالت که تم روشن/تیره از آن ساخته می‌شود. */
 data class PaletteColors(
@@ -334,7 +335,11 @@ internal fun mixColor(a: Color, b: Color, ratio: Float): Color {
  * روشن → پس‌زمینه‌های نزدیک به سفید؛ تیره → سطوح نزدیک به مشکی.
  */
 fun buildCustomPalette(primaryArgb: Long, dark: Boolean): PaletteColors {
-    val primary = Color(primaryArgb.toULong())
+    // تبدیل درست ARGB به Color از مسیر @ColorInt است؛ ساختن Color از ULong خام
+    // رنگ نامعتبر می‌سازد و هنگام رسم کرش می‌کند.
+    val primary = Color(primaryArgb.toInt())
+    // قانون رنگ مکمل: لهجه (secondary) همیشه مکمل رنگ اصلی است، نه رنگی دیگر.
+    val complement = Color(complementArgb(primaryArgb).toInt())
     val white = Color.White
     val black = Color.Black
     return if (!dark) {
@@ -343,7 +348,7 @@ fun buildCustomPalette(primaryArgb: Long, dark: Boolean): PaletteColors {
             onPrimary = white,
             primaryContainer = mixColor(primary, white, 0.82f),
             onPrimaryContainer = mixColor(primary, black, 0.55f),
-            secondary = mixColor(primary, white, 0.25f),
+            secondary = complement,
             tertiary = mixColor(primary, white, 0.45f),
             background = mixColor(primary, white, 0.965f),
             surface = white,
@@ -356,7 +361,7 @@ fun buildCustomPalette(primaryArgb: Long, dark: Boolean): PaletteColors {
             onPrimary = mixColor(primary, black, 0.7f),
             primaryContainer = mixColor(primary, black, 0.45f),
             onPrimaryContainer = mixColor(primary, white, 0.85f),
-            secondary = mixColor(primary, white, 0.4f),
+            secondary = complement,
             tertiary = lightPrimary,
             background = mixColor(primary, black, 0.92f),
             surface = mixColor(primary, black, 0.85f),
