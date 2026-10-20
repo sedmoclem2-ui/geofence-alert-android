@@ -61,7 +61,15 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
-@Database(entities = [Zone::class, EventLog::class], version = 6, exportSchema = false)
+/** مهاجرت ۶ به ۷: ترتیب دستی کاربر در فهرست محدوده‌ها. */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `sortOrder` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("UPDATE `zones` SET `sortOrder` = `id`")
+    }
+}
+
+@Database(entities = [Zone::class, EventLog::class], version = 7, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun zoneDao(): ZoneDao
     abstract fun eventDao(): EventDao

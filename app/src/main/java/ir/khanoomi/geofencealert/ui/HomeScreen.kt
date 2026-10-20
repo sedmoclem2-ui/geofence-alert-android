@@ -3,11 +3,16 @@ package ir.khanoomi.geofencealert.ui
 import android.app.Activity
 import android.app.Application
 import android.content.Context
+import android.content.Intent
 import android.location.LocationManager
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -18,6 +23,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,7 +39,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -40,6 +51,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -66,8 +78,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -76,6 +93,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -87,6 +105,7 @@ import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.alert.AlertController
 import ir.khanoomi.geofencealert.data.Zone
 import ir.khanoomi.geofencealert.domain.TimeFormat
+import ir.khanoomi.geofencealert.domain.ZoneSort
 import ir.khanoomi.geofencealert.domain.formatRadiusFa
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.ui.theme.RedDeep
@@ -97,6 +116,7 @@ import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -128,6 +148,36 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     val alertingZones = zones.map { list -> list.filter { it.isAlerting } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** حالت مرتب‌سازی فهرست (دستی/نام/تازه‌ترین/شعاع) — ذخیره‌شده در تنظیمات. */
+    val sortMode = prefs.zoneSortMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ZoneSort.MANUAL)
+
+    /** فهرست نمایشی محدوده‌ها، مرتب‌شده بر اساس حالت انتخاب‌شده. */
+    val displayZones = combine(zones, sortMode) { list, mode ->
+        ZoneSort.sortZones(list, mode)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun setSortMode(mode: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                prefs.setZoneSortMode(mode)
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "setSortMode($mode) failed", e)
+            }
+        }
+    }
+
+    /** ثبت ترتیب دستی تازه پس از کشیدن و رها کردن کارت‌ها. */
+    fun reorderZones(orderedIds: List<Long>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repo.updateSortOrders(orderedIds)
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "reorderZones failed", e)
+            }
+        }
+    }
 
     init {
         // با هر تغییر محدوده‌ها، شمارنده ویجت به‌روز شود
@@ -204,6 +254,8 @@ fun HomeScreen(navController: NavController) {
     val vm: HomeViewModel = viewModel { HomeViewModel(app) }
 
     val zones by vm.zones.collectAsStateWithLifecycle()
+    val displayZones by vm.displayZones.collectAsStateWithLifecycle()
+    val sortMode by vm.sortMode.collectAsStateWithLifecycle()
     val monitoring by vm.monitoringEnabled.collectAsStateWithLifecycle()
     val alerting by vm.alertingZones.collectAsStateWithLifecycle()
 
@@ -212,6 +264,40 @@ fun HomeScreen(navController: NavController) {
     var permBackground by remember { mutableStateOf(false) }
     var permNotif by remember { mutableStateOf(false) }
     var zoneToDelete by remember { mutableStateOf<Zone?>(null) }
+    // آیا بهینه‌سازی باتری برای این برنامه فعال است؟ (پایش را در پس‌زمینه خفه می‌کند)
+    var batteryRestricted by remember { mutableStateOf(false) }
+
+    // ---- جابه‌جایی با کشیدن در حالت «دستی» ----
+    val listState = rememberLazyListState()
+    val haptics = LocalHapticFeedback.current
+    var localZones by remember { mutableStateOf<List<Zone>>(emptyList()) }
+    val isManualSort = sortMode == ZoneSort.MANUAL
+    val reorderController = remember {
+        ZoneReorderController(
+            listState = listState,
+            currentList = { localZones },
+            onSwap = { from, to ->
+                val m = localZones.toMutableList()
+                if (from in m.indices && to in m.indices) {
+                    m.add(to, m.removeAt(from))
+                    localZones = m
+                }
+            },
+            onDragStart = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
+            onDragEnd = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                vm.reorderZones(localZones.map { it.id })
+            }
+        )
+    }
+    // آینه محلی فقط وقتی با داده واقعی همگام می‌شود که درگ در جریان نیست
+    // تا وسط کشیدن، فهرست زیر دست کاربر جابه‌جا نشود.
+    LaunchedEffect(displayZones, sortMode, reorderController.isDragging) {
+        if (isManualSort && !reorderController.isDragging) {
+            localZones = displayZones
+        }
+    }
+    val shownZones = if (isManualSort) localZones else displayZones
 
     // لانچر دیالوگ سیستمی روشن کردن GPS (هنگام فعال‌سازی پایش)
     val gpsLauncher = rememberLauncherForActivityResult(
@@ -229,6 +315,12 @@ fun HomeScreen(navController: NavController) {
         permLocation = Permissions.hasAnyLocation(context)
         permBackground = Permissions.hasBackgroundLocation(context)
         permNotif = Permissions.hasNotifications(context)
+        batteryRestricted = try {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            pm.isIgnoringBatteryOptimizations(context.packageName) == false
+        } catch (_: Exception) {
+            false
+        }
     }
 
     OnResume { refreshStatus() }
@@ -273,6 +365,7 @@ fun HomeScreen(navController: NavController) {
         }
     ) { padding ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
@@ -303,6 +396,34 @@ fun HomeScreen(navController: NavController) {
                 )
             }
 
+            // هشدار بهینه‌سازی باتری: وقتی پایش روشن است اما سیستم برنامه را
+            // در پس‌زمینه خفه می‌کند، هشدارها ممکن است دیر برسند یا نرسند.
+            if (monitoring && batteryRestricted) {
+                item {
+                    BatteryWarningBanner(
+                        onDisableOptimization = {
+                            try {
+                                context.startActivity(
+                                    Intent(
+                                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                        Uri.parse("package:" + context.packageName)
+                                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
+                            } catch (_: Exception) {
+                                try {
+                                    context.startActivity(
+                                        Intent(
+                                            Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+                                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                } catch (_: Exception) {
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+
             item {
                 AnimatedVisibility(visible = alerting.isNotEmpty()) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -319,9 +440,67 @@ fun HomeScreen(navController: NavController) {
             if (zones.isEmpty()) {
                 item { EmptyState(onAdd = { navController.navigate("edit") }) }
             } else {
-                items(zones, key = { it.id }) { zone ->
+                item {
+                    ZoneSortBar(
+                        sortMode = sortMode,
+                        onSelect = { vm.setSortMode(it) }
+                    )
+                }
+                if (isManualSort) {
+                    item {
+                        Surface(
+                            color = MaterialTheme.colorScheme.tertiaryContainer,
+                            shape = CircleShape
+                        ) {
+                            Text(
+                                "برای جابه‌جایی، کارت را نگه دار و بکش",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+                items(shownZones, key = { it.id }) { zone ->
+                    val isDragging = isManualSort &&
+                        reorderController.draggingKey == zone.id
+                    val cardModifier = if (isManualSort) {
+                        Modifier
+                            .animateItem()
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .graphicsLayer {
+                                translationY = if (isDragging) {
+                                    reorderController.dragOffsetY
+                                } else {
+                                    0f
+                                }
+                                scaleX = if (isDragging) 1.03f else 1f
+                                scaleY = if (isDragging) 1.03f else 1f
+                            }
+                            .shadow(
+                                elevation = if (isDragging) 16.dp else 0.dp,
+                                shape = MaterialTheme.shapes.medium
+                            )
+                            .pointerInput(zone.id) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        reorderController.onDragStart(zone.id)
+                                    },
+                                    onDragEnd = { reorderController.onDragEnd() },
+                                    onDragCancel = { reorderController.onDragEnd() },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        reorderController.onDrag(dragAmount.y)
+                                    }
+                                )
+                            }
+                    } else {
+                        Modifier.animateItem()
+                    }
                     ZoneCard(
                         zone = zone,
+                        modifier = cardModifier,
                         onToggleActive = { vm.toggleActive(zone) },
                         onEdit = { navController.navigate("edit?zoneId=${zone.id}") },
                         onDelete = { zoneToDelete = zone },
@@ -651,6 +830,7 @@ private fun StatusPill(zone: Zone) {
 @Composable
 private fun ZoneCard(
     zone: Zone,
+    modifier: Modifier = Modifier,
     onToggleActive: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -658,7 +838,7 @@ private fun ZoneCard(
 ) {
     val scheme = MaterialTheme.colorScheme
     Surface(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .animateContentSize(),
         shape = MaterialTheme.shapes.medium,
@@ -790,6 +970,180 @@ private fun EmptyState(onAdd: () -> Unit) {
             Icon(Icons.Default.Add, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("ساخت محدوده")
+        }
+    }
+}
+
+/**
+ * نگهدارنده وضعیت کشیدن و جابه‌جایی کارت‌ها در حالت مرتب‌سازی «دستی».
+ *
+ * الگوی استاندارد بدون کتابخانه: با لمس طولانی، کارت بلند می‌شود؛ هنگام
+ * کشیدن، هر وقت مرکز کارت از مرز آیتم همسایه رد شد جابه‌جایی (swap) روی
+ * فهرست آینه‌ای اعمال می‌شود و [dragOffsetY] به‌اندازه اختلاف جایگاه دو
+ * آیتم اصلاح می‌شود تا کارت زیر انگشت نپرد. در پایان، ترتیب تازه از راه
+ * [onDragEnd] به لایه داده سپرده می‌شود.
+ */
+private class ZoneReorderController(
+    private val listState: LazyListState,
+    private val currentList: () -> List<Zone>,
+    private val onSwap: (fromIndex: Int, toIndex: Int) -> Unit,
+    private val onDragStart: () -> Unit,
+    private val onDragEnd: () -> Unit
+) {
+    /** شناسه محدوده در حال کشیده شدن؛ null یعنی درگی در جریان نیست. */
+    var draggingKey by mutableStateOf<Long?>(null)
+        private set
+
+    /** جابه‌جایی عمودی کارت در حال کشیده شدن نسبت به جایگاه چیدمانش. */
+    var dragOffsetY by mutableStateOf(0f)
+        private set
+
+    val isDragging: Boolean get() = draggingKey != null
+
+    private var draggingIndex = -1
+
+    fun onDragStart(key: Long) {
+        // با شناسه محدوده شروع می‌کنیم نه اندیس: اندیسِ گرفته‌شده در
+        // pointerInput ممکن است پس از جابه‌جایی‌ها کهنه شود، شناسه هرگز.
+        val list = currentList()
+        val index = list.indexOfFirst { it.id == key }
+        if (index < 0) return
+        draggingIndex = index
+        draggingKey = key
+        dragOffsetY = 0f
+        onDragStart()
+    }
+
+    fun onDrag(deltaY: Float) {
+        val key = draggingKey ?: return
+        dragOffsetY += deltaY
+        val info = listState.layoutInfo
+        val draggingItem = info.visibleItemsInfo
+            .firstOrNull { it.key == key } ?: return
+        val list = currentList()
+        val currentIndex = list.indexOfFirst { it.id == key }
+        if (currentIndex < 0) return
+        val draggedCenter =
+            draggingItem.offset + dragOffsetY + draggingItem.size / 2f
+        val target = info.visibleItemsInfo.firstOrNull { item ->
+            item.key != key &&
+                draggedCenter.toInt() in item.offset until (item.offset + item.size)
+        } ?: return
+        val targetIndex = list.indexOfFirst { it.id == target.key }
+        if (targetIndex < 0 || targetIndex == currentIndex) return
+        onSwap(currentIndex, targetIndex)
+        // جبران پرش: کارت به جایگاه همسایه می‌نشیند، پس آفست انگشت
+        // به‌اندازه اختلاف جایگاه دو آیتم اصلاح می‌شود.
+        dragOffsetY += (draggingItem.offset - target.offset).toFloat()
+        draggingIndex = targetIndex
+    }
+
+    fun onDragEnd() {
+        if (draggingKey == null) return
+        draggingKey = null
+        draggingIndex = -1
+        dragOffsetY = 0f
+        onDragEnd()
+    }
+}
+
+/** نوار مرتب‌سازی فهرست محدوده‌ها: چهار کپسول انتخابی با انیمیشن رنگ. */
+@Composable
+private fun ZoneSortBar(sortMode: String, onSelect: (String) -> Unit) {
+    val options = listOf(
+        ZoneSort.MANUAL to "دستی",
+        ZoneSort.NAME to "نام",
+        ZoneSort.NEWEST to "تازه‌ترین",
+        ZoneSort.RADIUS to "کوچک‌ترین شعاع"
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            "مرتب‌سازی",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            options.forEach { (mode, label) ->
+                val selected = sortMode == mode
+                val bg by animateColorAsState(
+                    targetValue = if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    },
+                    label = "sortChipBg"
+                )
+                val fg by animateColorAsState(
+                    targetValue = if (selected) {
+                        MaterialTheme.colorScheme.onPrimary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    label = "sortChipFg"
+                )
+                Surface(
+                    color = bg,
+                    shape = CircleShape,
+                    modifier = Modifier.clickable { onSelect(mode) }
+                ) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = fg,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * بنر هشدار بهینه‌سازی باتری: وقتی پایش روشن است اما سیستم اجازه معافیت
+ * باتری نداده، با یک دکمه کاربر مستقیم به صفحه معافیت همان برنامه می‌رود.
+ */
+@Composable
+private fun BatteryWarningBanner(onDisableOptimization: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = scheme.errorContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = scheme.onErrorContainer
+                )
+                Text(
+                    "بهینه‌سازی باتری فعال است؛ ممکن است هشدارها با تأخیر برسند یا متوقف شوند.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onErrorContainer
+                )
+            }
+            Button(
+                onClick = onDisableOptimization,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = scheme.error,
+                    contentColor = scheme.onError
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("غیرفعال کردن بهینه‌سازی", fontWeight = FontWeight.Bold)
+            }
         }
     }
 }

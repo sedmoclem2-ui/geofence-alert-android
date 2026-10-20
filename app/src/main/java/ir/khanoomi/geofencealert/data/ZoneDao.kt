@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ZoneDao {
 
-    @Query("SELECT * FROM zones ORDER BY updatedAt DESC")
+    @Query("SELECT * FROM zones ORDER BY sortOrder ASC, id ASC")
     fun observeZones(): Flow<List<Zone>>
 
     @Query("SELECT * FROM zones WHERE isActive = 1")
@@ -43,7 +43,10 @@ interface ZoneDao {
     @Query("UPDATE zones SET stayReminded = :v WHERE id = :id")
     suspend fun setStayReminded(id: Long, v: Boolean)
 
-    @Query("SELECT * FROM zones ORDER BY updatedAt DESC")
+    @Query("UPDATE zones SET sortOrder = :order WHERE id = :id")
+    suspend fun setSortOrder(id: Long, order: Int)
+
+    @Query("SELECT * FROM zones ORDER BY sortOrder ASC, id ASC")
     suspend fun getAll(): List<Zone>
 
     @Query("DELETE FROM zones")

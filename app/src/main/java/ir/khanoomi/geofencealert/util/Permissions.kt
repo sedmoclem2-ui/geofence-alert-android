@@ -48,6 +48,12 @@ object Permissions {
             context, Manifest.permission.SEND_SMS
         ) == PackageManager.PERMISSION_GRANTED
 
+    /** آیا مجوز خواندن مخاطبین (برای انتخاب شماره پیامک از دفترچه تلفن) داده شده است. */
+    fun hasContacts(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(
+            context, Manifest.permission.READ_CONTACTS
+        ) == PackageManager.PERMISSION_GRANTED
+
     /**
      * آیا مکان‌یابی گوشی (GPS یا شبکه) روشن است.
      * در اندروید ۹ به بالا از [LocationManager.isLocationEnabled] و در

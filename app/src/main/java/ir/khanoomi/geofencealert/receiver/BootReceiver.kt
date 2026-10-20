@@ -12,13 +12,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
-/** پس از روشن شدن گوشی، ثبت ژئوفنس‌های فعال را بازیابی می‌کند. */
+/**
+ * بازیابی ثبت ژئوفنس‌ها پس از رویدادهای سیستمی‌ای که ممکن است ثبت‌ها را
+ * از بین ببرند: روشن شدن گوشی، به‌روزرسانی خود برنامه و تغییر ساعت یا
+ * منطقه زمانی گوشی. بدنه بازیابی برای همه یکسان است.
+ */
 class BootReceiver : BroadcastReceiver() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
-        Log.i(TAG, "Boot completed; refreshing geofence registrations")
+        if (intent.action !in HANDLED_ACTIONS) return
+        Log.i(TAG, "System event ${intent.action}; refreshing geofence registrations")
         val pending = goAsync()
         scope.launch {
             try {
@@ -26,7 +30,7 @@ class BootReceiver : BroadcastReceiver() {
                 ZoneWidgetProvider.updateAll(context)
                 ProximityMonitorService.sync(context)
             } catch (e: Exception) {
-                Log.e(TAG, "refreshRegistrations failed on boot", e)
+                Log.e(TAG, "refreshRegistrations failed on ${intent.action}", e)
             } finally {
                 pending.finish()
             }
@@ -35,5 +39,12 @@ class BootReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "BootReceiver"
+
+        private val HANDLED_ACTIONS = setOf(
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+            Intent.ACTION_TIME_CHANGED,
+            Intent.ACTION_TIMEZONE_CHANGED
+        )
     }
 }

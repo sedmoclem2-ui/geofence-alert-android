@@ -67,6 +67,7 @@ object BackupManager {
         o.put("silentEndMin", zone.silentEndMin)
         o.put("insideSince", zone.insideSince)
         o.put("stayReminded", zone.stayReminded)
+        o.put("sortOrder", zone.sortOrder)
         o.put("updatedAt", zone.updatedAt)
         return o
     }
@@ -107,6 +108,7 @@ object BackupManager {
             silentEndMin = o.optInt("silentEndMin", 360),
             insideSince = o.optLong("insideSince", 0),
             stayReminded = o.optBoolean("stayReminded", false),
+            sortOrder = o.optInt("sortOrder", 0),
             updatedAt = o.optLong("updatedAt", System.currentTimeMillis())
         )
     }

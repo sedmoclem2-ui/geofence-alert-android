@@ -35,10 +35,14 @@ object SmsSender {
      * یک شماره). بدون مجوز SEND_SMS یا با ورودی خالی، هیچ کاری نمی‌شود.
      */
     fun send(context: Context, numbersRaw: String, message: String) {
+        // فقط applicationContext: این مسیر از رسیور پس‌زمینه (در حالی که اپ
+        // بسته است و فرایند تازه از سرد استارت خورده) هم فراخوانی می‌شود و
+        // نباید به هیچ Activity یا Context گذرا وابسته باشد.
+        val appContext = context.applicationContext
         try {
             if (message.isBlank()) return
             if (ContextCompat.checkSelfPermission(
-                    context, Manifest.permission.SEND_SMS
+                    appContext, Manifest.permission.SEND_SMS
                 ) != PackageManager.PERMISSION_GRANTED
             ) {
                 Log.i(TAG, "SEND_SMS not granted; skipping SMS")
@@ -49,7 +53,7 @@ object SmsSender {
                 .map { it.trim() }
                 .filter { it.isNotEmpty() }
             if (numbers.isEmpty()) return
-            val sm = smsManager(context) ?: return
+            val sm = smsManager(appContext) ?: return
             for (number in numbers) {
                 try {
                     val parts = sm.divideMessage(message)

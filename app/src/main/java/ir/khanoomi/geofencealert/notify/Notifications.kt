@@ -271,15 +271,19 @@ object Notifications {
     }
 
     /**
-     * اعلان دائمی سرویس پیش‌زمینه پایش دقیق محدوده‌های کوچک.
-     * اگر [zoneName] داده شود، نمای سفارشی با نام محدوده و ثانیه‌شمار
-     * دایره‌ای قرمزِ شمارش معکوس تا بررسی بعدی نمایش داده می‌شود؛
-     * در غیر این صورت نمای ساده بدون ثانیه‌شمار.
+     * اعلان دائمی سرویس پیش‌زمینه پایش محدوده‌ها.
+     * - اگر [zoneName] داده شود، نمای سفارشی با نام محدوده و ثانیه‌شمار
+     *   دایره‌ای قرمزِ شمارش معکوس تا بررسی بعدی نمایش داده می‌شود.
+     * - اگر [monitoringIdle] درست باشد (پایش روشن است اما هیچ محدوده کوچکی
+     *   در نزدیکی نیست)، عنوان «پایش فعال است» و متن «در حال پایش
+     *   محدوده‌ها» بدون ثانیه‌شمار نمایش داده می‌شود.
+     * - در غیر این صورت نمای ساده بدون ثانیه‌شمار.
      */
     fun proximityNotification(
         context: Context,
         zoneName: String? = null,
-        countdownSec: Int? = null
+        countdownSec: Int? = null,
+        monitoringIdle: Boolean = false
     ): Notification {
         val contentIntent = PendingIntent.getActivity(
             context,
@@ -288,16 +292,26 @@ object Notifications {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val views = RemoteViews(context.packageName, R.layout.notification_proximity)
-        if (zoneName != null) {
-            views.setTextViewText(R.id.tv_prox_zone, zoneName)
-            views.setViewVisibility(R.id.tv_prox_countdown, View.VISIBLE)
-            views.setTextViewText(
-                R.id.tv_prox_countdown,
-                TimeFormat.toFaDigits((countdownSec ?: 0).toString())
-            )
-        } else {
-            views.setTextViewText(R.id.tv_prox_zone, "نزدیک شدن به محدوده‌های کوچک")
-            views.setViewVisibility(R.id.tv_prox_countdown, View.GONE)
+        when {
+            monitoringIdle -> {
+                views.setTextViewText(R.id.tv_prox_title, "پایش فعال است")
+                views.setTextViewText(R.id.tv_prox_zone, "در حال پایش محدوده‌ها")
+                views.setViewVisibility(R.id.tv_prox_countdown, View.GONE)
+            }
+            zoneName != null -> {
+                views.setTextViewText(R.id.tv_prox_title, "پایش دقیق فعال است")
+                views.setTextViewText(R.id.tv_prox_zone, zoneName)
+                views.setViewVisibility(R.id.tv_prox_countdown, View.VISIBLE)
+                views.setTextViewText(
+                    R.id.tv_prox_countdown,
+                    TimeFormat.toFaDigits((countdownSec ?: 0).toString())
+                )
+            }
+            else -> {
+                views.setTextViewText(R.id.tv_prox_title, "پایش دقیق فعال است")
+                views.setTextViewText(R.id.tv_prox_zone, "نزدیک شدن به محدوده‌های کوچک")
+                views.setViewVisibility(R.id.tv_prox_countdown, View.GONE)
+            }
         }
         return NotificationCompat.Builder(context, PROXIMITY_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)

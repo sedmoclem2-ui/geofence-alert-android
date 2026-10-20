@@ -18,6 +18,10 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- ارسال پیامک اطلاع‌رسانی ورود به محدوده (فقط شماره‌های تعریف‌شده کاربر) -->
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <!-- خواندن دفترچه تلفن برای انتخاب شماره پیامک از مخاطبین (با اجازه کاربر) -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- درخواست معافیت از بهینه‌سازی باتری تا پایش در پس‌زمینه متوقف نشود -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- فقط در اندروید ۹ و پایین‌تر: نوشتن پشتیبان خودکار در Documents عمومی -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -79,25 +83,34 @@
             android:name=".receiver.GpsActionReceiver"
             android:exported="false" />
 
-        <!-- ثبت مجدد محدوده‌ها پس از راه‌اندازی مجدد گوشی -->
+        <!-- ثبت مجدد محدوده‌ها پس از راه‌اندازی مجدد گوشی، به‌روزرسانی خود
+             برنامه یا تغییر ساعت/منطقه زمانی (ژئوفنس‌ها در این رویدادها
+             ممکن است از دست بروند) -->
         <receiver
             android:name=".receiver.BootReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
 
-        <!-- سرویس پیش‌زمینه پخش هشدار صوتی -->
+        <!-- سرویس پیش‌زمینه پخش هشدار صوتی؛ با بستن برنامه از فهرست
+             برنامه‌های اخیر هم از بین نمی‌رود -->
         <service
             android:name=".service.AlertService"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="location" />
 
-        <!-- سرویس پیش‌زمینه پایش دقیق محدوده‌های کوچک (هر ۲۰ ثانیه) -->
+        <!-- سرویس پیش‌زمینه پایش محدوده‌ها؛ تا وقتی پایش روشن است زنده
+             می‌ماند و با بستن برنامه از فهرست اخیر هم متوقف نمی‌شود -->
         <service
             android:name=".service.ProximityMonitorService"
             android:exported="false"
+            android:stopWithTask="false"
             android:foregroundServiceType="location" />
 
         <!-- ویجت صفحه اصلی -->

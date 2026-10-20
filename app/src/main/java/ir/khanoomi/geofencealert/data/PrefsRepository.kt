@@ -188,4 +188,22 @@ class PrefsRepository(private val context: Context) {
     suspend fun setSmsAsked(asked: Boolean) {
         context.prefsDataStore.edit { prefs -> prefs[KEY_SMS_ASKED] = asked }
     }
+
+    private val KEY_ZONE_SORT_MODE = stringPreferencesKey("zone_sort_mode")
+
+    /**
+     * حالت مرتب‌سازی فهرست محدوده‌ها: «manual» (دستی، پیش‌فرض)، «name»،
+     * «newest» یا «radius» — مقادیر در [ir.khanoomi.geofencealert.domain.ZoneSort].
+     */
+    val zoneSortMode: Flow<String> = context.prefsDataStore.data
+        .map { prefs -> prefs[KEY_ZONE_SORT_MODE] ?: "manual" }
+        .catch { emit("manual") }
+
+    suspend fun setZoneSortMode(mode: String) {
+        val normalized = when (mode) {
+            "name", "newest", "radius" -> mode
+            else -> "manual"
+        }
+        context.prefsDataStore.edit { prefs -> prefs[KEY_ZONE_SORT_MODE] = normalized }
+    }
 }

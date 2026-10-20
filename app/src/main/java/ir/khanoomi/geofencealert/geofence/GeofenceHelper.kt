@@ -261,6 +261,9 @@ object GeofenceHelper {
 
     private const val SELF_HEAL_REQUEST_CODE = 7701
 
+    /** فاصله خودترمیمی دوره‌ای: هر ۶ ساعت (از نسخه ۲.۲.۰؛ قبلاً نیم‌روز بود). */
+    private const val SELF_HEAL_INTERVAL_MS = 6 * 60 * 60 * 1000L
+
     private fun selfHealPendingIntent(context: Context): PendingIntent {
         val intent = Intent(context, SelfHealReceiver::class.java)
         return PendingIntent.getBroadcast(
@@ -272,7 +275,7 @@ object GeofenceHelper {
     }
 
     /**
-     * زمان‌بندی بررسی دوره‌ای خودترمیمی (هر نیم‌روز، غیر دقیق و کم‌مصرف).
+     * زمان‌بندی بررسی دوره‌ای خودترمیمی (هر ۶ ساعت، غیر دقیق و کم‌مصرف).
      * وقتی پایش روشن است صدا زده می‌شود.
      */
     fun scheduleSelfHeal(context: Context) {
@@ -280,8 +283,8 @@ object GeofenceHelper {
             val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             am.setInexactRepeating(
                 AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                SystemClock.elapsedRealtime() + AlarmManager.INTERVAL_HALF_DAY,
-                AlarmManager.INTERVAL_HALF_DAY,
+                SystemClock.elapsedRealtime() + SELF_HEAL_INTERVAL_MS,
+                SELF_HEAL_INTERVAL_MS,
                 selfHealPendingIntent(context)
             )
             Log.i(TAG, "Self-heal alarm scheduled")

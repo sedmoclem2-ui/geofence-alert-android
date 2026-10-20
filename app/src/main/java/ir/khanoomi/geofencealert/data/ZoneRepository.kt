@@ -25,6 +25,13 @@ class ZoneRepository(private val dao: ZoneDao) {
     suspend fun setInsideSince(id: Long, v: Long) = dao.setInsideSince(id, v)
     suspend fun setStayReminded(id: Long, v: Boolean) = dao.setStayReminded(id, v)
 
+    suspend fun setSortOrder(id: Long, order: Int) = dao.setSortOrder(id, order)
+
+    /** ثبت ترتیب دستی تازه: به هر محدوده، اندیسش در فهرست داده‌شده داده می‌شود. */
+    suspend fun updateSortOrders(orderedIds: List<Long>) {
+        orderedIds.forEachIndexed { index, id -> dao.setSortOrder(id, index) }
+    }
+
     suspend fun getAll(): List<Zone> = dao.getAll()
 
     suspend fun deleteAll() = dao.deleteAll()

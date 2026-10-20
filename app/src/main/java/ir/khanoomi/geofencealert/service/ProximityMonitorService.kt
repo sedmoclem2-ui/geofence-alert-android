@@ -47,8 +47,13 @@ import kotlin.math.max
  *
  * وقتی محدوده‌ای armed است، سرویس هر [Zone.checkIntervalSec] ثانیه فاصله دقیق
  * گوشی تا مرکز محدوده را با فرمول هاورساین حساب می‌کند و ورود/خروج را با همان
- * منطق ژئوفنس سیستمی ([ZoneTransitionHandler]) اعلام می‌کند. وقتی هیچ محدوده‌ای
- * armed نیست، سرویس خودش را متوقف می‌کند تا باتری مصرف نشود.
+ * منطق ژئوفنس سیستمی ([ZoneTransitionHandler]) اعلام می‌کند.
+ *
+ * از نسخه ۲.۲.۰ این سرویس تا وقتی «پایش» در تنظیمات روشن است همیشه زنده
+ * می‌ماند (حتی وقتی هیچ محدوده‌ای armed نیست) تا بسته ماندن طولانی برنامه
+ * باعث از دست رفتن هشدارها نشود؛ در حالت بیکار، اعلانش «پایش فعال است»
+ * نشان می‌دهد و حلقه پایش دقیق نمی‌چرخد (مصرف باتری ناچیز). فقط خاموش
+ * کردن پایش توسط کاربر، سرویس را متوقف می‌کند.
  *
  * چون سرویس پیش‌زمینه است، با بسته شدن برنامه (سوایپ) از بین نمی‌رود.
  */
@@ -85,7 +90,7 @@ class ProximityMonitorService : Service() {
             ServiceCompat.startForeground(
                 this,
                 FOREGROUND_NOTIFICATION_ID,
-                Notifications.proximityNotification(this),
+                Notifications.proximityNotification(this, monitoringIdle = true),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             )
         } catch (e: Exception) {
@@ -93,10 +98,13 @@ class ProximityMonitorService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (intent?.action == ACTION_SYNC) {
+        // intent تهی یعنی سیستم پس از کشته شدن سرویس آن را دوباره ساخته است
+        // (START_STICKY)؛ مثل ACTION_SYNC باهاش رفتار می‌شود تا وضعیت پایش
+        // از نو همگام شود و سرویس بی‌جهت زامبی نماند.
+        if (intent?.action == ACTION_SYNC || intent == null) {
             scope.launch {
                 try {
-                    if (!needsPolling()) {
+                    if (!shouldStayAlive()) {
                         stopSelf()
                         return@launch
                     }
@@ -110,8 +118,12 @@ class ProximityMonitorService : Service() {
         return START_STICKY
     }
 
-    /** آیا شرایط کلی پایش دقیق برقرار است؟ */
-    private suspend fun needsPolling(): Boolean {
+    /**
+     * آیا سرویس باید زنده بماند؟ از نسخه ۲.۲.۰ شرط فقط روشن بودن پایش و
+     * داشتن مجوز مکان است — وجود محدوده کوچک armed دیگر لازم نیست تا
+     * سرویس (و اعلان «پایش فعال است») همیشه برقرار بماند.
+     */
+    private suspend fun shouldStayAlive(): Boolean {
         val app = applicationContext as GeofenceAlertApp
         val monitoring = try {
             app.prefs.monitoringEnabled.first()
@@ -120,14 +132,7 @@ class ProximityMonitorService : Service() {
             true
         }
         if (!monitoring) return false
-        if (!hasLocationPermission()) return false
-        val zones = try {
-            app.zoneRepo.getActiveZones()
-        } catch (e: Exception) {
-            Log.e(TAG, "Cannot load zones", e)
-            emptyList()
-        }
-        return zones.any { it.radiusMeters < PRECISE_RADIUS_THRESHOLD_M }
+        return hasLocationPermission()
     }
 
     private fun hasLocationPermission(): Boolean =
@@ -179,8 +184,15 @@ class ProximityMonitorService : Service() {
                     Log.e(TAG, "tick failed", e)
                 }
                 if (armed.isEmpty()) {
-                    stopSelf()
-                    break
+                    // حالت بیکار: سرویس زنده می‌ماند (اعلان «پایش فعال است»)
+                    // و فقط وضعیت پایش را هر ۳۰ ثانیه بازبینی می‌کند؛
+                    // تنها وقتی کاربر پایش را خاموش کند متوقف می‌شود.
+                    if (!shouldStayAlive()) {
+                        stopSelf()
+                        break
+                    }
+                    delay(IDLE_RECHECK_MS)
+                    continue
                 }
                 val nextDelay = (armed.values.minOrNull()?.minus(System.currentTimeMillis()))
                     ?.coerceIn(1_000L, 3_600_000L) ?: 20_000L
@@ -198,9 +210,28 @@ class ProximityMonitorService : Service() {
         if (tickerJob?.isActive == true) return
         tickerJob = scope.launch {
             val nm = NotificationManagerCompat.from(this@ProximityMonitorService)
+            var idleShown = false
             while (isActive) {
                 try {
-                    if (armed.isEmpty()) break
+                    if (armed.isEmpty()) {
+                        // گذر به حالت بیکار: یک‌بار اعلان «پایش فعال است»
+                        // نشان داده می‌شود تا ثانیه‌شمار قبلی پاک شود.
+                        if (!idleShown) {
+                            idleShown = true
+                            if (Permissions.hasNotifications(this@ProximityMonitorService)) {
+                                nm.notify(
+                                    FOREGROUND_NOTIFICATION_ID,
+                                    Notifications.proximityNotification(
+                                        this@ProximityMonitorService,
+                                        monitoringIdle = true
+                                    )
+                                )
+                            }
+                        }
+                        delay(1000)
+                        continue
+                    }
+                    idleShown = false
                     val now = System.currentTimeMillis()
                     val next = armed.minByOrNull { it.value }
                     if (next != null) {
@@ -324,6 +355,9 @@ class ProximityMonitorService : Service() {
         private const val FOREGROUND_NOTIFICATION_ID = 9003
         private const val LOCATION_TIMEOUT_S = 15L
 
+        /** فاصله بازبینی وضعیت پایش در حالت بیکار (بدون محدوده armed). */
+        private const val IDLE_RECHECK_MS = 30_000L
+
         private val syncScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
         /**
@@ -376,15 +410,10 @@ class ProximityMonitorService : Service() {
                 } catch (e: Exception) {
                     Log.e(TAG, "armZone(false) failed", e)
                 } finally {
-                    if (armed.isEmpty()) {
-                        try {
-                            context.stopService(
-                                Intent(context, ProximityMonitorService::class.java)
-                            )
-                        } catch (e: Exception) {
-                            Log.e(TAG, "stopService failed", e)
-                        }
-                    }
+                    // از نسخه ۲.۲.۰ سرویس با خالی شدن armed متوقف نمی‌شود؛
+                    // تا وقتی پایش روشن است زنده می‌ماند و اعلان «پایش فعال
+                    // است» را نگه می‌دارد. توقف فقط از مسیر sync (خاموش
+                    // شدن پایش یا از دست رفتن مجوز) انجام می‌شود.
                 }
             }
         }
@@ -397,8 +426,9 @@ class ProximityMonitorService : Service() {
 
         /**
          * همگام‌سازی وضعیت سرویس با شرایط واقعی؛ امن برای فراخوانی از هر نخی.
-         * اگر پایش دقیق لازم باشد سرویس را روشن (تا درشت‌اولیه armed کند)،
-         * وگرنه خاموش می‌کند.
+         * از نسخه ۲.۲.۰: اگر پایش روشن و مجوز مکان موجود باشد سرویس همیشه
+         * روشن می‌ماند (حتی بدون هیچ محدوده کوچک armed) تا بسته ماندن
+         * طولانی برنامه هشدارها را از کار نیندازد؛ وگرنه خاموش می‌شود.
          */
         fun sync(context: Context) {
             syncScope.launch {
@@ -416,20 +446,14 @@ class ProximityMonitorService : Service() {
                             ContextCompat.checkSelfPermission(
                                 context, Manifest.permission.ACCESS_COARSE_LOCATION
                             ) == PackageManager.PERMISSION_GRANTED
-                    val zones: List<Zone> = try {
-                        app.zoneRepo.getActiveZones()
-                    } catch (e: Exception) {
-                        emptyList()
-                    }
-                    val need = monitoring && hasPerm &&
-                        zones.any { it.radiusMeters < PRECISE_RADIUS_THRESHOLD_M }
+                    val need = monitoring && hasPerm
                     if (need) {
                         ContextCompat.startForegroundService(
                             context,
                             Intent(context, ProximityMonitorService::class.java)
                                 .setAction(ACTION_SYNC)
                         )
-                        Log.i(TAG, "sync: starting proximity monitoring")
+                        Log.i(TAG, "sync: keeping monitoring service alive")
                     } else {
                         context.stopService(
                             Intent(context, ProximityMonitorService::class.java)

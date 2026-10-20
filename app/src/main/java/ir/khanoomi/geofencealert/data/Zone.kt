@@ -81,6 +81,8 @@ data class Zone(
     val insideSince: Long = 0,
     /** آیا یادآور ماندنِ این اقامت قبلاً ارسال شده است. */
     val stayReminded: Boolean = false,
+    /** ترتیب دستی کاربر در فهرست محدوده‌ها (حالت مرتب‌سازی «دستی»). */
+    val sortOrder: Int = 0,
     val updatedAt: Long = System.currentTimeMillis()
 ) {
     companion object {

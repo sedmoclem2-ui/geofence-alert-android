@@ -465,6 +465,14 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
         ActivityResultContracts.RequestPermission()
     ) { /* نتیجه مهم نیست؛ ارسال پیامک بدون مجوز در سکوت رد می‌شود */ }
 
+    // انتخاب شماره پیامک از مخاطبین: با داده شدن مجوز (یا از قبل داده شده)
+    // دیالوگ انتخاب باز می‌شود؛ اگر مجوز رد شود هم دیالوگ باز می‌شود تا
+    // پیام راهنمای ورود دستی را نشان دهد.
+    var showContactsPicker by remember { mutableStateOf(false) }
+    val contactsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { showContactsPicker = true }
+
     // انتخاب فایل صوتی دلخواه از حافظه گوشی
     val customSoundLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -627,6 +635,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             silentEndMin = vm.silentEndMin,
                             insideSince = vm.existing?.insideSince ?: 0,
                             stayReminded = vm.existing?.stayReminded ?: false,
+                            sortOrder = vm.existing?.sortOrder ?: 0,
                             postExitCount = ZoneValidator.parseDoubleFa(vm.postExitCountText)
                                 ?.toInt()?.coerceIn(1, 20) ?: 3,
                             postExitDurationSec = ZoneValidator.parseDoubleFa(vm.postExitDurationText)
@@ -638,7 +647,15 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             updatedAt = System.currentTimeMillis()
                         )
                         try {
-                            app.zoneRepo.upsert(zone)
+                            val savedId = app.zoneRepo.upsert(zone)
+                            // محدوده تازه در حالت «دستی» ته فهرست می‌نشیند:
+                            // ترتیبش برابر شناسه‌اش می‌شود (مثل مهاجرت دیتابیس).
+                            if (vm.existing == null && savedId > 0) {
+                                try {
+                                    app.zoneRepo.setSortOrder(savedId, savedId.toInt())
+                                } catch (_: Exception) {
+                                }
+                            }
                             GeofenceHelper.refreshRegistrations(context)
                             // تازه‌سازی پشتیبان خودکار پس از هر تغییر محدوده
                             try {
@@ -1343,6 +1360,20 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                OutlinedButton(
+                    onClick = {
+                        if (Permissions.hasContacts(context)) {
+                            showContactsPicker = true
+                        } else {
+                            contactsPermissionLauncher.launch(
+                                Manifest.permission.READ_CONTACTS
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("انتخاب از مخاطبین")
+                }
             }
 
             SectionCard(icon = Icons.Filled.DateRange, title = strings.silentWindow) {
@@ -1417,5 +1448,29 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
 
             Spacer(Modifier.height(8.dp))
         }
+    }
+
+    if (showContactsPicker) {
+        ContactsPickerDialog(
+            pickedNumbers = vm.smsNumbersText
+                .split('\n', ';', ',')
+                .map { normalizePhoneNumber(it) }
+                .filter { it.isNotEmpty() }
+                .toSet(),
+            onPick = { number ->
+                val key = normalizePhoneNumber(number)
+                val alreadyThere = key.isNotEmpty() && vm.smsNumbersText
+                    .split('\n', ';', ',')
+                    .any { normalizePhoneNumber(it) == key }
+                if (!alreadyThere) {
+                    vm.smsNumbersText = if (vm.smsNumbersText.isBlank()) {
+                        number
+                    } else {
+                        vm.smsNumbersText.trimEnd() + "\n" + number
+                    }
+                }
+            },
+            onDismiss = { showContactsPicker = false }
+        )
     }
 }
