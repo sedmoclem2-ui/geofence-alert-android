@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#1B5E20</color>
     <string name="app_name">محدوده هشدار</string>
     <string name="channel_alerts">هشدارها</string>
     <string name="channel_status">وضعیت پایش</string>
     <string name="widget_desc">نمایش تعداد محدوده‌های فعال و توقف سریع هشدار</string>
     <string name="widget_single_desc">ویجت اختصاصی یک محدوده</string>
     <style name="Theme.GeofenceAlert" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">#1B5E20</item>
+        <item name="android:statusBarColor">#0B2A52</item>
         <item name="android:navigationBarColor">#FFFFFF</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
