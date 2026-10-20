@@ -11,10 +11,12 @@ import android.widget.RemoteViews
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.MainActivity
 import ir.khanoomi.geofencealert.R
-import ir.khanoomi.geofencealert.domain.TimeFormat
 import ir.khanoomi.geofencealert.receiver.StopAlertReceiver
 import ir.khanoomi.geofencealert.receiver.WidgetActionReceiver
 import ir.khanoomi.geofencealert.service.AlertService
+import ir.khanoomi.geofencealert.ui.appLangForContext
+import ir.khanoomi.geofencealert.ui.localizedDigits
+import ir.khanoomi.geofencealert.ui.stringsForContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -66,15 +68,20 @@ class ZoneWidgetProvider : AppWidgetProvider() {
             monitoringOn: Boolean,
             alerting: Boolean
         ) {
+            val s = stringsForContext(context)
+            val lang = appLangForContext(context)
             val views = RemoteViews(context.packageName, R.layout.widget_geofence)
             views.setTextViewText(
                 R.id.tv_status,
-                "${TimeFormat.toFaDigits(activeCount.toString())} محدوده فعال"
+                String.format(
+                    s.widgetActiveZones,
+                    localizedDigits(activeCount.toString(), lang)
+                )
             )
             // وضعیت پایش
             views.setTextViewText(
                 R.id.tv_monitor,
-                if (monitoringOn) "پایش: فعال" else "پایش: غیرفعال"
+                if (monitoringOn) s.widgetMonitoringOn else s.widgetMonitoringOff
             )
             views.setTextColor(
                 R.id.tv_monitor,
@@ -82,6 +89,7 @@ class ZoneWidgetProvider : AppWidgetProvider() {
             )
             // وضعیت هشدار: فقط هنگام پخش صدا نمایش داده می‌شود
             if (alerting) {
+                views.setTextViewText(R.id.tv_alerting, s.widgetAlertPlaying)
                 views.setViewVisibility(R.id.tv_alerting, View.VISIBLE)
             } else {
                 views.setViewVisibility(R.id.tv_alerting, View.GONE)
@@ -89,8 +97,9 @@ class ZoneWidgetProvider : AppWidgetProvider() {
             // دکمه معکوس‌کردن پایش
             views.setTextViewText(
                 R.id.btn_toggle,
-                if (monitoringOn) "توقف پایش" else "شروع پایش"
+                if (monitoringOn) s.widgetStopMonitoring else s.widgetStartMonitoring
             )
+            views.setTextViewText(R.id.btn_stop, s.stopAlert)
             val toggleIntent = PendingIntent.getBroadcast(
                 context,
                 2,

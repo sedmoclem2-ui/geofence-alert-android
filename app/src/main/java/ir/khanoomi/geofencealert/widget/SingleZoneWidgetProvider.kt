@@ -14,6 +14,7 @@ import ir.khanoomi.geofencealert.R
 import ir.khanoomi.geofencealert.receiver.StopAlertReceiver
 import ir.khanoomi.geofencealert.receiver.WidgetActionReceiver
 import ir.khanoomi.geofencealert.service.AlertService
+import ir.khanoomi.geofencealert.ui.stringsForContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -85,18 +86,21 @@ class SingleZoneWidgetProvider : AppWidgetProvider() {
             scope.launch {
                 try {
                     val app = context.applicationContext as GeofenceAlertApp
+                    val s = stringsForContext(context)
                     val zone = app.zoneRepo.getById(zoneId)
                     val views = RemoteViews(context.packageName, R.layout.widget_single_zone)
                     if (zone == null) {
-                        views.setTextViewText(R.id.tv_zone_name, "محدوده حذف شده")
-                        views.setTextViewText(R.id.tv_zone_status, "این محدوده دیگر وجود ندارد")
+                        views.setTextViewText(R.id.tv_zone_name, s.widgetZoneDeleted)
+                        views.setTextViewText(R.id.tv_zone_status, s.widgetZoneDeletedSub)
                     } else {
                         views.setTextViewText(R.id.tv_zone_name, zone.name)
                         val status = buildString {
-                            append(if (zone.isActive) "فعال" else "غیرفعال")
-                            if (zone.isAlerting) append(" • هشدار فعال")
+                            append(if (zone.isActive) s.active else s.inactive)
+                            if (zone.isAlerting) append(" • " + s.widgetAlertActive)
                         }
                         views.setTextViewText(R.id.tv_zone_status, status)
+                        views.setTextViewText(R.id.btn_zone_stop, s.stopAlert)
+                        views.setTextViewText(R.id.btn_zone_toggle, s.widgetToggleZone)
                         // توقف دستی هشدار همین محدوده
                         val stopPi = PendingIntent.getBroadcast(
                             context,
@@ -137,9 +141,10 @@ class SingleZoneWidgetProvider : AppWidgetProvider() {
             mgr: AppWidgetManager,
             appWidgetId: Int
         ) {
+            val s = stringsForContext(context)
             val views = RemoteViews(context.packageName, R.layout.widget_single_zone)
-            views.setTextViewText(R.id.tv_zone_name, "محدوده انتخاب نشده")
-            views.setTextViewText(R.id.tv_zone_status, "برای انتخاب محدوده بزنید")
+            views.setTextViewText(R.id.tv_zone_name, s.widgetNoZone)
+            views.setTextViewText(R.id.tv_zone_status, s.widgetNoZoneSub)
             val pi = PendingIntent.getActivity(
                 context,
                 appWidgetId,

@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -45,6 +46,16 @@ interface ZoneDao {
 
     @Query("UPDATE zones SET sortOrder = :order WHERE id = :id")
     suspend fun setSortOrder(id: Long, order: Int)
+
+    /**
+     * ثبت اتمیک ترتیب دستی تازه: همه ردیف‌ها در یک تراکنش به‌روز می‌شوند
+     * تا ناظران فهرست فقط «یک بار» و با ترتیب نهایی مطلع شوند؛ وگرنه انتشار
+     * میانیِ نیمه‌کاره، ترتیب را لحظه‌ای به‌هم‌ریخته نشان می‌داد.
+     */
+    @Transaction
+    suspend fun updateSortOrders(orderedIds: List<Long>) {
+        orderedIds.forEachIndexed { index, id -> setSortOrder(id, index) }
+    }
 
     @Query("SELECT * FROM zones ORDER BY sortOrder ASC, id ASC")
     suspend fun getAll(): List<Zone>

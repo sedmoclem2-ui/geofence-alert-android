@@ -13,10 +13,12 @@ import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import ir.khanoomi.geofencealert.MainActivity
 import ir.khanoomi.geofencealert.R
-import ir.khanoomi.geofencealert.domain.TimeFormat
 import ir.khanoomi.geofencealert.receiver.GpsActionReceiver
 import ir.khanoomi.geofencealert.receiver.StopAlertReceiver
 import ir.khanoomi.geofencealert.service.AlertService
+import ir.khanoomi.geofencealert.ui.localizedDigits
+import ir.khanoomi.geofencealert.ui.appLangForContext
+import ir.khanoomi.geofencealert.ui.stringsForContext
 import ir.khanoomi.geofencealert.util.Permissions
 
 /**
@@ -57,42 +59,43 @@ object Notifications {
 
     fun createChannels(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val s = stringsForContext(context)
         val nm = manager(context)
         val alert = NotificationChannel(
             ALERT_CHANNEL_ID,
-            context.getString(R.string.channel_alerts),
+            s.chanAlerts,
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
             enableVibration(true)
-            description = "اعلان هشدار ورود به محدوده"
+            description = s.chanAlertsDesc
         }
         val status = NotificationChannel(
             STATUS_CHANNEL_ID,
-            context.getString(R.string.channel_status),
+            s.chanStatus,
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "وضعیت کلی پایش محدوده‌ها"
+            description = s.chanStatusDesc
         }
         val proximity = NotificationChannel(
             PROXIMITY_CHANNEL_ID,
-            "پایش دقیق محدوده",
+            s.chanProximity,
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "پایش دقیق محدوده‌های کوچک هنگام نزدیک شدن"
+            description = s.chanProximityDesc
         }
         val gps = NotificationChannel(
             GPS_CHANNEL_ID,
-            "هشدار مکان",
+            s.chanGps,
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "هشدار خاموش بودن مکان‌یابی گوشی هنگام فعال بودن پایش"
+            description = s.chanGpsDesc
         }
         val quiet = NotificationChannel(
             CHANNEL_SERVICE_QUIET,
-            "پایش پس‌زمینه",
+            s.chanQuiet,
             NotificationManager.IMPORTANCE_MIN
         ).apply {
-            description = "اعلان بی‌صدای سرویس پایش در حالت بیکار؛ بدون آیکن نوار وضعیت"
+            description = s.chanQuietDesc
             setShowBadge(false)
             enableVibration(false)
             enableLights(false)
@@ -107,6 +110,7 @@ object Notifications {
 
     /** اعلان هشدار یک محدوده (برای سرویس پیش‌زمینه و مسیر جایگزین). */
     fun alertNotification(context: Context, zoneId: Long, zoneName: String): Notification {
+        val s = stringsForContext(context)
         val stopIntent = PendingIntent.getBroadcast(
             context,
             alertNotificationId(zoneId),
@@ -122,8 +126,8 @@ object Notifications {
         )
         return NotificationCompat.Builder(context, ALERT_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle("هشدار ورود به محدوده")
-            .setContentText("$zoneName — برای توقف هشدار، دکمه زیر را بزنید")
+            .setContentTitle(s.notifAlertTitle)
+            .setContentText(String.format(s.notifAlertBody, zoneName))
             .setOngoing(true)
             .setAutoCancel(false)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
@@ -131,7 +135,7 @@ object Notifications {
             .setContentIntent(contentIntent)
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
-                "توقف هشدار",
+                s.stopAlert,
                 stopIntent
             )
             .build()
@@ -164,7 +168,7 @@ object Notifications {
         )
         val builder = NotificationCompat.Builder(context, STATUS_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("نزدیک شدن به محدوده")
+            .setContentTitle(stringsForContext(context).notifApproachTitle)
             .setContentText(zoneName)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -187,11 +191,17 @@ object Notifications {
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val s = stringsForContext(context)
+        val lang = appLangForContext(context)
         val notification = NotificationCompat.Builder(context, STATUS_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("یادآور ماندن")
+            .setContentTitle(s.notifStayTitle)
             .setContentText(
-                "بیش از ${TimeFormat.toFaDigits(minutes.toString())} دقیقه است که در محدودهٔ $zoneName هستید."
+                String.format(
+                    s.notifStayBody,
+                    localizedDigits(minutes.toString(), lang),
+                    zoneName
+                )
             )
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -211,7 +221,7 @@ object Notifications {
         )
         val notification = NotificationCompat.Builder(context, STATUS_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("پایش محدوده‌ها")
+            .setContentTitle(stringsForContext(context).notifStatusTitle)
             .setContentText(text)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -234,6 +244,7 @@ object Notifications {
      * - «غیر فعال کردن پایش»: پایش را از طریق [GpsActionReceiver] خاموش می‌کند.
      */
     fun gpsOffNotification(context: Context): Notification {
+        val s = stringsForContext(context)
         val contentIntent = PendingIntent.getActivity(
             context,
             GPS_NOTIFICATION_ID,
@@ -254,10 +265,10 @@ object Notifications {
                 .setAction(GpsActionReceiver.ACTION_DISABLE_MONITORING),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val text = "پایش فعال است اما مکان‌یابی گوشی خاموش است؛ هشدارها کار نمی‌کنند."
+        val text = s.gpsOffBody
         return NotificationCompat.Builder(context, GPS_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_alert)
-            .setContentTitle("جی‌پی‌اس خاموش است")
+            .setContentTitle(s.gpsOffTitle)
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setOngoing(true)
@@ -267,12 +278,12 @@ object Notifications {
             .setContentIntent(contentIntent)
             .addAction(
                 android.R.drawable.ic_menu_mylocation,
-                "فعال کردن جی پی اس",
+                s.gpsEnable,
                 enableGpsIntent
             )
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,
-                "غیر فعال کردن پایش",
+                s.disableMonitoring,
                 disableIntent
             )
             .build()
@@ -305,7 +316,7 @@ object Notifications {
         return NotificationCompat.Builder(context, CHANNEL_SERVICE_QUIET)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(context.getString(R.string.app_name))
-            .setContentText("پایش فعال است")
+            .setContentText(stringsForContext(context).monitoringOn)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setContentIntent(contentIntent)
@@ -333,25 +344,27 @@ object Notifications {
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val s = stringsForContext(context)
+        val lang = appLangForContext(context)
         val views = RemoteViews(context.packageName, R.layout.notification_proximity)
         when {
             monitoringIdle -> {
-                views.setTextViewText(R.id.tv_prox_title, "پایش فعال است")
-                views.setTextViewText(R.id.tv_prox_zone, "در حال پایش محدوده‌ها")
+                views.setTextViewText(R.id.tv_prox_title, s.monitoringOn)
+                views.setTextViewText(R.id.tv_prox_zone, s.proxIdleText)
                 views.setViewVisibility(R.id.tv_prox_countdown, View.GONE)
             }
             zoneName != null -> {
-                views.setTextViewText(R.id.tv_prox_title, "پایش دقیق فعال است")
+                views.setTextViewText(R.id.tv_prox_title, s.proxActiveTitle)
                 views.setTextViewText(R.id.tv_prox_zone, zoneName)
                 views.setViewVisibility(R.id.tv_prox_countdown, View.VISIBLE)
                 views.setTextViewText(
                     R.id.tv_prox_countdown,
-                    TimeFormat.toFaDigits((countdownSec ?: 0).toString())
+                    localizedDigits((countdownSec ?: 0).toString(), lang)
                 )
             }
             else -> {
-                views.setTextViewText(R.id.tv_prox_title, "پایش دقیق فعال است")
-                views.setTextViewText(R.id.tv_prox_zone, "نزدیک شدن به محدوده‌های کوچک")
+                views.setTextViewText(R.id.tv_prox_title, s.proxActiveTitle)
+                views.setTextViewText(R.id.tv_prox_zone, s.proxNearText)
                 views.setViewVisibility(R.id.tv_prox_countdown, View.GONE)
             }
         }

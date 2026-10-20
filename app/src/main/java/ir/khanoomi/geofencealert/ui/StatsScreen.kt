@@ -44,7 +44,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.data.EventLog
-import ir.khanoomi.geofencealert.domain.TimeFormat
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
@@ -53,6 +52,7 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
 import java.util.Locale
 
 /** نام فارسی ماه‌های میلادی. */
@@ -94,6 +94,7 @@ class StatsViewModel(app: Application) : AndroidViewModel(app) {
 @Composable
 fun StatsScreen(navController: NavController) {
     val context = LocalContext.current
+    val strings = LocalStrings.current
     val app = context.applicationContext as GeofenceAlertApp
     val vm: StatsViewModel = viewModel { StatsViewModel(app) }
     val stats by vm.stats.collectAsStateWithLifecycle()
@@ -110,10 +111,10 @@ fun StatsScreen(navController: NavController) {
     val maxCount = (perZone.maxOfOrNull { it.second } ?: 0).coerceAtLeast(1)
 
     // بازه ۷ روز اخیر به میلادی
-    val weekRange = remember {
+    val weekRange = remember(strings.rangeSep) {
         val end = LocalDate.now()
         val start = end.minusDays(6)
-        "${start.format(GREGORIAN_FORMATTER)} تا ${end.format(GREGORIAN_FORMATTER)}"
+        "${start.format(GREGORIAN_FORMATTER)} ${strings.rangeSep} ${end.format(GREGORIAN_FORMATTER)}"
     }
 
     // سبدهای ۶ ماه تقویمی اخیر؛ ماه‌های قبلی هرگز حذف نمی‌شوند
@@ -139,7 +140,10 @@ fun StatsScreen(navController: NavController) {
                 title = { Text(LocalStrings.current.statistics, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = strings.back
+                        )
                     }
                 }
             )
@@ -161,7 +165,7 @@ fun StatsScreen(navController: NavController) {
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "با ورود و خروج از محدوده‌ها، آمار اینجا ساخته می‌شود.",
+                    strings.statsEmptySub,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -225,7 +229,7 @@ fun StatsScreen(navController: NavController) {
                 } else {
                     item {
                         Text(
-                            "در این هفته رویدادی ثبت نشده است.",
+                            strings.statsWeekEmpty,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -266,7 +270,7 @@ private fun StatTotalCard(title: String, value: Int, modifier: Modifier = Modifi
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                TimeFormat.toFaDigits(value.toString()),
+                localizedDigits(value.toString(), LocalAppLang.current),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
@@ -299,7 +303,7 @@ private fun ZoneBarRow(
                 modifier = Modifier.weight(1f)
             )
             Text(
-                TimeFormat.toFaDigits(count.toString()),
+                localizedDigits(count.toString(), LocalAppLang.current),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
                 color = scheme.primary
@@ -334,10 +338,15 @@ private fun ZoneBarRow(
 @Composable
 private fun MonthCard(bucket: MonthBucket, fraction: Float) {
     val scheme = MaterialTheme.colorScheme
+    val strings = LocalStrings.current
+    val lang = LocalAppLang.current
     val ym = bucket.yearMonth
-    val faLabel = "${PERSIAN_MONTH_NAMES[ym.monthValue] ?: ""} " +
-        TimeFormat.toFaDigits(ym.year.toString())
-    val gregRange = "${ym.atDay(1).format(GREGORIAN_FORMATTER)} تا " +
+    val monthLabel = when (lang) {
+        AppLang.FA -> (PERSIAN_MONTH_NAMES[ym.monthValue] ?: "")
+        AppLang.EN -> ym.month.getDisplayName(TextStyle.FULL, Locale.US)
+        AppLang.AR -> ym.month.getDisplayName(TextStyle.FULL, Locale("ar"))
+    } + " " + localizedDigits(ym.year.toString(), lang)
+    val gregRange = "${ym.atDay(1).format(GREGORIAN_FORMATTER)} ${strings.rangeSep} " +
         ym.atEndOfMonth().format(GREGORIAN_FORMATTER)
     val total = bucket.enters + bucket.exits
     Card(
@@ -350,14 +359,14 @@ private fun MonthCard(bucket: MonthBucket, fraction: Float) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    faLabel,
+                    monthLabel,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f)
                 )
                 Text(
-                    "ورود: ${TimeFormat.toFaDigits(bucket.enters.toString())} • " +
-                        "خروج: ${TimeFormat.toFaDigits(bucket.exits.toString())}",
+                    "${strings.enterLabel}: ${localizedDigits(bucket.enters.toString(), lang)} • " +
+                        "${strings.exitLabel}: ${localizedDigits(bucket.exits.toString(), lang)}",
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold,
                     color = scheme.primary
@@ -370,7 +379,7 @@ private fun MonthCard(bucket: MonthBucket, fraction: Float) {
             )
             if (total == 0) {
                 Text(
-                    "بدون رویداد",
+                    strings.noEvents,
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant
                 )

@@ -13,8 +13,24 @@ import ir.khanoomi.geofencealert.data.PrefsRepository
 import ir.khanoomi.geofencealert.data.ZoneRepository
 import ir.khanoomi.geofencealert.audio.VoiceAnnouncer
 import ir.khanoomi.geofencealert.notify.Notifications
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class GeofenceAlertApp : Application() {
+
+    /**
+     * کلید زبان ذخیره‌شده («fa»/«en»/«ar») به‌صورت هم‌گام و همیشه تازه؛
+     * لایه‌هایی که نمی‌توانند Flow بخوانند (اعلان‌ها، ویجت‌ها، کاشی تنظیمات
+     * سریع و سرویس‌ها) از همین‌جا زبان فعلی را می‌گیرند تا هیچ متنی به
+     * زبان اشتباه نمایش داده نشود.
+     */
+    @Volatile
+    var currentLanguageKey: String = "fa"
+        private set
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
@@ -22,6 +38,13 @@ class GeofenceAlertApp : Application() {
         // گرم کردن زودهنگام موتور گفتار گوشی تا هنگام ورود به محدوده،
         // اعلام صوتی نام بدون تأخیر راه‌اندازی موتور شروع شود.
         VoiceAnnouncer.init(this)
+        // نگهداری نسخه هم‌گامِ زبان انتخاب‌شده برای لایه‌های غیرکامپوزی.
+        appScope.launch {
+            try {
+                prefs.appLanguage.collect { currentLanguageKey = it }
+            } catch (_: Exception) {
+            }
+        }
     }
 
     val db: AppDatabase by lazy {

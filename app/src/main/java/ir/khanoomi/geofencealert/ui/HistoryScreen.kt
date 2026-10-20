@@ -52,7 +52,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.data.EventLog
-import ir.khanoomi.geofencealert.domain.TimeFormat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -116,13 +115,19 @@ fun HistoryScreen(navController: NavController) {
                 title = { Text(strings.history, fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = strings.back
+                        )
                     }
                 },
                 actions = {
                     if (events.isNotEmpty()) {
                         IconButton(onClick = { showDeleteDialog = true }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "پاک کردن تاریخچه")
+                            Icon(
+                                Icons.Filled.Delete,
+                                contentDescription = strings.clearHistory
+                            )
                         }
                     }
                 }
@@ -139,13 +144,13 @@ fun HistoryScreen(navController: NavController) {
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    "هنوز رویدادی ثبت نشده است.",
+                    strings.historyEmpty,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "با ورود و خروج از محدوده‌ها، اینجا ثبت می‌شود.",
+                    strings.historyEmptySub,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -176,18 +181,20 @@ fun HistoryScreen(navController: NavController) {
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("پاک کردن تاریخچه") },
-            text = { Text("همه رویدادهای ثبت‌شده پاک شود؟") },
+            title = { Text(strings.clearHistory) },
+            text = { Text(strings.clearHistoryConfirm) },
             confirmButton = {
                 TextButton(onClick = {
                     vm.clearAll()
                     showDeleteDialog = false
                 }) {
-                    Text("پاک شود", color = MaterialTheme.colorScheme.error)
+                    Text(strings.clearAction, color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("انصراف") }
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text(strings.cancel)
+                }
             }
         )
     }
@@ -242,7 +249,7 @@ private fun EventRow(event: EventLog) {
                 }
             }
             Text(
-                TimeFormat.formatRelativeTimeFa(event.timestamp),
+                formatRelativeTimeLocalized(strings, LocalAppLang.current, event.timestamp),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

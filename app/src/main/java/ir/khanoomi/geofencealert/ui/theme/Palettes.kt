@@ -23,12 +23,16 @@ const val CUSTOM_THEME_KEY = "custom"
 enum class AppPalette(
     val key: String,
     val titleFa: String,
+    val titleEn: String,
+    val titleAr: String,
     val light: PaletteColors,
     val dark: PaletteColors
 ) {
     DEEP_BLUE(
         key = "deepblue",
         titleFa = "آبی عمیق",
+        titleEn = "Deep Blue",
+        titleAr = "أزرق عميق",
         light = PaletteColors(
             primary = Color(0xFF0B2A52),
             onPrimary = Color.White,
@@ -55,6 +59,8 @@ enum class AppPalette(
     TEAL(
         key = "teal",
         titleFa = "سبزآبی",
+        titleEn = "Teal",
+        titleAr = "أخضر مزرق",
         light = PaletteColors(
             primary = TealPrimary,
             onPrimary = TealOnPrimary,
@@ -81,6 +87,8 @@ enum class AppPalette(
     INDIGO(
         key = "indigo",
         titleFa = "نیلی",
+        titleEn = "Indigo",
+        titleAr = "نيلي",
         light = PaletteColors(
             primary = Color(0xFF4C5FD5),
             onPrimary = Color.White,
@@ -107,6 +115,8 @@ enum class AppPalette(
     ROSE(
         key = "rose",
         titleFa = "رز",
+        titleEn = "Rose",
+        titleAr = "وردي",
         light = PaletteColors(
             primary = Color(0xFFC2436B),
             onPrimary = Color.White,
@@ -133,6 +143,8 @@ enum class AppPalette(
     GALAXY(
         key = "galaxy",
         titleFa = "بنفش کهکشانی",
+        titleEn = "Galaxy Purple",
+        titleAr = "بنفسجي مجري",
         light = PaletteColors(
             primary = Color(0xFF7B2FBE),
             onPrimary = Color.White,
@@ -159,6 +171,8 @@ enum class AppPalette(
     SUNSET(
         key = "sunset",
         titleFa = "غروب نارنجی",
+        titleEn = "Orange Sunset",
+        titleAr = "غروب برتقالي",
         light = PaletteColors(
             primary = Color(0xFFE0641F),
             onPrimary = Color.White,
@@ -185,6 +199,8 @@ enum class AppPalette(
     GOLD(
         key = "gold",
         titleFa = "طلایی سلطنتی",
+        titleEn = "Royal Gold",
+        titleAr = "ذهبي ملكي",
         light = PaletteColors(
             primary = Color(0xFF9A7B1E),
             onPrimary = Color.White,
@@ -211,6 +227,8 @@ enum class AppPalette(
     OCEAN(
         key = "ocean",
         titleFa = "اقیانوس عمیق",
+        titleEn = "Deep Ocean",
+        titleAr = "محيط عميق",
         light = PaletteColors(
             primary = Color(0xFF0B5FA5),
             onPrimary = Color.White,
@@ -237,6 +255,8 @@ enum class AppPalette(
     FOREST(
         key = "forest",
         titleFa = "جنگل سبز",
+        titleEn = "Forest Green",
+        titleAr = "أخضر الغابة",
         light = PaletteColors(
             primary = Color(0xFF2E7D32),
             onPrimary = Color.White,
@@ -263,6 +283,8 @@ enum class AppPalette(
     CHERRY(
         key = "cherry",
         titleFa = "چری",
+        titleEn = "Cherry",
+        titleAr = "كرزي",
         light = PaletteColors(
             primary = Color(0xFFD81B60),
             onPrimary = Color.White,
@@ -289,6 +311,8 @@ enum class AppPalette(
     MIDNIGHT(
         key = "midnight",
         titleFa = "شب نیمه",
+        titleEn = "Midnight",
+        titleAr = "منتصف الليل",
         light = PaletteColors(
             primary = Color(0xFF37474F),
             onPrimary = Color.White,
@@ -368,4 +392,12 @@ fun buildCustomPalette(primaryArgb: Long, dark: Boolean): PaletteColors {
             surfaceVariant = mixColor(primary, black, 0.72f)
         )
     }
+}
+
+
+/** نام نمایشی پالت به زبان فعال برنامه. */
+fun AppPalette.titleFor(lang: ir.khanoomi.geofencealert.ui.AppLang): String = when (lang) {
+    ir.khanoomi.geofencealert.ui.AppLang.FA -> titleFa
+    ir.khanoomi.geofencealert.ui.AppLang.EN -> titleEn
+    ir.khanoomi.geofencealert.ui.AppLang.AR -> titleAr
 }

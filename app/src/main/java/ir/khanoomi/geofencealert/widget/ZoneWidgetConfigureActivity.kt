@@ -23,16 +23,24 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.data.Zone
+import ir.khanoomi.geofencealert.ui.AppLang
+import ir.khanoomi.geofencealert.ui.LocalAppLang
+import ir.khanoomi.geofencealert.ui.LocalStrings
+import ir.khanoomi.geofencealert.ui.stringsForContext
+import ir.khanoomi.geofencealert.ui.appLangForContext
 import ir.khanoomi.geofencealert.ui.theme.AppTheme
 import kotlinx.coroutines.flow.Flow
 
@@ -56,39 +64,48 @@ class ZoneWidgetConfigureActivity : ComponentActivity() {
             return
         }
         setContent {
-            AppTheme {
-                Scaffold(
-                    topBar = {
-                        TopAppBar(
-                            title = {
-                                Text(
-                                    "انتخاب محدوده برای ویجت",
-                                    fontWeight = FontWeight.Bold
+            val lang = appLangForContext(applicationContext)
+            val strings = stringsForContext(applicationContext)
+            CompositionLocalProvider(
+                LocalStrings provides strings,
+                LocalAppLang provides lang,
+                LocalLayoutDirection provides
+                    if (lang == AppLang.EN) LayoutDirection.Ltr else LayoutDirection.Rtl
+            ) {
+                AppTheme {
+                    Scaffold(
+                        topBar = {
+                            TopAppBar(
+                                title = {
+                                    Text(
+                                        strings.widgetPickTitle,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            )
+                        }
+                    ) { padding ->
+                        ZonePickList(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(padding),
+                            onPick = { zone ->
+                                SingleZoneWidgetProvider.setZoneForWidget(
+                                    this, appWidgetId, zone.id
                                 )
+                                SingleZoneWidgetProvider.updateOne(
+                                    this,
+                                    AppWidgetManager.getInstance(this),
+                                    appWidgetId
+                                )
+                                val result = Intent().putExtra(
+                                    AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId
+                                )
+                                setResult(RESULT_OK, result)
+                                finish()
                             }
                         )
                     }
-                ) { padding ->
-                    ZonePickList(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(padding),
-                        onPick = { zone ->
-                            SingleZoneWidgetProvider.setZoneForWidget(
-                                this, appWidgetId, zone.id
-                            )
-                            SingleZoneWidgetProvider.updateOne(
-                                this,
-                                AppWidgetManager.getInstance(this),
-                                appWidgetId
-                            )
-                            val result = Intent().putExtra(
-                                AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId
-                            )
-                            setResult(RESULT_OK, result)
-                            finish()
-                        }
-                    )
                 }
             }
         }
@@ -101,6 +118,7 @@ private fun ZonePickList(
     onPick: (Zone) -> Unit
 ) {
     val context = LocalContext.current
+    val strings = LocalStrings.current
     val zonesFlow: Flow<List<Zone>> = remember {
         (context.applicationContext as GeofenceAlertApp).zoneRepo.observeZones()
     }
@@ -111,11 +129,11 @@ private fun ZonePickList(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                "هنوز محدوده‌ای نساخته‌اید.",
+                strings.widgetConfigureEmpty,
                 style = MaterialTheme.typography.bodyLarge
             )
             Text(
-                "اول در برنامه یک محدوده بسازید، بعد ویجت را اضافه کنید.",
+                strings.widgetConfigureEmptySub,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp)
@@ -141,7 +159,7 @@ private fun ZonePickList(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(zone.name, fontWeight = FontWeight.Bold)
                     Text(
-                        if (zone.isActive) "فعال" else "غیرفعال",
+                        if (zone.isActive) strings.active else strings.inactive,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

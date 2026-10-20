@@ -23,6 +23,7 @@ import ir.khanoomi.geofencealert.domain.GeoMath
 import ir.khanoomi.geofencealert.geofence.ZoneTransitionHandler
 import ir.khanoomi.geofencealert.notify.Notifications
 import ir.khanoomi.geofencealert.receiver.GpsStateReceiver
+import ir.khanoomi.geofencealert.ui.stringsForContext
 import ir.khanoomi.geofencealert.util.Permissions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -264,7 +265,7 @@ class ProximityMonitorService : Service() {
                         }
                         val notification = Notifications.proximityNotification(
                             this@ProximityMonitorService,
-                            name ?: "محدوده",
+                            name ?: stringsForContext(this@ProximityMonitorService).genericZone,
                             remaining
                         )
                         if (!visibleNotification) {

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_desc">Shows the number of active zones and quick alert stop</string>
+    <string name="widget_single_desc">Dedicated widget for a single zone</string>
+</resources>

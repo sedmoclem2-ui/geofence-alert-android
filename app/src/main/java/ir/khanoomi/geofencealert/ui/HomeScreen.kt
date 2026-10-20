@@ -13,9 +13,11 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -27,6 +29,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,8 +75,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -111,9 +113,7 @@ import androidx.navigation.NavController
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.alert.AlertController
 import ir.khanoomi.geofencealert.data.Zone
-import ir.khanoomi.geofencealert.domain.TimeFormat
 import ir.khanoomi.geofencealert.domain.ZoneSort
-import ir.khanoomi.geofencealert.domain.formatRadiusFa
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.ui.theme.RedDeep
 import ir.khanoomi.geofencealert.ui.theme.mixColor
@@ -282,6 +282,11 @@ fun HomeScreen(navController: NavController) {
     val listState = rememberLazyListState()
     val haptics = LocalHapticFeedback.current
     var localZones by remember { mutableStateOf<List<Zone>>(emptyList()) }
+    // ترتیب در انتظار تأیید دیتابیس پس از رها کردن کارت: تا وقتی فهرست
+    // نمایشی دقیقاً همین ترتیب را نشان نداده، آینه محلی با داده کهنه
+    // بازنویسی نمی‌شود؛ وگرنه کارت به جایگاه قبلی برمی‌گشت (نوشتن در
+    // دیتابیس ناهمگام است و انتشار کهنهٔ قبلی برنده می‌شد).
+    var pendingOrderIds by remember { mutableStateOf<List<Long>?>(null) }
     val isManualSort = sortMode == ZoneSort.MANUAL
     val reorderController = remember {
         ZoneReorderController(
@@ -297,15 +302,36 @@ fun HomeScreen(navController: NavController) {
             onDragStart = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
             onDragEnd = {
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                vm.reorderZones(localZones.map { it.id })
+                pendingOrderIds = localZones.map { it.id }
+                vm.reorderZones(pendingOrderIds!!)
             }
         )
     }
-    // آینه محلی فقط وقتی با داده واقعی همگام می‌شود که درگ در جریان نیست
-    // تا وسط کشیدن، فهرست زیر دست کاربر جابه‌جا نشود.
-    LaunchedEffect(displayZones, sortMode, reorderController.isDragging) {
-        if (isManualSort && !reorderController.isDragging) {
-            localZones = displayZones
+    // همگام‌سازی آینه محلی با داده واقعی:
+    // - وسط کشیدن: هرگز (فهرست زیر دست کاربر جابه‌جا نشود).
+    // - وقتی ترتیب در انتظار تأیید داریم: فقط وقتی دیتابیس همان ترتیب را
+    //   برگرداند همگام می‌شویم و نگهبان پاک می‌شود؛ اگر مجموعه شناسه‌ها
+    //   عوض شده باشد (افزودن/حذف بیرونی) نگهبان کنار گذاشته می‌شود.
+    // - در بقیه حالت‌ها (از جمله خروج از حالت دستی): همگام‌سازی مستقیم.
+    LaunchedEffect(displayZones, sortMode, reorderController.isDragging, pendingOrderIds) {
+        if (!isManualSort) {
+            pendingOrderIds = null
+            return@LaunchedEffect
+        }
+        if (reorderController.isDragging) return@LaunchedEffect
+        val pending = pendingOrderIds
+        when {
+            pending == null -> localZones = displayZones
+            displayZones.map { it.id } == pending -> {
+                pendingOrderIds = null
+                localZones = displayZones
+            }
+            displayZones.map { it.id }.toSet() != pending.toSet() -> {
+                // تغییر بیرونی (افزودن/حذف محدوده) — نگهبان دیگر معتبر نیست.
+                pendingOrderIds = null
+                localZones = displayZones
+            }
+            // وگرنه: دیتابیس هنوز به ترتیب تازه نرسیده؛ localZones دست نخورد.
         }
     }
     val shownZones = if (isManualSort) localZones else displayZones
@@ -350,13 +376,45 @@ fun HomeScreen(navController: NavController) {
                 title = { Text(LocalStrings.current.appTitle, fontWeight = FontWeight.Bold) },
                 actions = {
                     IconButton(onClick = { navController.navigate("stats") }) {
-                        Icon(Icons.Filled.DateRange, contentDescription = "آمار")
+                        Icon(
+                            Icons.Filled.DateRange,
+                            contentDescription = LocalStrings.current.statistics
+                        )
                     }
                     IconButton(onClick = { navController.navigate("history") }) {
-                        Icon(Icons.Filled.List, contentDescription = "تاریخچه")
+                        Icon(
+                            Icons.Filled.List,
+                            contentDescription = LocalStrings.current.history
+                        )
+                    }
+                    // دکمه مرتب‌سازی در هدر، کنار سه دکمه دیگر؛ وقتی حالتی
+                    // غیر از «دستی» فعال است، یک نقطه رنگی کوچک رویش می‌نشیند.
+                    Box {
+                        IconButton(onClick = { sortPanelOpen = !sortPanelOpen }) {
+                            Icon(
+                                Icons.Filled.List,
+                                contentDescription = LocalStrings.current.sortTitle,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        if (sortMode != ZoneSort.MANUAL) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(top = 8.dp, end = 8.dp)
+                                    .size(8.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.primary,
+                                        CircleShape
+                                    )
+                            )
+                        }
                     }
                     IconButton(onClick = { navController.navigate("settings") }) {
-                        Icon(Icons.Default.Settings, contentDescription = "تنظیمات")
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = LocalStrings.current.settings
+                        )
                     }
                 }
             )
@@ -377,35 +435,22 @@ fun HomeScreen(navController: NavController) {
             )
         }
     ) { padding ->
-        LazyColumn(
-            state = listState,
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+        ) {
+        LazyColumn(
+            state = listState,
+            // وسط کشیدن کارت، فهرست نباید اسکرول شود؛ وگرنه جابه‌جایی‌ها
+            // با سطرهای اشتباه هم‌تراز می‌شوند و کارت جای نادرست می‌نشیند.
+            userScrollEnabled = !reorderController.isDragging,
+            modifier = Modifier
+                .fillMaxSize()
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SortToggleButton(
-                        sortMode = sortMode,
-                        expanded = sortPanelOpen,
-                        onClick = { sortPanelOpen = !sortPanelOpen }
-                    )
-                    AnimatedVisibility(
-                        visible = sortPanelOpen,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut()
-                    ) {
-                        SortPanel(
-                            sortMode = sortMode,
-                            onSelect = { vm.setSortMode(it) }
-                        )
-                    }
-                }
-            }
-
             item {
                 RadarHeroCard(
                     monitoring = monitoring,
@@ -483,7 +528,7 @@ fun HomeScreen(navController: NavController) {
                             shape = CircleShape
                         ) {
                             Text(
-                                "برای جابه‌جایی، کارت را نگه دار و بکش",
+                                LocalStrings.current.dragHint,
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -539,6 +584,43 @@ fun HomeScreen(navController: NavController) {
                 }
             }
         }
+
+        // ——— پنل مرتب‌سازی: روکش واقعی روی محتوا ———
+        // اسکریم نیمه‌شفاف و پنل زیر نوار بالا شناورند؛ فهرست و کارت پایش
+        // اصلاً حرکت نمی‌کنند و جابه‌جا نمی‌شوند.
+        AnimatedVisibility(
+            visible = sortPanelOpen,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(1f)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.4f))
+                    .clickable { sortPanelOpen = false }
+            )
+        }
+        AnimatedVisibility(
+            visible = sortPanelOpen,
+            enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+            exit = shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .zIndex(2f)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            SortPanel(
+                sortMode = sortMode,
+                onSelect = { mode, keepOpen ->
+                    vm.setSortMode(mode)
+                    if (!keepOpen) sortPanelOpen = false
+                }
+            )
+        }
+        }
     }
 
     zoneToDelete?.let { zone ->
@@ -546,28 +628,53 @@ fun HomeScreen(navController: NavController) {
             onDismissRequest = { zoneToDelete = null },
             containerColor = MaterialTheme.colorScheme.surface,
             title = { Text(LocalStrings.current.deleteZoneTitle, fontWeight = FontWeight.Bold) },
-            text = { Text("«${zone.name}» حذف شود؟") },
+            text = {
+                Text(
+                    String.format(
+                        LocalStrings.current.deleteZoneConfirm,
+                        zone.name
+                    )
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     vm.deleteZone(zone)
                     zoneToDelete = null
-                }) { Text("حذف", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
+                }) {
+                    Text(
+                        LocalStrings.current.delete,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             },
             dismissButton = {
-                TextButton(onClick = { zoneToDelete = null }) { Text("انصراف") }
+                TextButton(onClick = { zoneToDelete = null }) {
+                    Text(LocalStrings.current.cancel)
+                }
             }
         )
     }
 }
 
-/** پالس رادار: سه دایره متحدالمرکز با انیمیشن بی‌پایان. */
+/**
+ * موج‌های رادار کارت پایش:
+ * - فعال: سه حلقه موجیِ بی‌پایان که از مرکز باز می‌شوند (مقیاس ~۰٫۳۵ تا
+ *   ~۱٫۲) و هم‌زمان محو می‌شوند، با فازهای پلکانی؛ نقطه مرکزی هم آرام
+ *   می‌تپد.
+ * - غیرفعال: سه حلقه ثابت و کم‌رنگ، بدون هیچ حرکتی.
+ * - با هر تغییر وضعیت ([burstKey] عوض شود) یک حلقه اضافی به‌سرعت باز و
+ *   محو می‌شود (انفجار موجی کوتاه) تا تغییر وضعیت چشمگیر دیده شود.
+ */
 @Composable
-private fun RadarPulse(
-    modifier: Modifier = Modifier,
-    pulseColor: Color,
-    dotColor: Color
+private fun RadarWaves(
+    active: Boolean,
+    burstKey: Int,
+    ringColor: Color,
+    dotColor: Color,
+    modifier: Modifier = Modifier
 ) {
-    val infinite = rememberInfiniteTransition(label = "radar")
+    val infinite = rememberInfiniteTransition(label = "radarWaves")
     val progress by infinite.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
@@ -577,17 +684,53 @@ private fun RadarPulse(
         ),
         label = "radarProgress"
     )
+    val dotPulse by infinite.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "radarDotPulse"
+    )
+    // انفجار موجی یک‌باره هنگام هر تغییر وضعیت؛ ۱ یعنی تمام شده.
+    val burst = remember { Animatable(1f) }
+    LaunchedEffect(burstKey) {
+        if (burstKey > 0) {
+            burst.snapTo(0f)
+            burst.animateTo(1f, animationSpec = tween(650, easing = LinearEasing))
+        }
+    }
     Canvas(modifier = modifier) {
         val maxR = size.minDimension / 2f
-        for (i in 0 until 3) {
-            val f = (progress + i / 3f) % 1f
+        if (active) {
+            for (i in 0 until 3) {
+                val f = (progress + i / 3f) % 1f
+                drawCircle(
+                    color = ringColor.copy(alpha = 0.55f * (1f - f)),
+                    radius = maxR * (0.35f + 0.85f * f),
+                    style = Stroke(width = 2.dp.toPx())
+                )
+            }
+            drawCircle(color = dotColor, radius = 7.dp.toPx() * dotPulse)
+        } else {
+            listOf(1f, 0.7f, 0.42f).forEach { frac ->
+                drawCircle(
+                    color = ringColor.copy(alpha = 0.18f),
+                    radius = maxR * frac,
+                    style = Stroke(width = 2.dp.toPx())
+                )
+            }
+            drawCircle(color = dotColor.copy(alpha = 0.7f), radius = 7.dp.toPx())
+        }
+        val bp = burst.value
+        if (bp < 1f) {
             drawCircle(
-                color = pulseColor.copy(alpha = 0.5f * (1f - f)),
-                radius = maxR * (0.55f + 0.45f * f),
-                style = Stroke(width = 2.dp.toPx())
+                color = ringColor.copy(alpha = 0.8f * (1f - bp)),
+                radius = maxR * (0.2f + 1.1f * bp),
+                style = Stroke(width = 3.dp.toPx())
             )
         }
-        drawCircle(color = dotColor, radius = 7.dp.toPx())
     }
 }
 
@@ -611,6 +754,8 @@ private fun RadarHeroCard(
     // گرادیان از تم فعال ساخته می‌شود (دیگر همیشه سبز نیست):
     // بالای کارت تیره‌تر از رنگ اصلی و پایین آن آمیخته با رنگ مکمل (لهجه).
     val scheme = MaterialTheme.colorScheme
+    val strings = LocalStrings.current
+    val haptics = LocalHapticFeedback.current
     val gradient = Brush.verticalGradient(
         listOf(
             mixColor(scheme.primary, Color.Black, 0.25f),
@@ -640,10 +785,28 @@ private fun RadarHeroCard(
         start = Offset(shimmerX * 900f, 0f),
         end = Offset(shimmerX * 900f + 320f, 420f)
     )
+    // لمس روی کل کارت = تغییر وضعیت پایش (جای کلید قدیمی): با بازخورد
+    // فشاری (جمع‌شدن خفیف کارت) و انفجار موجی رادار + لرزش لمسی.
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val cardScale by animateFloatAsState(
+        targetValue = if (pressed) 0.98f else 1f,
+        label = "heroScale"
+    )
+    var burstKey by remember { mutableStateOf(0) }
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .border(2.dp, shimmerBorder, MaterialTheme.shapes.large),
+            .graphicsLayer {
+                scaleX = cardScale
+                scaleY = cardScale
+            }
+            .border(2.dp, shimmerBorder, MaterialTheme.shapes.large)
+            .clickable(interactionSource = interaction, indication = null) {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                burstKey++
+                onMonitoringChange(!monitoring)
+            },
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
@@ -662,48 +825,40 @@ private fun RadarHeroCard(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = if (monitoring) LocalStrings.current.monitoringOn
-                            else LocalStrings.current.monitoringOff,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = scheme.onPrimary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Switch(
-                            checked = monitoring,
-                            onCheckedChange = onMonitoringChange,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = scheme.onPrimary,
-                                checkedTrackColor = scheme.onPrimary.copy(alpha = 0.35f),
-                                checkedBorderColor = Color.Transparent,
-                                uncheckedThumbColor = scheme.onPrimary.copy(alpha = 0.75f),
-                                uncheckedTrackColor = scheme.onPrimary.copy(alpha = 0.18f),
-                                uncheckedBorderColor = Color.Transparent
-                            )
-                        )
-                    }
                     Text(
-                        "$activeCount ${LocalStrings.current.activeZonesSuffix} • " +
-                            "$alertingCount ${LocalStrings.current.activeAlertsSuffix}",
+                        text = if (monitoring) strings.monitoringOn
+                        else strings.monitoringOff,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onPrimary
+                    )
+                    Text(
+                        "${localizedDigits(activeCount.toString(), LocalAppLang.current)} " +
+                            "${strings.activeZonesSuffix} • " +
+                            "${localizedDigits(alertingCount.toString(), LocalAppLang.current)} " +
+                            strings.activeAlertsSuffix,
                         style = MaterialTheme.typography.bodyMedium,
                         color = scheme.onPrimary.copy(alpha = 0.85f)
                     )
-                    // چیپ وضعیت «همه» درخواست‌ها: مکان، پس‌زمینه، GPS،
-                    // اعلان، پیامک، مخاطبین و باتری — نقطه سبز یعنی سالم،
+                    Text(
+                        strings.heroTapHint,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onPrimary.copy(alpha = 0.75f)
+                    )
+                    // چیپ وضعیت «همه» درخواست‌ها: مکان، پس‌زمینه، باتری،
+                    // اعلان، پیامک، مخاطبین و GPS — نقطه سبز یعنی سالم،
                     // قرمز یعنی نیازمند اقدام.
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        HeroPermChip("مکان", permLocation)
-                        HeroPermChip("پس‌زمینه", permBackground)
-                        HeroPermChip("GPS", locationOn)
-                        HeroPermChip("اعلان", permNotif)
-                        HeroPermChip("پیامک", permSms)
-                        HeroPermChip("مخاطبین", permContacts)
-                        HeroPermChip("باتری", batteryOk)
+                        HeroPermChip(strings.chipLocation, permLocation)
+                        HeroPermChip(strings.chipBackground, permBackground)
+                        HeroPermChip(strings.chipBattery, batteryOk)
+                        HeroPermChip(strings.chipNotif, permNotif)
+                        HeroPermChip(strings.chipSms, permSms)
+                        HeroPermChip(strings.permContacts, permContacts)
+                        HeroPermChip(strings.chipGps, locationOn)
                     }
                     if (hasIssue) {
                         TextButton(
@@ -711,14 +866,16 @@ private fun RadarHeroCard(
                             colors = ButtonDefaults.textButtonColors(contentColor = scheme.onPrimary),
                             contentPadding = PaddingValues(0.dp)
                         ) {
-                            Text(LocalStrings.current.fixIssue, fontWeight = FontWeight.Bold)
+                            Text(strings.fixIssue, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
-                RadarPulse(
-                    modifier = Modifier.size(96.dp),
-                    pulseColor = scheme.secondary,
-                    dotColor = Color.White
+                RadarWaves(
+                    active = monitoring,
+                    burstKey = burstKey,
+                    ringColor = scheme.secondary,
+                    dotColor = Color.White,
+                    modifier = Modifier.size(96.dp)
                 )
             }
         }
@@ -811,23 +968,63 @@ private fun AlertBanner(zoneName: String, onStop: () -> Unit) {
     }
 }
 
-/** مینی‌رادار کارت محدوده؛ شعاع دایره‌ها با لگاریتم شعاع محدوده مقیاس می‌شود. */
+/**
+ * مینی‌رادار کارت محدوده؛ شعاع دایره‌ها با لگاریتم شعاع محدوده مقیاس
+ * می‌شود. فعال: حلقه‌ها آرام موج می‌خورند (تپش نرم بی‌پایان)؛ غیرفعال:
+ * حلقه‌های خاکستری ثابت و کم‌رنگ. با هر تغییر وضعیت کارت ([burstKey])
+ * یک حلقه انفجاری کوتاه باز و محو می‌شود.
+ */
 @Composable
-private fun RadarMini(radiusMeters: Double, active: Boolean, modifier: Modifier = Modifier) {
+private fun RadarMini(
+    radiusMeters: Double,
+    active: Boolean,
+    burstKey: Int,
+    modifier: Modifier = Modifier
+) {
     val scheme = MaterialTheme.colorScheme
     val ringBase = if (active) scheme.primary else scheme.outline
     val dot = if (active) scheme.primary else scheme.outline
+    val infinite = rememberInfiniteTransition(label = "radarMini")
+    val progress by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "radarMiniProgress"
+    )
+    val burst = remember { Animatable(1f) }
+    LaunchedEffect(burstKey) {
+        if (burstKey > 0) {
+            burst.snapTo(0f)
+            burst.animateTo(1f, animationSpec = tween(550, easing = LinearEasing))
+        }
+    }
     Canvas(modifier = modifier.size(72.dp)) {
         val t = (log10(radiusMeters.toFloat()).coerceIn(1f, 6f) - 1f) / 5f
         val maxR = size.minDimension / 2f
+        val scaleBase = 0.72f + 0.28f * t
         listOf(1f, 0.72f, 0.46f).forEachIndexed { i, frac ->
+            // در حالت فعال، هر حلقه با فاز خودش کمی باز و بسته می‌شود.
+            val wave = if (active) (progress + i / 3f) % 1f else 0f
+            val pulseScale = if (active) 0.94f + 0.09f * wave else 1f
+            val alpha = (0.55f - i * 0.12f) * (if (active) 1f - 0.3f * wave else 1f)
             drawCircle(
-                color = ringBase.copy(alpha = 0.55f - i * 0.12f),
-                radius = maxR * frac * (0.72f + 0.28f * t),
+                color = ringBase.copy(alpha = alpha),
+                radius = maxR * frac * scaleBase * pulseScale,
                 style = Stroke(width = 1.5.dp.toPx())
             )
         }
         drawCircle(color = dot, radius = 6.dp.toPx())
+        val bp = burst.value
+        if (bp < 1f) {
+            drawCircle(
+                color = ringBase.copy(alpha = 0.75f * (1f - bp)),
+                radius = maxR * (0.2f + 0.95f * bp),
+                style = Stroke(width = 2.dp.toPx())
+            )
+        }
     }
 }
 
@@ -866,6 +1063,48 @@ private fun StatusPill(zone: Zone) {
     }
 }
 
+/**
+ * دکمه گرد نرم ویرایش/حذف کارت محدوده: دایره ۴۲dp با پس‌زمینه ملایم هم‌رنگ
+ * کنش، بازخورد فشاری (جمع‌شدن تا ۰٫۸۵) و لرزش لمسی سبک هنگام لمس.
+ */
+@Composable
+private fun RoundActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    containerColor: Color,
+    contentColor: Color,
+    onClick: () -> Unit
+) {
+    val haptics = LocalHapticFeedback.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) 0.85f else 1f,
+        label = "roundBtnScale"
+    )
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .background(containerColor, CircleShape)
+            .clickable(interactionSource = interaction, indication = null) {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = contentColor,
+            modifier = Modifier.size(21.dp)
+        )
+    }
+}
+
 @Composable
 private fun ZoneCard(
     zone: Zone,
@@ -876,6 +1115,18 @@ private fun ZoneCard(
     onStopAlert: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val strings = LocalStrings.current
+    val lang = LocalAppLang.current
+    val haptics = LocalHapticFeedback.current
+    // لمس بدنه کارت = فعال/غیرفعال کردن محدوده (جای کلید قدیمی)؛ هنگام
+    // پخش هشدار، لمس کارت کاری نمی‌کند و دکمه توقف راه درست است.
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val cardScale by animateFloatAsState(
+        targetValue = if (pressed && !zone.isAlerting) 0.99f else 1f,
+        label = "zoneCardScale"
+    )
+    var burstKey by remember { mutableStateOf(0) }
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -884,14 +1135,33 @@ private fun ZoneCard(
         tonalElevation = 2.dp,
         color = scheme.surface
     ) {
-        Column {
+        Column(
+            modifier = Modifier
+                .graphicsLayer {
+                    scaleX = cardScale
+                    scaleY = cardScale
+                }
+                .clickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    enabled = !zone.isAlerting
+                ) {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    burstKey++
+                    onToggleActive()
+                }
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                RadarMini(radiusMeters = zone.radiusMeters, active = zone.isActive)
+                RadarMini(
+                    radiusMeters = zone.radiusMeters,
+                    active = zone.isActive,
+                    burstKey = burstKey
+                )
                 Spacer(Modifier.width(12.dp))
                 Column(
                     modifier = Modifier.weight(1f),
@@ -903,39 +1173,55 @@ private fun ZoneCard(
                         fontWeight = FontWeight.Bold
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TonalChip(formatRadiusFa(zone.radiusMeters))
+                        TonalChip(formatRadiusLocalized(strings, lang, zone.radiusMeters))
                         TonalChip(
                             when (zone.exitBehavior) {
-                                Zone.EXIT_SEQUENCE -> "الگوی تکراری"
-                                Zone.EXIT_CONTINUE -> "تا توقف دستی"
-                                else -> "توقف فوری"
+                                Zone.EXIT_SEQUENCE -> strings.exitSequence
+                                Zone.EXIT_CONTINUE -> strings.exitContinueShort
+                                else -> strings.exitStop
                             }
                         )
                     }
                     StatusPill(zone = zone)
                     if (zone.lastTriggeredAt > 0) {
                         Text(
-                            "${LocalStrings.current.lastEntry}: " +
-                                TimeFormat.formatRelativeTimeFa(zone.lastTriggeredAt),
+                            "${strings.lastEntry}: " +
+                                formatRelativeTimeLocalized(
+                                    strings, lang, zone.lastTriggeredAt
+                                ),
                             style = MaterialTheme.typography.bodySmall,
                             color = scheme.onSurfaceVariant
                         )
                     }
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                    Switch(checked = zone.isActive, onCheckedChange = { onToggleActive() })
-                    Row {
-                        IconButton(onClick = onEdit) {
-                            Icon(Icons.Default.Edit, contentDescription = "ویرایش")
-                        }
-                        IconButton(onClick = onDelete) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "حذف",
-                                tint = scheme.error
-                            )
-                        }
-                    }
+                // دکمه‌های گرد ویرایش/حذف، عمودی و وسط‌چین در سمت چپ کارت
+                // (جای چشمیِ کلید قدیمی)؛ ورودشان با محو ملایم همراه است.
+                var actionsShown by remember { mutableStateOf(false) }
+                LaunchedEffect(Unit) { actionsShown = true }
+                val actionsAlpha by animateFloatAsState(
+                    targetValue = if (actionsShown) 1f else 0f,
+                    animationSpec = tween(350),
+                    label = "zoneActionsAlpha"
+                )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.graphicsLayer { alpha = actionsAlpha }
+                ) {
+                    RoundActionButton(
+                        icon = Icons.Default.Edit,
+                        contentDescription = strings.edit,
+                        containerColor = scheme.primaryContainer,
+                        contentColor = scheme.primary,
+                        onClick = onEdit
+                    )
+                    RoundActionButton(
+                        icon = Icons.Default.Delete,
+                        contentDescription = strings.delete,
+                        containerColor = scheme.errorContainer,
+                        contentColor = scheme.error,
+                        onClick = onDelete
+                    )
                 }
             }
             if (zone.isAlerting) {
@@ -949,7 +1235,7 @@ private fun ZoneCard(
                         .fillMaxWidth()
                         .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
                 ) {
-                    Text(LocalStrings.current.stopAlert, fontWeight = FontWeight.Bold)
+                    Text(strings.stopAlert, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1008,7 +1294,7 @@ private fun EmptyState(onAdd: () -> Unit) {
         GradientButton(onClick = onAdd) {
             Icon(Icons.Default.Add, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("ساخت محدوده")
+            Text(LocalStrings.current.createZone)
         }
     }
 }
@@ -1086,63 +1372,19 @@ private class ZoneReorderController(
     }
 }
 
-/** خلاصه خوانای حالت مرتب‌سازی فعلی برای نمایش روی دکمه مرتب‌سازی. */
-private fun sortSummaryText(mode: String): String = when (ZoneSort.normalize(mode)) {
-    ZoneSort.NAME_ASC -> "نام — ترتیب الفبا"
-    ZoneSort.NAME_DESC -> "نام — برعکس الفبا"
-    ZoneSort.NEWEST -> "ایجاد — تازه‌ترین"
-    ZoneSort.OLDEST -> "ایجاد — قدیمی‌ترین"
-    ZoneSort.RADIUS_DESC -> "شعاع — بزرگ‌ترین"
-    ZoneSort.RADIUS_ASC -> "شعاع — کوچک‌ترین"
-    else -> "دستی"
-}
-
 /**
- * دکمه یگانه مرتب‌سازی بالای کارت پایش: آیکن فهرست + «مرتب‌سازی» +
- * خلاصه حالت فعلی + پیکان باز/بسته. لمسش پنل کشویی زیرش را باز می‌کند.
- */
-@Composable
-private fun SortToggleButton(sortMode: String, expanded: Boolean, onClick: () -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = scheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(Icons.Filled.List, contentDescription = null, tint = scheme.primary)
-            Text("مرتب‌سازی", fontWeight = FontWeight.Bold)
-            Text(
-                sortSummaryText(sortMode),
-                style = MaterialTheme.typography.bodySmall,
-                color = scheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-            Icon(
-                if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                contentDescription = null,
-                tint = scheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-/**
- * پنل کشویی مرتب‌سازی: چهار ردیف بزرگ (دستی/نام/ایجاد/شعاع). ردیف‌های
+ * پنل روکش مرتب‌سازی: چهار ردیف بزرگ (دستی/نام/ایجاد/شعاع). ردیف‌های
  * جهت‌دار با هر لمس جهتشان برعکس می‌شود؛ لمس اول روی «شعاع» از
  * «بزرگ‌ترین» شروع می‌کند و روی بقیه از حالت پیش‌فرضشان (الفبا/تازه‌ترین).
+ * لمس ردیفِ جهت‌دارِ فعال فقط جهت را برعکس می‌کند و پنل باز می‌ماند تا
+ * کاربر برگشت زیرنویس را ببیند؛ لمس هر ردیف دیگر انتخاب می‌کند و پنل
+ * بسته می‌شود (keepOpen در [onSelect]).
+ * قانون یکدست پیکان‌ها: جهت نخستِ نام‌برده‌شده پیکان پایین و جهت برعکس
+ * پیکان بالا — برای هر سه ردیف جهت‌دار دقیقاً همین قاعده.
  */
 @Composable
-private fun SortPanel(sortMode: String, onSelect: (String) -> Unit) {
+private fun SortPanel(sortMode: String, onSelect: (String, Boolean) -> Unit) {
+    val strings = LocalStrings.current
     val mode = ZoneSort.normalize(sortMode)
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1150,52 +1392,67 @@ private fun SortPanel(sortMode: String, onSelect: (String) -> Unit) {
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Column(
             modifier = Modifier.padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             SortPanelRow(
-                title = "دستی",
-                caption = "ترتیب دلخواه من",
+                title = strings.sortManual,
+                caption = strings.sortManualCaption,
                 arrowUp = null,
                 selected = mode == ZoneSort.MANUAL,
-                onClick = { onSelect(ZoneSort.MANUAL) }
+                onClick = { onSelect(ZoneSort.MANUAL, false) }
             )
             SortPanelRow(
-                title = "نام",
-                caption = if (mode == ZoneSort.NAME_DESC) "برعکس الفبا" else "ترتیب الفبا",
-                arrowUp = mode != ZoneSort.NAME_DESC,
+                title = strings.sortName,
+                caption = if (mode == ZoneSort.NAME_DESC) strings.sortNameDesc
+                else strings.sortNameAsc,
+                // الفبا = پیکان پایین، برعکس الفبا = پیکان بالا
+                arrowUp = mode == ZoneSort.NAME_DESC,
                 selected = mode == ZoneSort.NAME_ASC || mode == ZoneSort.NAME_DESC,
                 onClick = {
+                    val familyActive =
+                        mode == ZoneSort.NAME_ASC || mode == ZoneSort.NAME_DESC
                     onSelect(
                         if (mode == ZoneSort.NAME_ASC) ZoneSort.NAME_DESC
-                        else ZoneSort.NAME_ASC
+                        else ZoneSort.NAME_ASC,
+                        familyActive
                     )
                 }
             )
             SortPanelRow(
-                title = "ایجاد",
-                caption = if (mode == ZoneSort.OLDEST) "قدیمی‌ترین" else "تازه‌ترین",
+                title = strings.sortCreated,
+                caption = if (mode == ZoneSort.OLDEST) strings.sortOldest
+                else strings.sortNewest,
+                // تازه‌ترین = پیکان پایین، قدیمی‌ترین = پیکان بالا
                 arrowUp = mode == ZoneSort.OLDEST,
                 selected = mode == ZoneSort.NEWEST || mode == ZoneSort.OLDEST,
                 onClick = {
+                    val familyActive =
+                        mode == ZoneSort.NEWEST || mode == ZoneSort.OLDEST
                     onSelect(
                         if (mode == ZoneSort.NEWEST) ZoneSort.OLDEST
-                        else ZoneSort.NEWEST
+                        else ZoneSort.NEWEST,
+                        familyActive
                     )
                 }
             )
             SortPanelRow(
-                title = "شعاع",
-                caption = if (mode == ZoneSort.RADIUS_ASC) "کوچک‌ترین" else "بزرگ‌ترین",
+                title = strings.sortRadius,
+                caption = if (mode == ZoneSort.RADIUS_ASC) strings.sortRadiusAsc
+                else strings.sortRadiusDesc,
+                // بزرگ‌ترین = پیکان پایین، کوچک‌ترین = پیکان بالا
                 arrowUp = mode == ZoneSort.RADIUS_ASC,
                 selected = mode == ZoneSort.RADIUS_DESC || mode == ZoneSort.RADIUS_ASC,
                 onClick = {
+                    val familyActive =
+                        mode == ZoneSort.RADIUS_DESC || mode == ZoneSort.RADIUS_ASC
                     onSelect(
                         if (mode == ZoneSort.RADIUS_DESC) ZoneSort.RADIUS_ASC
-                        else ZoneSort.RADIUS_DESC
+                        else ZoneSort.RADIUS_DESC,
+                        familyActive
                     )
                 }
             )
@@ -1287,7 +1544,7 @@ private fun BatteryWarningBanner(onDisableOptimization: () -> Unit) {
                     tint = scheme.onErrorContainer
                 )
                 Text(
-                    "بهینه‌سازی باتری فعال است؛ ممکن است هشدارها با تأخیر برسند یا متوقف شوند.",
+                    LocalStrings.current.batteryWarningText,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = scheme.onErrorContainer
@@ -1301,7 +1558,7 @@ private fun BatteryWarningBanner(onDisableOptimization: () -> Unit) {
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("غیرفعال کردن بهینه‌سازی", fontWeight = FontWeight.Bold)
+                Text(LocalStrings.current.batteryWarningAction, fontWeight = FontWeight.Bold)
             }
         }
     }

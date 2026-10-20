@@ -125,6 +125,7 @@ fun ContactsPickerDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val strings = LocalStrings.current
     val granted = remember { Permissions.hasContacts(context) }
     var query by remember { mutableStateOf("") }
     var contacts by remember { mutableStateOf<List<ContactEntry>?>(null) }
@@ -152,18 +153,18 @@ fun ContactsPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("انتخاب از مخاطبین", fontWeight = FontWeight.Bold) },
+        title = { Text(strings.contactsPickerTitle, fontWeight = FontWeight.Bold) },
         text = {
             when {
                 !granted -> Text(
-                    "دسترسی به مخاطبین داده نشد؛ شماره را دستی وارد کنید."
+                    strings.contactsDenied
                 )
                 contacts == null -> Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(22.dp))
-                    Text("در حال بارگذاری…")
+                    Text(strings.loading)
                 }
                 else -> Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -171,14 +172,14 @@ fun ContactsPickerDialog(
                     OutlinedTextField(
                         value = query,
                         onValueChange = { query = it },
-                        label = { Text("جستجوی نام یا شماره") },
+                        label = { Text(strings.contactsSearch) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(16.dp)
                     )
                     if (filtered.isEmpty()) {
                         Text(
-                            "مخاطبی یافت نشد",
+                            strings.contactsEmpty,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -215,7 +216,7 @@ fun ContactsPickerDialog(
                                     if (picked) {
                                         Icon(
                                             Icons.Filled.Check,
-                                            contentDescription = "انتخاب‌شده",
+                                            contentDescription = strings.selectedCd,
                                             tint = MaterialTheme.colorScheme.primary
                                         )
                                     }
@@ -228,7 +229,7 @@ fun ContactsPickerDialog(
         },
         confirmButton = {
             TextButton(onClick = onDismiss) {
-                Text("تمام", fontWeight = FontWeight.Bold)
+                Text(strings.done, fontWeight = FontWeight.Bold)
             }
         }
     )
