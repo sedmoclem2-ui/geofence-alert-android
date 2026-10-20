@@ -12,7 +12,6 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -20,21 +19,25 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -42,13 +45,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
@@ -263,9 +270,13 @@ fun HomeScreen(navController: NavController) {
     var permLocation by remember { mutableStateOf(false) }
     var permBackground by remember { mutableStateOf(false) }
     var permNotif by remember { mutableStateOf(false) }
+    var permSms by remember { mutableStateOf(false) }
+    var permContacts by remember { mutableStateOf(false) }
     var zoneToDelete by remember { mutableStateOf<Zone?>(null) }
     // آیا بهینه‌سازی باتری برای این برنامه فعال است؟ (پایش را در پس‌زمینه خفه می‌کند)
     var batteryRestricted by remember { mutableStateOf(false) }
+    // پنل کشویی مرتب‌سازی (زیر دکمه مرتب‌سازی، بالای کارت پایش)
+    var sortPanelOpen by remember { mutableStateOf(false) }
 
     // ---- جابه‌جایی با کشیدن در حالت «دستی» ----
     val listState = rememberLazyListState()
@@ -315,6 +326,8 @@ fun HomeScreen(navController: NavController) {
         permLocation = Permissions.hasAnyLocation(context)
         permBackground = Permissions.hasBackgroundLocation(context)
         permNotif = Permissions.hasNotifications(context)
+        permSms = Permissions.hasSendSms(context)
+        permContacts = Permissions.hasContacts(context)
         batteryRestricted = try {
             val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
             pm.isIgnoringBatteryOptimizations(context.packageName) == false
@@ -374,6 +387,26 @@ fun HomeScreen(navController: NavController) {
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SortToggleButton(
+                        sortMode = sortMode,
+                        expanded = sortPanelOpen,
+                        onClick = { sortPanelOpen = !sortPanelOpen }
+                    )
+                    AnimatedVisibility(
+                        visible = sortPanelOpen,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        SortPanel(
+                            sortMode = sortMode,
+                            onSelect = { vm.setSortMode(it) }
+                        )
+                    }
+                }
+            }
+
+            item {
                 RadarHeroCard(
                     monitoring = monitoring,
                     activeCount = activeCount,
@@ -382,6 +415,9 @@ fun HomeScreen(navController: NavController) {
                     permLocation = permLocation,
                     permBackground = permBackground,
                     permNotif = permNotif,
+                    permSms = permSms,
+                    permContacts = permContacts,
+                    batteryOk = !batteryRestricted,
                     // روشن شدن پایش → دیالوگ سیستمی روشن کردن GPS؛
                     // خاموش شدن پایش هیچ کاری با GPS نمی‌کند.
                     onMonitoringChange = { enabled ->
@@ -440,12 +476,6 @@ fun HomeScreen(navController: NavController) {
             if (zones.isEmpty()) {
                 item { EmptyState(onAdd = { navController.navigate("edit") }) }
             } else {
-                item {
-                    ZoneSortBar(
-                        sortMode = sortMode,
-                        onSelect = { vm.setSortMode(it) }
-                    )
-                }
                 if (isManualSort) {
                     item {
                         Surface(
@@ -562,6 +592,7 @@ private fun RadarPulse(
 }
 
 /** کارت قهرمان بالای صفحه اصلی با گرادیان و رادار متحرک. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun RadarHeroCard(
     monitoring: Boolean,
@@ -571,6 +602,9 @@ private fun RadarHeroCard(
     permLocation: Boolean,
     permBackground: Boolean,
     permNotif: Boolean,
+    permSms: Boolean,
+    permContacts: Boolean,
+    batteryOk: Boolean,
     onMonitoringChange: (Boolean) -> Unit,
     onOpenSettings: () -> Unit
 ) {
@@ -584,7 +618,8 @@ private fun RadarHeroCard(
             mixColor(scheme.primary, scheme.secondary, 0.45f)
         )
     )
-    val hasIssue = !monitoring || !locationOn || !permLocation || !permBackground || !permNotif
+    val hasIssue = !monitoring || !locationOn || !permLocation || !permBackground ||
+        !permNotif || !permSms || !permContacts || !batteryOk
     // درخشش متحرک روی لبه کارت: حس آینده‌نگرانه، با هزینه کم (فقط همین کارت بازسازی می‌شود)
     val shimmerTransition = rememberInfiniteTransition(label = "heroShimmer")
     val shimmerX by shimmerTransition.animateFloat(
@@ -608,19 +643,18 @@ private fun RadarHeroCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(200.dp)
             .border(2.dp, shimmerBorder, MaterialTheme.shapes.large),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
                 .background(gradient)
         ) {
             Row(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -656,15 +690,20 @@ private fun RadarHeroCard(
                         style = MaterialTheme.typography.bodyMedium,
                         color = scheme.onPrimary.copy(alpha = 0.85f)
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            HeroPermChip("مکان", permLocation)
-                            HeroPermChip("پس‌زمینه", permBackground)
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            HeroPermChip("اعلان", permNotif)
-                            HeroPermChip("GPS", locationOn)
-                        }
+                    // چیپ وضعیت «همه» درخواست‌ها: مکان، پس‌زمینه، GPS،
+                    // اعلان، پیامک، مخاطبین و باتری — نقطه سبز یعنی سالم،
+                    // قرمز یعنی نیازمند اقدام.
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        HeroPermChip("مکان", permLocation)
+                        HeroPermChip("پس‌زمینه", permBackground)
+                        HeroPermChip("GPS", locationOn)
+                        HeroPermChip("اعلان", permNotif)
+                        HeroPermChip("پیامک", permSms)
+                        HeroPermChip("مخاطبین", permContacts)
+                        HeroPermChip("باتری", batteryOk)
                     }
                     if (hasIssue) {
                         TextButton(
@@ -1047,56 +1086,176 @@ private class ZoneReorderController(
     }
 }
 
-/** نوار مرتب‌سازی فهرست محدوده‌ها: چهار کپسول انتخابی با انیمیشن رنگ. */
+/** خلاصه خوانای حالت مرتب‌سازی فعلی برای نمایش روی دکمه مرتب‌سازی. */
+private fun sortSummaryText(mode: String): String = when (ZoneSort.normalize(mode)) {
+    ZoneSort.NAME_ASC -> "نام — ترتیب الفبا"
+    ZoneSort.NAME_DESC -> "نام — برعکس الفبا"
+    ZoneSort.NEWEST -> "ایجاد — تازه‌ترین"
+    ZoneSort.OLDEST -> "ایجاد — قدیمی‌ترین"
+    ZoneSort.RADIUS_DESC -> "شعاع — بزرگ‌ترین"
+    ZoneSort.RADIUS_ASC -> "شعاع — کوچک‌ترین"
+    else -> "دستی"
+}
+
+/**
+ * دکمه یگانه مرتب‌سازی بالای کارت پایش: آیکن فهرست + «مرتب‌سازی» +
+ * خلاصه حالت فعلی + پیکان باز/بسته. لمسش پنل کشویی زیرش را باز می‌کند.
+ */
 @Composable
-private fun ZoneSortBar(sortMode: String, onSelect: (String) -> Unit) {
-    val options = listOf(
-        ZoneSort.MANUAL to "دستی",
-        ZoneSort.NAME to "نام",
-        ZoneSort.NEWEST to "تازه‌ترین",
-        ZoneSort.RADIUS to "کوچک‌ترین شعاع"
-    )
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            "مرتب‌سازی",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold
-        )
+private fun SortToggleButton(sortMode: String, expanded: Boolean, onClick: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = scheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
         Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            options.forEach { (mode, label) ->
-                val selected = sortMode == mode
-                val bg by animateColorAsState(
-                    targetValue = if (selected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    },
-                    label = "sortChipBg"
-                )
-                val fg by animateColorAsState(
-                    targetValue = if (selected) {
-                        MaterialTheme.colorScheme.onPrimary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    label = "sortChipFg"
-                )
-                Surface(
-                    color = bg,
-                    shape = CircleShape,
-                    modifier = Modifier.clickable { onSelect(mode) }
-                ) {
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = fg,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            Icon(Icons.Filled.List, contentDescription = null, tint = scheme.primary)
+            Text("مرتب‌سازی", fontWeight = FontWeight.Bold)
+            Text(
+                sortSummaryText(sortMode),
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                contentDescription = null,
+                tint = scheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * پنل کشویی مرتب‌سازی: چهار ردیف بزرگ (دستی/نام/ایجاد/شعاع). ردیف‌های
+ * جهت‌دار با هر لمس جهتشان برعکس می‌شود؛ لمس اول روی «شعاع» از
+ * «بزرگ‌ترین» شروع می‌کند و روی بقیه از حالت پیش‌فرضشان (الفبا/تازه‌ترین).
+ */
+@Composable
+private fun SortPanel(sortMode: String, onSelect: (String) -> Unit) {
+    val mode = ZoneSort.normalize(sortMode)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            SortPanelRow(
+                title = "دستی",
+                caption = "ترتیب دلخواه من",
+                arrowUp = null,
+                selected = mode == ZoneSort.MANUAL,
+                onClick = { onSelect(ZoneSort.MANUAL) }
+            )
+            SortPanelRow(
+                title = "نام",
+                caption = if (mode == ZoneSort.NAME_DESC) "برعکس الفبا" else "ترتیب الفبا",
+                arrowUp = mode != ZoneSort.NAME_DESC,
+                selected = mode == ZoneSort.NAME_ASC || mode == ZoneSort.NAME_DESC,
+                onClick = {
+                    onSelect(
+                        if (mode == ZoneSort.NAME_ASC) ZoneSort.NAME_DESC
+                        else ZoneSort.NAME_ASC
                     )
                 }
+            )
+            SortPanelRow(
+                title = "ایجاد",
+                caption = if (mode == ZoneSort.OLDEST) "قدیمی‌ترین" else "تازه‌ترین",
+                arrowUp = mode == ZoneSort.OLDEST,
+                selected = mode == ZoneSort.NEWEST || mode == ZoneSort.OLDEST,
+                onClick = {
+                    onSelect(
+                        if (mode == ZoneSort.NEWEST) ZoneSort.OLDEST
+                        else ZoneSort.NEWEST
+                    )
+                }
+            )
+            SortPanelRow(
+                title = "شعاع",
+                caption = if (mode == ZoneSort.RADIUS_ASC) "کوچک‌ترین" else "بزرگ‌ترین",
+                arrowUp = mode == ZoneSort.RADIUS_ASC,
+                selected = mode == ZoneSort.RADIUS_DESC || mode == ZoneSort.RADIUS_ASC,
+                onClick = {
+                    onSelect(
+                        if (mode == ZoneSort.RADIUS_DESC) ZoneSort.RADIUS_ASC
+                        else ZoneSort.RADIUS_DESC
+                    )
+                }
+            )
+        }
+    }
+}
+
+/** یک ردیف از پنل مرتب‌سازی: عنوان + زیرنویس حالت + پیکان جهت (اگر جهت‌دار است). */
+@Composable
+private fun SortPanelRow(
+    title: String,
+    caption: String,
+    arrowUp: Boolean?,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val titleColor = if (selected) scheme.onPrimaryContainer else scheme.onSurface
+    val captionColor = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant
+    Surface(
+        color = if (selected) scheme.primaryContainer else Color.Transparent,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                color = titleColor,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                caption,
+                style = MaterialTheme.typography.bodySmall,
+                color = captionColor
+            )
+            if (arrowUp != null) {
+                Icon(
+                    if (arrowUp) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = captionColor
+                )
+            }
+            if (selected) {
+                Icon(
+                    Icons.Filled.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = scheme.onPrimaryContainer
+                )
             }
         }
     }

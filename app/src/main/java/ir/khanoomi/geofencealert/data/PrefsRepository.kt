@@ -12,6 +12,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import ir.khanoomi.geofencealert.domain.ScheduleChecker
+import ir.khanoomi.geofencealert.domain.ZoneSort
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
@@ -192,18 +193,59 @@ class PrefsRepository(private val context: Context) {
     private val KEY_ZONE_SORT_MODE = stringPreferencesKey("zone_sort_mode")
 
     /**
-     * حالت مرتب‌سازی فهرست محدوده‌ها: «manual» (دستی، پیش‌فرض)، «name»،
-     * «newest» یا «radius» — مقادیر در [ir.khanoomi.geofencealert.domain.ZoneSort].
+     * حالت مرتب‌سازی فهرست محدوده‌ها: یکی از مقادیر [ZoneSort] (پیش‌فرض:
+     * «manual»). مقادیر قدیمی «name»/«radius» هنگام خواندن به معادل
+     * جهت‌دار تازه نرمال می‌شوند.
      */
     val zoneSortMode: Flow<String> = context.prefsDataStore.data
-        .map { prefs -> prefs[KEY_ZONE_SORT_MODE] ?: "manual" }
-        .catch { emit("manual") }
+        .map { prefs -> ZoneSort.normalize(prefs[KEY_ZONE_SORT_MODE]) }
+        .catch { emit(ZoneSort.MANUAL) }
 
     suspend fun setZoneSortMode(mode: String) {
-        val normalized = when (mode) {
-            "name", "newest", "radius" -> mode
-            else -> "manual"
+        context.prefsDataStore.edit { prefs ->
+            prefs[KEY_ZONE_SORT_MODE] = ZoneSort.normalize(mode)
         }
-        context.prefsDataStore.edit { prefs -> prefs[KEY_ZONE_SORT_MODE] = normalized }
+    }
+
+    private val KEY_WAKE_SCREEN = booleanPreferencesKey("wake_screen_on_alert")
+
+    /**
+     * روشن شدن صفحه هنگام شروع هشدار (پیش‌فرض: روشن)؛ کاربر از پنل
+     * تنظیمات می‌تواند آن را خاموش کند تا هنگام اعلان، صفحه قفل روشن نشود.
+     */
+    val wakeScreenOnAlert: Flow<Boolean> = context.prefsDataStore.data
+        .map { prefs -> prefs[KEY_WAKE_SCREEN] ?: true }
+        .catch { emit(true) }
+
+    suspend fun setWakeScreenOnAlert(enabled: Boolean) {
+        context.prefsDataStore.edit { prefs -> prefs[KEY_WAKE_SCREEN] = enabled }
+    }
+
+    private val KEY_FLASHLIGHT_MODE = stringPreferencesKey("flashlight_mode")
+
+    /**
+     * رفتار چراغ قوه هنگام هشدار: «off» (خاموش)، «steady» (ثابت) یا
+     * «blink» (چشمک‌زن) — پیش‌فرض: خاموش.
+     */
+    val flashlightMode: Flow<String> = context.prefsDataStore.data
+        .map { prefs -> normalizeFlashlightMode(prefs[KEY_FLASHLIGHT_MODE]) }
+        .catch { emit(FLASHLIGHT_OFF) }
+
+    suspend fun setFlashlightMode(mode: String) {
+        context.prefsDataStore.edit { prefs ->
+            prefs[KEY_FLASHLIGHT_MODE] = normalizeFlashlightMode(mode)
+        }
+    }
+
+    companion object {
+        const val FLASHLIGHT_OFF = "off"
+        const val FLASHLIGHT_STEADY = "steady"
+        const val FLASHLIGHT_BLINK = "blink"
+
+        /** نرمال‌سازی حالت چراغ قوه؛ هر مقدار ناشناخته «خاموش» حساب می‌شود. */
+        fun normalizeFlashlightMode(mode: String?): String = when (mode) {
+            FLASHLIGHT_STEADY, FLASHLIGHT_BLINK -> mode
+            else -> FLASHLIGHT_OFF
+        }
     }
 }

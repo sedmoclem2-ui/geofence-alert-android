@@ -28,14 +28,25 @@ class ZoneSortTest {
     }
 
     @Test
-    fun `name mode orders alphabetically`() {
+    fun `name asc mode orders alphabetically`() {
         val zones = listOf(
             zone(id = 1, name = "خانه", radius = 100.0, sortOrder = 0),
             zone(id = 2, name = "اداره", radius = 100.0, sortOrder = 0),
             zone(id = 3, name = "باشگاه", radius = 100.0, sortOrder = 0)
         )
-        val sorted = ZoneSort.sortZones(zones, ZoneSort.NAME)
+        val sorted = ZoneSort.sortZones(zones, ZoneSort.NAME_ASC)
         assertEquals(listOf("اداره", "باشگاه", "خانه"), sorted.map { it.name })
+    }
+
+    @Test
+    fun `name desc mode orders reverse alphabetically`() {
+        val zones = listOf(
+            zone(id = 1, name = "خانه", radius = 100.0, sortOrder = 0),
+            zone(id = 2, name = "اداره", radius = 100.0, sortOrder = 0),
+            zone(id = 3, name = "باشگاه", radius = 100.0, sortOrder = 0)
+        )
+        val sorted = ZoneSort.sortZones(zones, ZoneSort.NAME_DESC)
+        assertEquals(listOf("خانه", "باشگاه", "اداره"), sorted.map { it.name })
     }
 
     @Test
@@ -50,13 +61,35 @@ class ZoneSortTest {
     }
 
     @Test
-    fun `radius mode orders by radius ascending`() {
+    fun `oldest mode puts lowest id first`() {
+        val zones = listOf(
+            zone(id = 1, name = "الف", radius = 100.0, sortOrder = 0),
+            zone(id = 5, name = "ب", radius = 100.0, sortOrder = 0),
+            zone(id = 3, name = "ج", radius = 100.0, sortOrder = 0)
+        )
+        val sorted = ZoneSort.sortZones(zones, ZoneSort.OLDEST)
+        assertEquals(listOf(1L, 3L, 5L), sorted.map { it.id })
+    }
+
+    @Test
+    fun `radius desc mode orders by radius descending`() {
         val zones = listOf(
             zone(id = 1, name = "الف", radius = 500.0, sortOrder = 0),
             zone(id = 2, name = "ب", radius = 100.0, sortOrder = 0),
             zone(id = 3, name = "ج", radius = 200.0, sortOrder = 0)
         )
-        val sorted = ZoneSort.sortZones(zones, ZoneSort.RADIUS)
+        val sorted = ZoneSort.sortZones(zones, ZoneSort.RADIUS_DESC)
+        assertEquals(listOf(1L, 3L, 2L), sorted.map { it.id })
+    }
+
+    @Test
+    fun `radius asc mode orders by radius ascending`() {
+        val zones = listOf(
+            zone(id = 1, name = "الف", radius = 500.0, sortOrder = 0),
+            zone(id = 2, name = "ب", radius = 100.0, sortOrder = 0),
+            zone(id = 3, name = "ج", radius = 200.0, sortOrder = 0)
+        )
+        val sorted = ZoneSort.sortZones(zones, ZoneSort.RADIUS_ASC)
         assertEquals(listOf(2L, 3L, 1L), sorted.map { it.id })
     }
 }

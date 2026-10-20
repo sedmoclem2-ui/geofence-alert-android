@@ -5,7 +5,6 @@ import android.content.Context
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.alert.AlertController
 import ir.khanoomi.geofencealert.audio.AlertVibrator
-import ir.khanoomi.geofencealert.audio.VoiceAnnouncer
 import ir.khanoomi.geofencealert.data.EventLog
 import ir.khanoomi.geofencealert.data.Zone
 import ir.khanoomi.geofencealert.domain.AlertDecider
@@ -39,6 +38,25 @@ object ZoneTransitionHandler {
     suspend fun onEnter(context: Context, zone: Zone) {
         val app = context.applicationContext as GeofenceAlertApp
         val id = zone.id
+        // محافظ «همان سفر»: ثبت دوباره ژئوفنس‌ها (مثلاً با هر ویرایش و ذخیره
+        // محدوده، refreshRegistrations صدا زده می‌شود) با
+        // INITIAL_TRIGGER_ENTER برای محدوده‌ای که گوشی هنوز داخلش است، یک
+        // ENTER تازه می‌سازد. اگر کاربر هشدار این سفر را قبلاً دستی متوقف
+        // کرده (تأییدشده) و هنوز داخل محدوده است (insideSince پاک نشده)،
+        // این رویداد همان سفر قبلی است، نه ورود تازه: کاملاً نادیده گرفته
+        // می‌شود تا هشداری که کاربر ساکت کرده دوباره شروع نشود. ورود واقعی
+        // همیشه بعد از یک خروج است و خروج insideSince را صفر می‌کند، پس
+        // ورود تازه هرگز زیر این محافظ نمی‌ماند.
+        val freshRow = try {
+            app.zoneRepo.getById(id)
+        } catch (e: Exception) {
+            Log.e(TAG, "getById failed for zone $id", e)
+            null
+        }
+        if (freshRow != null && freshRow.alertAcknowledged && freshRow.insideSince > 0) {
+            Log.i(TAG, "ENTER ignored for zone $id: same trip, already acknowledged by user")
+            return
+        }
         // سفر جدید: هشدارِ دستیِ متوقف‌شده قبلی فراموش می‌شود.
         try {
             app.zoneRepo.setAcknowledged(id, false)
@@ -130,20 +148,10 @@ object ZoneTransitionHandler {
             Log.e(TAG, "isQuietNow failed", e)
             false
         }
+        // اعلام صوتی نام محدوده (TTS خود گوشی) حالا داخل خود AlertController
+        // و «پیش از» صدای هشدار انجام می‌شود (دو بار خواندن، بعد صدا) تا
+        // ترتیب پخش تضمین شود؛ اینجا دیگر جداگانه صدا زده نمی‌شود.
         AlertController.startAlert(context, fresh, silent = quiet)
-
-        // اعلام صوتی نام محدوده (TTS خود گوشی): فقط اگر صدا مجاز باشد و در
-        // ساعات سکوت عمومی نباشیم.
-        if (!quiet && fresh.voiceAnnounce &&
-            AlertController.soundAllowed(fresh.alertMode)
-        ) {
-            try {
-                val lang = app.prefs.appLanguage.first()
-                VoiceAnnouncer.speakEntry(context, fresh.name, lang)
-            } catch (e: Exception) {
-                Log.e(TAG, "Voice announce failed for zone $id", e)
-            }
-        }
     }
 
     /**

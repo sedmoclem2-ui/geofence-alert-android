@@ -11,6 +11,7 @@ import ir.khanoomi.geofencealert.data.MIGRATION_5_6
 import ir.khanoomi.geofencealert.data.MIGRATION_6_7
 import ir.khanoomi.geofencealert.data.PrefsRepository
 import ir.khanoomi.geofencealert.data.ZoneRepository
+import ir.khanoomi.geofencealert.audio.VoiceAnnouncer
 import ir.khanoomi.geofencealert.notify.Notifications
 
 class GeofenceAlertApp : Application() {
@@ -18,6 +19,9 @@ class GeofenceAlertApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Notifications.createChannels(this)
+        // گرم کردن زودهنگام موتور گفتار گوشی تا هنگام ورود به محدوده،
+        // اعلام صوتی نام بدون تأخیر راه‌اندازی موتور شروع شود.
+        VoiceAnnouncer.init(this)
     }
 
     val db: AppDatabase by lazy {

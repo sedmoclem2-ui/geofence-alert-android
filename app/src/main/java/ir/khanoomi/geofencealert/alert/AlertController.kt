@@ -7,6 +7,7 @@ import androidx.core.content.ContextCompat
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.audio.AlertPlayer
 import ir.khanoomi.geofencealert.audio.AlertVibrator
+import ir.khanoomi.geofencealert.audio.VoiceAnnouncer
 import ir.khanoomi.geofencealert.data.Zone
 import ir.khanoomi.geofencealert.notify.Notifications
 import ir.khanoomi.geofencealert.service.AlertService
@@ -19,6 +20,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
 
@@ -35,6 +37,10 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object AlertController {
     private const val TAG = "AlertController"
+
+    /** مهلت سخت انتظار برای پایان اعلام صوتی پیش از شروع صدای هشدار. */
+    private const val VOICE_TIMEOUT_MS = 5_000L
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** جاب‌های الگوی تکراری پس از خروج، یکی برای هر محدوده. */
@@ -107,6 +113,11 @@ object AlertController {
      * شروع هشدار برای یک محدوده (پس از رویداد ورود معتبر).
      * اگر [silent] درست باشد (مثلاً در ساعات سکوت)، فقط اعلان نمایش داده
      * می‌شود و صدایی پخش نمی‌گردد؛ دکمه توقف همچنان در اعلان هست.
+     *
+     * ترتیب پخش از نسخه ۲.۳.۰: اگر اعلام صوتی نام فعال باشد و نوع هشدار
+     * صدا را اجازه دهد، «اول» نام محدوده دو بار با صدای گوشی خوانده می‌شود
+     * و «بعد» صدای هشدار (و لرزش) شروع می‌شود — مدیریت این ترتیب همین‌جا
+     * در [startAlertAfterVoice] است، نه در فراخواننده.
      */
     fun startAlert(context: Context, zone: Zone, silent: Boolean = false) {
         if (AlertPlayer.isPlaying(zone.id)) {
@@ -119,6 +130,60 @@ object AlertController {
             Notifications.notifyAlert(context, zone.id, zone.name)
             return
         }
+        if (zone.voiceAnnounce && soundAllowed(zone.alertMode)) {
+            startAlertAfterVoice(context, zone)
+        } else {
+            startAlertSound(context, zone)
+        }
+    }
+
+    /**
+     * شناسه محدوده‌هایی که شروع صدایشان در انتظار پایان اعلام صوتی است.
+     * توقف هشدار در این فاصله، شناسه را حذف می‌کند تا صدا بعد از گفتار
+     * هم شروع نشود.
+     */
+    private val pendingVoiceStarts = ConcurrentHashMap.newKeySet<Long>()
+
+    /**
+     * اول اعلام صوتی (دو بار خواندن نام به زبان فعلی برنامه)، بعد صدا.
+     * شروع صدا دقیقاً یک بار انجام می‌شود: هرکدام زودتر برسد — پایان گفتار
+     * یا مهلت سخت ~۵ ثانیه — و دومی بی‌اثر است. خطای گفتار هم صدا را
+     * معطل نمی‌کند.
+     */
+    private fun startAlertAfterVoice(context: Context, zone: Zone) {
+        val appContext = context.applicationContext
+        pendingVoiceStarts.add(zone.id)
+        val startOnce: () -> Unit = {
+            // فقط اگر در این فاصله کاربر هشدار را متوقف نکرده باشد.
+            if (pendingVoiceStarts.remove(zone.id)) {
+                startAlertSound(appContext, zone)
+            }
+        }
+        scope.launch {
+            val lang = try {
+                (appContext as GeofenceAlertApp).prefs.appLanguage.first()
+            } catch (e: Exception) {
+                Log.e(TAG, "Cannot read app language; defaulting to fa", e)
+                "fa"
+            }
+            try {
+                VoiceAnnouncer.announceNameTwice(appContext, zone.name, lang) {
+                    startOnce()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Voice announce failed; starting sound directly", e)
+                startOnce()
+            }
+            // مهلت سخت: صدا هیچ‌وقت بیش از ~۵ ثانیه منتظر گفتار نمی‌ماند.
+            launch {
+                delay(VOICE_TIMEOUT_MS)
+                startOnce()
+            }
+        }
+    }
+
+    /** شروع واقعی صدای هشدار: سرویس پیش‌زمینه یا مسیر جایگزین پخش مستقیم. */
+    private fun startAlertSound(context: Context, zone: Zone) {
         val intent = Intent(context, AlertService::class.java)
             .setAction(AlertService.ACTION_START)
             .putExtra(AlertService.EXTRA_ZONE_ID, zone.id)
@@ -149,6 +214,8 @@ object AlertController {
      * در حال اجرای همان محدوده لغو می‌گردد و آلارم‌های بعدی به صدا درنمی‌آید.
      */
     fun stopAlert(context: Context, zoneId: Long, manual: Boolean) {
+        // اگر شروع صدا هنوز در انتظار پایان اعلام صوتی است، لغوش کن.
+        pendingVoiceStarts.remove(zoneId)
         // لغو الگوی تکراری پس از خروج (اگر در حال اجراست)
         sequenceJobs.remove(zoneId)?.cancel()
         AlertPlayer.stop(zoneId)
@@ -185,6 +252,8 @@ object AlertController {
 
     /** توقف همه هشدارهای فعال (دکمه ویجت). */
     fun stopAllAlerts(context: Context, manual: Boolean) {
+        // لغو شروع‌های در انتظار اعلام صوتی
+        pendingVoiceStarts.clear()
         // لغو همه الگوهای تکراری در حال اجرا
         sequenceJobs.keys.toList().forEach { sequenceJobs.remove(it)?.cancel() }
         AlertPlayer.stopAll()

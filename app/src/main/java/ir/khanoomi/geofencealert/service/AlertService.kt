@@ -1,22 +1,30 @@
 package ir.khanoomi.geofencealert.service
 
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.ServiceCompat
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.alert.AlertController
 import ir.khanoomi.geofencealert.audio.AlertPlayer
 import ir.khanoomi.geofencealert.audio.AlertVibrator
+import ir.khanoomi.geofencealert.data.PrefsRepository
 import ir.khanoomi.geofencealert.data.Zone
 import ir.khanoomi.geofencealert.notify.Notifications
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -36,6 +44,15 @@ class AlertService : Service() {
 
     private val activeIds = mutableSetOf<Long>()
     private val activeNames = mutableMapOf<Long, String>()
+
+    /** قفل بیداری صفحه هنگام هشدار (با مهلت خودکار آزاد می‌شود). */
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    /** جاب چشمک چراغ قوه (در حالت «چشمک‌زن»). */
+    private var blinkJob: Job? = null
+
+    /** شناسه دوربین دارای فلش (یک بار پیدا و نگه داشته می‌شود). */
+    private var torchCameraId: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -99,6 +116,24 @@ class AlertService : Service() {
             } catch (e: Exception) {
                 0.7f
             }
+            // روشن شدن صفحه هنگام هشدار (اگر کاربر در تنظیمات خاموشش نکرده
+            // باشد) تا اعلان روی صفحه قفل دیده شود.
+            val wakeScreen = try {
+                app.prefs.wakeScreenOnAlert.first()
+            } catch (e: Exception) {
+                true
+            }
+            if (wakeScreen) {
+                acquireWakeLock()
+            }
+            // چراغ قوه هنگام هشدار طبق حالت انتخاب‌شده در تنظیمات
+            // (خاموش/ثابت/چشمک‌زن).
+            val flashMode = try {
+                app.prefs.flashlightMode.first()
+            } catch (e: Exception) {
+                PrefsRepository.FLASHLIGHT_OFF
+            }
+            applyFlashlight(flashMode)
             if (AlertController.soundAllowed(mode)) {
                 AlertPlayer.play(this@AlertService, zoneId, soundKey, soundUri, volume)
             }
@@ -127,9 +162,95 @@ class AlertService : Service() {
             activeIds.isNotEmpty()
         }
         if (!stillActive) {
+            // آخرین هشدار هم تمام شد: چراغ قوه خاموش و قفل صفحه آزاد.
+            stopFlashlight()
+            releaseWakeLock()
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
+    }
+
+    /**
+     * گرفتن قفل بیداری «روشن شدن صفحه» برای ۱۵ ثانیه هنگام شروع هشدار
+     * (با ACQUIRE_CAUSES_WAKEUP صفحه قفل روشن می‌شود). مجوز WAKE_LOCK در
+     * مانیفست هست و این قفل سقفی خودکار دارد؛ در پایان هشدار هم دستی آزاد
+     * می‌شود.
+     */
+    private fun acquireWakeLock() {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            releaseWakeLock()
+            @Suppress("DEPRECATION")
+            wakeLock = pm.newWakeLock(
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+                    PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                "GeofenceAlert:AlertWakeLock"
+            ).apply { acquire(WAKE_LOCK_TIMEOUT_MS) }
+        } catch (e: Exception) {
+            Log.w(TAG, "acquireWakeLock failed", e)
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            wakeLock?.let { if (it.isHeld) it.release() }
+        } catch (_: Exception) {
+        }
+        wakeLock = null
+    }
+
+    /**
+     * اعمال حالت چراغ قوه انتخاب‌شده در تنظیمات. چراغ قوه (Torch) به مجوز
+     * دوربین نیاز ندارد؛ روی گوشی بدون فلش یا دوربین مشغول، بی‌صدا رد
+     * می‌شود.
+     */
+    private fun applyFlashlight(mode: String) {
+        blinkJob?.cancel()
+        blinkJob = null
+        when (mode) {
+            PrefsRepository.FLASHLIGHT_STEADY -> setTorch(true)
+            PrefsRepository.FLASHLIGHT_BLINK -> {
+                blinkJob = scope.launch {
+                    var on = true
+                    while (isActive) {
+                        setTorch(on)
+                        on = !on
+                        delay(TORCH_BLINK_MS)
+                    }
+                }
+            }
+            else -> setTorch(false)
+        }
+    }
+
+    /** توقف کامل چراغ قوه (پایان هشدار/سرویس): لغو چشمک + خاموش کردن چراغ. */
+    private fun stopFlashlight() {
+        blinkJob?.cancel()
+        blinkJob = null
+        setTorch(false)
+    }
+
+    private fun setTorch(on: Boolean) {
+        try {
+            val cm = getSystemService(Context.CAMERA_SERVICE) as CameraManager
+            val cameraId = torchCameraId
+                ?: findTorchCamera(cm)?.also { torchCameraId = it }
+                ?: return
+            cm.setTorchMode(cameraId, on)
+        } catch (e: Exception) {
+            Log.w(TAG, "setTorch($on) failed", e)
+        }
+    }
+
+    /** اولین دوربینی که فلش دارد (معمولاً دوربین پشت). */
+    private fun findTorchCamera(cm: CameraManager): String? = try {
+        cm.cameraIdList.firstOrNull { id ->
+            cm.getCameraCharacteristics(id)
+                .get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+        }
+    } catch (e: Exception) {
+        Log.w(TAG, "findTorchCamera failed", e)
+        null
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -137,7 +258,9 @@ class AlertService : Service() {
     override fun onDestroy() {
         // اگر سیستم سرویس را از بین برد، برای هشدارهای باقی‌مانده اعلان
         // عادی می‌گذاریم تا کاربر همچنان دکمه توقف را داشته باشد.
-        // لرزش همه هشدارها هم متوقف می‌شود.
+        // لرزش همه هشدارها هم متوقف می‌شود. چراغ قوه و قفل صفحه هم آزاد.
+        stopFlashlight()
+        releaseWakeLock()
         AlertVibrator.stopAll(this)
         val remaining: Map<Long, String> = synchronized(activeIds) {
             activeNames.toMap()
@@ -163,6 +286,12 @@ class AlertService : Service() {
         const val EXTRA_SOUND_URI = "sound_uri"
 
         private const val FOREGROUND_NOTIFICATION_ID = 9001
+
+        /** مهلت قفل بیداری صفحه هنگام هشدار (۱۵ ثانیه). */
+        private const val WAKE_LOCK_TIMEOUT_MS = 15_000L
+
+        /** فاصله روشن/خاموش چراغ قوه در حالت چشمک‌زن (۶۰۰ میلی‌ثانیه). */
+        private const val TORCH_BLINK_MS = 600L
 
         /** آیا سرویس در حال اجراست (برای تصمیم‌گیری درباره ارسال ACTION_STOP). */
         @Volatile

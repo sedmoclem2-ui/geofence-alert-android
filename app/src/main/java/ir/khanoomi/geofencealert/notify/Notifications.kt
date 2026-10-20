@@ -31,6 +31,13 @@ object Notifications {
     const val PROXIMITY_CHANNEL_ID = "proximity_channel"
     const val GPS_CHANNEL_ID = "gps_channel"
 
+    /**
+     * کانال بی‌صدای سرویس پایش در حالت بیکار: اهمیت کمینه (MIN) — اندروید
+     * برایش هیچ آیکنی در نوار وضعیت نشان نمی‌دهد و فقط در بخش بی‌صدای سایه
+     * اعلان‌ها فهرست می‌شود.
+     */
+    const val CHANNEL_SERVICE_QUIET = "service_quiet_channel"
+
     private const val STATUS_NOTIFICATION_ID = 9002
 
     /** شناسه ثابت اعلان «جی‌پی‌اس خاموش است». */
@@ -80,10 +87,22 @@ object Notifications {
         ).apply {
             description = "هشدار خاموش بودن مکان‌یابی گوشی هنگام فعال بودن پایش"
         }
+        val quiet = NotificationChannel(
+            CHANNEL_SERVICE_QUIET,
+            "پایش پس‌زمینه",
+            NotificationManager.IMPORTANCE_MIN
+        ).apply {
+            description = "اعلان بی‌صدای سرویس پایش در حالت بیکار؛ بدون آیکن نوار وضعیت"
+            setShowBadge(false)
+            enableVibration(false)
+            enableLights(false)
+            setSound(null, null)
+        }
         nm.createNotificationChannel(alert)
         nm.createNotificationChannel(status)
         nm.createNotificationChannel(proximity)
         nm.createNotificationChannel(gps)
+        nm.createNotificationChannel(quiet)
     }
 
     /** اعلان هشدار یک محدوده (برای سرویس پیش‌زمینه و مسیر جایگزین). */
@@ -268,6 +287,29 @@ object Notifications {
     /** حذف اعلان «جی‌پی‌اس خاموش است» (روشن شدن مکان یا خاموش شدن پایش). */
     fun cancelGpsOff(context: Context) {
         manager(context).cancel(GPS_NOTIFICATION_ID)
+    }
+
+    /**
+     * اعلان «نامرئی» سرویس پیش‌زمینه پایش در حالت بیکار (هیچ نشست دقیقی
+     * فعال نیست): کانال با اهمیت کمینه و اولویت MIN — اندروید هیچ آیکنی
+     * در نوار وضعیت نشان نمی‌دهد؛ متن حداقلی (نام برنامه + «پایش فعال
+     * است») و بدون ثانیه‌شمار.
+     */
+    fun quietServiceNotification(context: Context): Notification {
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(context, CHANNEL_SERVICE_QUIET)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(context.getString(R.string.app_name))
+            .setContentText("پایش فعال است")
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setContentIntent(contentIntent)
+            .build()
     }
 
     /**

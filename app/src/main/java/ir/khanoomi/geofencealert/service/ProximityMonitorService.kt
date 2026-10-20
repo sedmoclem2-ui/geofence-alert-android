@@ -63,6 +63,14 @@ class ProximityMonitorService : Service() {
     private var loopJob: Job? = null
     private var tickerJob: Job? = null
 
+    /**
+     * آیا اعلان پیش‌زمینه فعلی «مرئی» است (پایش دقیق با ثانیه‌شمار) یا
+     * «بی‌صدا» (حالت بیکار، کانال کمینه بدون آیکن نوار وضعیت). برای
+     * جلوگیری از جابه‌جایی تکراری اعلان نگه داشته می‌شود.
+     */
+    @Volatile
+    private var visibleNotification = false
+
     /** شنونده تغییر وضعیت مکان‌یابی گوشی برای اعلان «جی‌پی‌اس خاموش است». */
     private val gpsStateReceiver = GpsStateReceiver()
 
@@ -90,7 +98,14 @@ class ProximityMonitorService : Service() {
             ServiceCompat.startForeground(
                 this,
                 FOREGROUND_NOTIFICATION_ID,
-                Notifications.proximityNotification(this, monitoringIdle = true),
+                // حالت بیکار: اعلان بی‌صدای نامرئی (بدون آیکن نوار وضعیت).
+                // اگر نشست دقیقی در جریان است، اعلان مرئی پایش دقیق می‌ماند
+                // و ثانیه‌شمار ظرف یک ثانیه آن را تازه می‌کند.
+                if (visibleNotification) {
+                    Notifications.proximityNotification(this)
+                } else {
+                    Notifications.quietServiceNotification(this)
+                },
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             )
         } catch (e: Exception) {
@@ -203,35 +218,40 @@ class ProximityMonitorService : Service() {
     }
 
     /**
-     * ثانیه‌شمار اعلان: هر ثانیه، نزدیک‌ترین موعد بررسی بعدی و نام محدوده‌اش
-     * روی اعلان پیش‌زمینه به‌روز می‌شود (دایره قرمز شمارش معکوس).
+     * ثانیه‌شمار و تعویض اعلان پیش‌زمینه:
+     * - وقتی نشست پایش دقیق فعال است (محدوده‌ای armed و داخل دروازه‌ایم)،
+     *   هر ثانیه نزدیک‌ترین موعد بررسی بعدی و نام محدوده‌اش روی اعلان
+     *   «مرئی» پایش دقیق به‌روز می‌شود (دایره قرمز شمارش معکوس).
+     * - وقتی هیچ نشست دقیقی فعال نیست، اعلان «بی‌صدای» کانال کمینه نشان
+     *   داده می‌شود؛ اندروید برای اهمیت MIN هیچ آیکنی در نوار وضعیت نشان
+     *   نمی‌دهد. تعویض بین دو حالت فقط هنگام تغییر وضعیت انجام می‌شود.
      */
     private fun ensureTickerRunning() {
         if (tickerJob?.isActive == true) return
         tickerJob = scope.launch {
             val nm = NotificationManagerCompat.from(this@ProximityMonitorService)
-            var idleShown = false
             while (isActive) {
                 try {
                     if (armed.isEmpty()) {
-                        // گذر به حالت بیکار: یک‌بار اعلان «پایش فعال است»
-                        // نشان داده می‌شود تا ثانیه‌شمار قبلی پاک شود.
-                        if (!idleShown) {
-                            idleShown = true
-                            if (Permissions.hasNotifications(this@ProximityMonitorService)) {
-                                nm.notify(
+                        // پایان نشست دقیق: بازگشت به اعلان بی‌صدای نامرئی.
+                        if (visibleNotification) {
+                            visibleNotification = false
+                            try {
+                                ServiceCompat.startForeground(
+                                    this@ProximityMonitorService,
                                     FOREGROUND_NOTIFICATION_ID,
-                                    Notifications.proximityNotification(
-                                        this@ProximityMonitorService,
-                                        monitoringIdle = true
-                                    )
+                                    Notifications.quietServiceNotification(
+                                        this@ProximityMonitorService
+                                    ),
+                                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
                                 )
+                            } catch (e: Exception) {
+                                Log.e(TAG, "swap to quiet notification failed", e)
                             }
                         }
                         delay(1000)
                         continue
                     }
-                    idleShown = false
                     val now = System.currentTimeMillis()
                     val next = armed.minByOrNull { it.value }
                     if (next != null) {
@@ -242,15 +262,31 @@ class ProximityMonitorService : Service() {
                         } catch (_: Exception) {
                             null
                         }
-                        if (Permissions.hasNotifications(this@ProximityMonitorService)) {
-                            nm.notify(
-                                FOREGROUND_NOTIFICATION_ID,
-                                Notifications.proximityNotification(
+                        val notification = Notifications.proximityNotification(
+                            this@ProximityMonitorService,
+                            name ?: "محدوده",
+                            remaining
+                        )
+                        if (!visibleNotification) {
+                            // شروع نشست دقیق: اعلان مرئی جای اعلان بی‌صدا را
+                            // می‌گیرد (با startForeground تا آیکن برگردد).
+                            visibleNotification = true
+                            try {
+                                ServiceCompat.startForeground(
                                     this@ProximityMonitorService,
-                                    name ?: "محدوده",
-                                    remaining
+                                    FOREGROUND_NOTIFICATION_ID,
+                                    notification,
+                                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
                                 )
-                            )
+                            } catch (e: Exception) {
+                                Log.e(TAG, "swap to visible notification failed", e)
+                                if (Permissions.hasNotifications(this@ProximityMonitorService)) {
+                                    nm.notify(FOREGROUND_NOTIFICATION_ID, notification)
+                                }
+                            }
+                        } else if (Permissions.hasNotifications(this@ProximityMonitorService)) {
+                            // به‌روزرسانی ثانیه‌شمار فقط در حالت مرئی.
+                            nm.notify(FOREGROUND_NOTIFICATION_ID, notification)
                         }
                     }
                 } catch (e: Exception) {

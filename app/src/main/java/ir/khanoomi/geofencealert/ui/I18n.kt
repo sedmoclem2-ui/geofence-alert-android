@@ -96,7 +96,18 @@ data class UiStrings(
     val getStarted: String,
     val next: String,
     val skip: String,
-    val previous: String
+    val previous: String,
+    // ردیف‌های تازه پنل تنظیمات: مخاطبین، باتری، روشن شدن صفحه و چراغ قوه
+    val permContacts: String,
+    val permBattery: String,
+    val batteryUnrestricted: String,
+    val batteryRestricted: String,
+    val wakeScreen: String,
+    val wakeScreenSub: String,
+    val flashlight: String,
+    val flashOff: String,
+    val flashSteady: String,
+    val flashBlink: String
 ) {
     companion object {
         val FA = UiStrings(
@@ -184,7 +195,17 @@ data class UiStrings(
             getStarted = "شروع",
             next = "بعدی",
             skip = "رد کردن",
-            previous = "قبلی"
+            previous = "قبلی",
+            permContacts = "مخاطبین",
+            permBattery = "مصرف باتری",
+            batteryUnrestricted = "بدون محدودیت",
+            batteryRestricted = "محدود شده",
+            wakeScreen = "روشن شدن صفحه هنگام هشدار",
+            wakeScreenSub = "هنگام شروع هشدار، صفحه قفل برای چند ثانیه روشن می‌شود.",
+            flashlight = "چراغ قوه هنگام هشدار",
+            flashOff = "خاموش",
+            flashSteady = "ثابت",
+            flashBlink = "چشمک‌زن"
         )
 
         val EN = UiStrings(
@@ -272,7 +293,17 @@ data class UiStrings(
             getStarted = "Get started",
             next = "Next",
             skip = "Skip",
-            previous = "Back"
+            previous = "Back",
+            permContacts = "Contacts",
+            permBattery = "Battery usage",
+            batteryUnrestricted = "Unrestricted",
+            batteryRestricted = "Restricted",
+            wakeScreen = "Wake screen on alert",
+            wakeScreenSub = "When an alert starts, the lock screen turns on for a few seconds.",
+            flashlight = "Flashlight during alert",
+            flashOff = "Off",
+            flashSteady = "Steady",
+            flashBlink = "Blinking"
         )
 
         val AR = UiStrings(
@@ -360,7 +391,17 @@ data class UiStrings(
             getStarted = "ابدأ",
             next = "التالي",
             skip = "تخطي",
-            previous = "السابق"
+            previous = "السابق",
+            permContacts = "جهات الاتصال",
+            permBattery = "استهلاك البطارية",
+            batteryUnrestricted = "بدون قيود",
+            batteryRestricted = "مقيّد",
+            wakeScreen = "إضاءة الشاشة عند التنبيه",
+            wakeScreenSub = "عند بدء التنبيه، تُضاء شاشة القفل لبضع ثوانٍ.",
+            flashlight = "المصباح أثناء التنبيه",
+            flashOff = "إيقاف",
+            flashSteady = "ثابت",
+            flashBlink = "وامض"
         )
     }
 }
