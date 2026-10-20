@@ -28,9 +28,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,7 +47,32 @@ import ir.khanoomi.geofencealert.data.EventLog
 import ir.khanoomi.geofencealert.domain.TimeFormat
 import ir.khanoomi.geofencealert.ui.theme.AmberSecondary
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
+import java.time.Instant
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+/** نام فارسی ماه‌های میلادی. */
+private val PERSIAN_MONTH_NAMES = mapOf(
+    1 to "ژانویه", 2 to "فوریه", 3 to "مارس", 4 to "آوریل",
+    5 to "مه", 6 to "ژوئن", 7 to "ژوئیه", 8 to "اوت",
+    9 to "سپتامبر", 10 to "اکتبر", 11 to "نوامبر", 12 to "دسامبر"
+)
+
+/** قالب تاریخ میلادی: «14 Oct 2026» — ارقام لاتین و نام انگلیسی ماه. */
+private val GREGORIAN_FORMATTER: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
+
+/** آمار یک ماه تقویمی. */
+private data class MonthBucket(
+    val yearMonth: YearMonth,
+    val enters: Int,
+    val exits: Int
+)
 
 class StatsViewModel(app: Application) : AndroidViewModel(app) {
     private val eventDao get() = (getApplication<Application>() as GeofenceAlertApp).db.eventDao()
@@ -54,9 +81,16 @@ class StatsViewModel(app: Application) : AndroidViewModel(app) {
 
     val stats = eventDao.statsSince(weekAgo)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** رویدادهای ۶ ماه تقویمی اخیر برای آمار ماهانه (یک بار خوانده می‌شود). */
+    val monthlyEvents = flow {
+        val since = YearMonth.now().minusMonths(5).atDay(1)
+            .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        emit(eventDao.getEventsSince(since))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 }
 
-/** آمار ورود و خروج هفتگی محدوده‌ها. */
+/** آمار ورود و خروج: بخش هفتگی + بخش ماهانه (۶ ماه اخیر). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(navController: NavController) {
@@ -64,6 +98,7 @@ fun StatsScreen(navController: NavController) {
     val app = context.applicationContext as GeofenceAlertApp
     val vm: StatsViewModel = viewModel { StatsViewModel(app) }
     val stats by vm.stats.collectAsStateWithLifecycle()
+    val monthlyEvents by vm.monthlyEvents.collectAsStateWithLifecycle()
 
     val totalEnters = stats.filter { it.type == EventLog.TYPE_ENTER }.sumOf { it.count }
     val totalExits = stats.filter { it.type == EventLog.TYPE_EXIT }.sumOf { it.count }
@@ -75,10 +110,34 @@ fun StatsScreen(navController: NavController) {
         .take(12)
     val maxCount = (perZone.maxOfOrNull { it.second } ?: 0).coerceAtLeast(1)
 
+    // بازه ۷ روز اخیر به میلادی
+    val weekRange = remember {
+        val end = LocalDate.now()
+        val start = end.minusDays(6)
+        "${start.format(GREGORIAN_FORMATTER)} تا ${end.format(GREGORIAN_FORMATTER)}"
+    }
+
+    // سبدهای ۶ ماه تقویمی اخیر؛ ماه‌های قبلی هرگز حذف نمی‌شوند
+    val months = remember(monthlyEvents) {
+        val zone = ZoneId.systemDefault()
+        (0..5).map { YearMonth.now().minusMonths(it.toLong()) }.sorted().map { ym ->
+            val events = monthlyEvents.filter {
+                YearMonth.from(Instant.ofEpochMilli(it.timestamp).atZone(zone)) == ym
+            }
+            MonthBucket(
+                yearMonth = ym,
+                enters = events.count { it.type == EventLog.TYPE_ENTER },
+                exits = events.count { it.type == EventLog.TYPE_EXIT }
+            )
+        }
+    }
+    val maxMonthTotal = (months.maxOfOrNull { it.enters + it.exits } ?: 0).coerceAtLeast(1)
+    val monthsEmpty = months.all { it.enters == 0 && it.exits == 0 }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("آمار هفته", fontWeight = FontWeight.Bold) },
+                title = { Text("آمار", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
@@ -87,7 +146,7 @@ fun StatsScreen(navController: NavController) {
             )
         }
     ) { padding ->
-        if (stats.isEmpty()) {
+        if (stats.isEmpty() && monthsEmpty) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -97,7 +156,7 @@ fun StatsScreen(navController: NavController) {
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    "در این هفته رویدادی ثبت نشده است.",
+                    "در این بازه رویدادی ثبت نشده است.",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -116,36 +175,77 @@ fun StatsScreen(navController: NavController) {
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // ─── بخش هفتگی ───
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        StatTotalCard(
-                            title = "مجموع ورودها",
-                            value = totalEnters,
-                            modifier = Modifier.weight(1f)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "آمار هفته",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
                         )
-                        StatTotalCard(
-                            title = "مجموع خروج‌ها",
-                            value = totalExits,
-                            modifier = Modifier.weight(1f)
+                        Text(
+                            weekRange,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
+                if (stats.isNotEmpty()) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            StatTotalCard(
+                                title = "مجموع ورودها",
+                                value = totalEnters,
+                                modifier = Modifier.weight(1f)
+                            )
+                            StatTotalCard(
+                                title = "مجموع خروج‌ها",
+                                value = totalExits,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                    item {
+                        Text(
+                            "ورودها به تفکیک محدوده",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    items(perZone, key = { it.first }) { (name, count) ->
+                        ZoneBarRow(
+                            name = name,
+                            count = count,
+                            fraction = count.toFloat() / maxCount,
+                            isMax = count == perZone.first().second && perZone.size > 1
+                        )
+                    }
+                } else {
+                    item {
+                        Text(
+                            "در این هفته رویدادی ثبت نشده است.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                // ─── بخش ماهانه ───
                 item {
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        "ورودها به تفکیک محدوده",
+                        "آمار ماهانه",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
                 }
-                items(perZone, key = { it.first }) { (name, count) ->
-                    ZoneBarRow(
-                        name = name,
-                        count = count,
-                        fraction = count.toFloat() / maxCount,
-                        isMax = count == perZone.first().second && perZone.size > 1
+                items(months, key = { it.yearMonth.toString() }) { bucket ->
+                    MonthCard(
+                        bucket = bucket,
+                        fraction = (bucket.enters + bucket.exits).toFloat() / maxMonthTotal
                     )
                 }
             }
@@ -218,8 +318,84 @@ private fun ZoneBarRow(
                     .fillMaxHeight()
                     .fillMaxWidth(fraction.coerceIn(0.02f, 1f))
                     .clip(RoundedCornerShape(7.dp))
-                    .background(if (isMax) AmberSecondary else scheme.primary)
+                    .background(
+                        if (isMax) Brush.horizontalGradient(
+                            listOf(AmberSecondary, scheme.secondary)
+                        )
+                        else Brush.horizontalGradient(
+                            listOf(scheme.primary, scheme.secondary)
+                        )
+                    )
             )
+        }
+    }
+}
+
+/** کارت یک ماه تقویمی: نام فارسی ماه، بازه میلادی، شمارش ورود/خروج و نوار پیشرفت. */
+@Composable
+private fun MonthCard(bucket: MonthBucket, fraction: Float) {
+    val scheme = MaterialTheme.colorScheme
+    val ym = bucket.yearMonth
+    val faLabel = "${PERSIAN_MONTH_NAMES[ym.monthValue] ?: ""} " +
+        TimeFormat.toFaDigits(ym.year.toString())
+    val gregRange = "${ym.atDay(1).format(GREGORIAN_FORMATTER)} تا " +
+        ym.atEndOfMonth().format(GREGORIAN_FORMATTER)
+    val total = bucket.enters + bucket.exits
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    faLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    "ورود: ${TimeFormat.toFaDigits(bucket.enters.toString())} • " +
+                        "خروج: ${TimeFormat.toFaDigits(bucket.exits.toString())}",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.primary
+                )
+            }
+            Text(
+                gregRange,
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant
+            )
+            if (total == 0) {
+                Text(
+                    "بدون رویداد",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(scheme.surfaceVariant)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(fraction.coerceIn(0.03f, 1f))
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(scheme.primary, scheme.secondary)
+                                )
+                            )
+                    )
+                }
+            }
         }
     }
 }

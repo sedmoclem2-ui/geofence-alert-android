@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -91,6 +92,27 @@ class PrefsRepository(private val context: Context) {
 
     suspend fun setThemePalette(key: String) {
         context.prefsDataStore.edit { prefs -> prefs[KEY_THEME] = key }
+    }
+
+    private val KEY_CUSTOM_PRIMARY = longPreferencesKey("custom_primary_argb")
+    private val KEY_CUSTOM_DARK = booleanPreferencesKey("custom_dark")
+
+    /** رنگ اصلی تم شخصی‌سازی‌شده (ARGB به‌صورت Long؛ پیش‌فرض: سبزآبی). */
+    val customPrimaryArgb: Flow<Long> = context.prefsDataStore.data
+        .map { prefs -> prefs[KEY_CUSTOM_PRIMARY] ?: 0xFF0E6B5CL }
+        .catch { emit(0xFF0E6B5CL) }
+
+    suspend fun setCustomPrimaryArgb(argb: Long) {
+        context.prefsDataStore.edit { prefs -> prefs[KEY_CUSTOM_PRIMARY] = argb }
+    }
+
+    /** تم پایه شخصی‌سازی‌شده: روشن (false) یا تیره (true) — پیش‌فرض: روشن. */
+    val customDark: Flow<Boolean> = context.prefsDataStore.data
+        .map { prefs -> prefs[KEY_CUSTOM_DARK] ?: false }
+        .catch { emit(false) }
+
+    suspend fun setCustomDark(dark: Boolean) {
+        context.prefsDataStore.edit { prefs -> prefs[KEY_CUSTOM_DARK] = dark }
     }
 
     private val KEY_WIDGET_ACTIVE = intPreferencesKey("widget_active_count")

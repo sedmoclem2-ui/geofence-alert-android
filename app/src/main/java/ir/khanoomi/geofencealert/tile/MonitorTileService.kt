@@ -17,7 +17,7 @@ import kotlinx.coroutines.withContext
  * کاشی تنظیمات سریع برای فعال/غیرفعال کردن پایش محدوده‌ها از سایه اعلان.
  *
  * کاربر باید یک بار آن را دستی اضافه کند: تنظیمات سریع ← ویرایش (مداد) ←
- * کشیدن «هشدار محدوده» به بالا.
+ * کشیدن «محدوده هشدار» به بالا.
  */
 class MonitorTileService : TileService() {
 
@@ -32,7 +32,7 @@ class MonitorTileService : TileService() {
                 withContext(Dispatchers.Main) {
                     qsTile?.let {
                         it.state = if (on) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-                        it.label = "هشدار محدوده"
+                        it.label = "محدوده هشدار"
                         it.updateTile()
                     }
                 }

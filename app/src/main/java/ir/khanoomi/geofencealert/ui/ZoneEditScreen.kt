@@ -40,7 +40,6 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -70,6 +69,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -115,6 +115,8 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
     /** فاصله بررسی دقیق به‌صورت متنی (ثانیه یا دقیقه)؛ فقط برای شعاع < ۲۰۰ متر */
     var checkIntervalText by mutableStateOf("20")
     var checkIntervalIsMinutes by mutableStateOf(false)
+    /** حالت «مداوم»: بررسی تقریباً پیوسته (checkIntervalSec = 0) */
+    var checkIntervalContinuous by mutableStateOf(false)
     // زمان‌بندی: ۱=شنبه … ۷=جمعه
     var scheduleEnabled by mutableStateOf(false)
     var scheduleDays by mutableStateOf("1,2,3,4,5,6,7")
@@ -156,8 +158,12 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
                         scheduleStartMin = z.scheduleStartMin
                         scheduleEndMin = z.scheduleEndMin
                         isActive = z.isActive
-                        // نمایش فاصله بررسی ذخیره‌شده: دقیقه اگر مضرب ۶۰ و دست‌کم ۶۰ ثانیه
-                        if (z.checkIntervalSec >= 60 && z.checkIntervalSec % 60 == 0) {
+                        // نمایش فاصله بررسی ذخیره‌شده: «مداوم» برای ۰؛ دقیقه اگر مضرب ۶۰ و دست‌کم ۶۰ ثانیه
+                        if (z.checkIntervalSec == CheckInterval.CONTINUOUS) {
+                            checkIntervalContinuous = true
+                            checkIntervalText = "20"
+                            checkIntervalIsMinutes = false
+                        } else if (z.checkIntervalSec >= 60 && z.checkIntervalSec % 60 == 0) {
                             checkIntervalText = (z.checkIntervalSec / 60).toString()
                             checkIntervalIsMinutes = true
                         } else {
@@ -358,9 +364,13 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
         val radiusMetersForCheck = radius?.let { toMeters(it, vm.unit) }
         val checkIntervalSec: Int =
             if (radiusMetersForCheck != null && radiusMetersForCheck < 200.0) {
-                val sec = CheckInterval.toSeconds(vm.checkIntervalText, vm.checkIntervalIsMinutes)
-                CheckInterval.errorFa(sec)?.let { allErrors += it }
-                sec ?: 20
+                if (vm.checkIntervalContinuous) {
+                    CheckInterval.CONTINUOUS
+                } else {
+                    val sec = CheckInterval.toSeconds(vm.checkIntervalText, vm.checkIntervalIsMinutes)
+                    CheckInterval.errorFa(sec)?.let { allErrors += it }
+                    sec ?: 20
+                }
             } else {
                 20
             }
@@ -448,7 +458,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 tonalElevation = 3.dp,
                 color = MaterialTheme.colorScheme.surface
             ) {
-                Button(
+                GradientButton(
                     onClick = { doSave() },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -666,34 +676,57 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         value = vm.checkIntervalText,
                         onValueChange = { vm.checkIntervalText = it },
                         label = { Text("هر چند وقت یک بار بررسی شود") },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .alpha(if (vm.checkIntervalContinuous) 0.4f else 1f),
+                        enabled = !vm.checkIntervalContinuous,
                         singleLine = true,
                         shape = RoundedCornerShape(16.dp),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         SegmentedButton(
-                            selected = !vm.checkIntervalIsMinutes,
-                            onClick = { vm.checkIntervalIsMinutes = false },
-                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                            selected = !vm.checkIntervalContinuous && !vm.checkIntervalIsMinutes,
+                            onClick = {
+                                vm.checkIntervalContinuous = false
+                                vm.checkIntervalIsMinutes = false
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
                             label = { Text("ثانیه") }
                         )
                         SegmentedButton(
-                            selected = vm.checkIntervalIsMinutes,
-                            onClick = { vm.checkIntervalIsMinutes = true },
-                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                            selected = !vm.checkIntervalContinuous && vm.checkIntervalIsMinutes,
+                            onClick = {
+                                vm.checkIntervalContinuous = false
+                                vm.checkIntervalIsMinutes = true
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
                             label = { Text("دقیقه") }
                         )
-                    }
-                    val intervalError = CheckInterval.errorFa(
-                        CheckInterval.toSeconds(vm.checkIntervalText, vm.checkIntervalIsMinutes)
-                    )
-                    if (intervalError != null) {
-                        Text(
-                            intervalError,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
+                        SegmentedButton(
+                            selected = vm.checkIntervalContinuous,
+                            onClick = { vm.checkIntervalContinuous = true },
+                            shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                            label = { Text("مداوم") }
                         )
+                    }
+                    if (vm.checkIntervalContinuous) {
+                        Text(
+                            "در حالت مداوم، موقعیت تقریباً هر لحظه (هر ۲ ثانیه) بررسی می‌شود؛ مصرف باتری بیشتر است.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        val intervalError = CheckInterval.errorFa(
+                            CheckInterval.toSeconds(vm.checkIntervalText, vm.checkIntervalIsMinutes)
+                        )
+                        if (intervalError != null) {
+                            Text(
+                                intervalError,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
             }
@@ -782,19 +815,19 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(
                         Zone.EXIT_STOP to ("توقف فوری" to "با خروج از محدوده، هشدار قطع می‌شود."),
                         Zone.EXIT_SEQUENCE to ("الگوی تکراری" to "پس از خروج، الگوی تکراری پخش می‌شود."),
-                        Zone.EXIT_CONTINUE to ("ادامه تا توقف دستی" to "هشدار تا زدن دکمه توقف ادامه دارد.")
+                        Zone.EXIT_CONTINUE to ("ادامه تا توقف دستی" to "هشدار تا توقف دستی ادامه دارد.")
                     ).forEach { (behavior, texts) ->
                         val selected = vm.exitBehavior == behavior
                         Card(
                             onClick = { vm.exitBehavior = behavior },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(
                                 containerColor = if (selected)
@@ -807,24 +840,28 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             else null
                         ) {
                             Row(
-                                modifier = Modifier.padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 RadioButton(
                                     selected = selected,
                                     onClick = { vm.exitBehavior = behavior }
                                 )
-                                Spacer(Modifier.width(8.dp))
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         texts.first,
                                         fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.bodyMedium
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        softWrap = true
                                     )
                                     Text(
                                         texts.second,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        softWrap = true
                                     )
                                 }
                             }

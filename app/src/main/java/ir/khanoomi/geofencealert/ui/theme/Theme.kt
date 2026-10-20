@@ -41,16 +41,37 @@ private fun darkScheme(palette: AppPalette): ColorScheme {
         AppPalette.TEAL -> NightOnSurface
         AppPalette.INDIGO -> Color(0xFFE9EBFA)
         AppPalette.ROSE -> Color(0xFFFAE9EE)
+        AppPalette.GALAXY -> Color(0xFFF0E9FB)
+        AppPalette.SUNSET -> Color(0xFFFBEFE4)
+        AppPalette.GOLD -> Color(0xFFF7F0DC)
+        AppPalette.OCEAN -> Color(0xFFE4F1FA)
+        AppPalette.FOREST -> Color(0xFFE8F3E8)
+        AppPalette.CHERRY -> Color(0xFFFAE9F0)
+        AppPalette.MIDNIGHT -> Color(0xFFE3EAF2)
     }
     val onDarkVariant = when (palette) {
         AppPalette.TEAL -> NightOnSurfaceVariant
         AppPalette.INDIGO -> Color(0xFFB9BFD9)
         AppPalette.ROSE -> Color(0xFFD9B9C2)
+        AppPalette.GALAXY -> Color(0xFFC4B3DB)
+        AppPalette.SUNSET -> Color(0xFFD9BFA9)
+        AppPalette.GOLD -> Color(0xFFD9CC9E)
+        AppPalette.OCEAN -> Color(0xFFADC4D9)
+        AppPalette.FOREST -> Color(0xFFB3CCB3)
+        AppPalette.CHERRY -> Color(0xFFD9B3C2)
+        AppPalette.MIDNIGHT -> Color(0xFFA9BACB)
     }
     val outline = when (palette) {
         AppPalette.TEAL -> NightOutline
         AppPalette.INDIGO -> Color(0xFF3A4270)
         AppPalette.ROSE -> Color(0xFF5A3540)
+        AppPalette.GALAXY -> Color(0xFF4A3470)
+        AppPalette.SUNSET -> Color(0xFF6B3A24)
+        AppPalette.GOLD -> Color(0xFF5C4A1E)
+        AppPalette.OCEAN -> Color(0xFF24435C)
+        AppPalette.FOREST -> Color(0xFF2E4A30)
+        AppPalette.CHERRY -> Color(0xFF5C2C3A)
+        AppPalette.MIDNIGHT -> Color(0xFF2E4356)
     }
     return darkColorScheme(
         primary = p.primary,
@@ -77,6 +98,31 @@ private fun darkScheme(palette: AppPalette): ColorScheme {
     )
 }
 
+/** طرح تیره برای پالت شخصی‌سازی‌شده (رنگ‌های رویی خنثی). */
+private fun darkSchemeCustom(p: PaletteColors): ColorScheme = darkColorScheme(
+    primary = p.primary,
+    onPrimary = p.onPrimary,
+    primaryContainer = p.primaryContainer,
+    onPrimaryContainer = p.onPrimaryContainer,
+    secondary = p.secondary,
+    onSecondary = AmberOnSecondary,
+    secondaryContainer = AmberContainerDark,
+    onSecondaryContainer = AmberOnContainerDark,
+    tertiary = p.tertiary,
+    background = p.background,
+    onBackground = Color(0xFFF5F5F5),
+    surface = p.surface,
+    onSurface = Color(0xFFF5F5F5),
+    surfaceVariant = p.surfaceVariant,
+    onSurfaceVariant = Color(0xFFBDBDBD),
+    error = SalmonErrorDark,
+    onError = NightOnError,
+    errorContainer = NightErrorContainer,
+    onErrorContainer = NightOnErrorContainer,
+    outline = Color(0xFF424242),
+    outlineVariant = Color(0xFF424242)
+)
+
 private val AppShapes = Shapes(
     small = RoundedCornerShape(12.dp),
     medium = RoundedCornerShape(20.dp),
@@ -90,8 +136,36 @@ fun AppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
+    AppTheme(
+        paletteKey = palette.key,
+        customColors = null,
+        darkTheme = darkTheme,
+        content = content
+    )
+}
+
+/**
+ * تم برنامه بر اساس کلید رشته‌ای + پالت شخصی‌سازی‌شده اختیاری.
+ * اگر [paletteKey] برابر [CUSTOM_THEME_KEY] باشد و [customColors] داده شده باشد،
+ * از پالت ساخته‌شده توسط کاربر استفاده می‌شود.
+ */
+@Composable
+fun AppTheme(
+    paletteKey: String,
+    customColors: PaletteColors? = null,
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit
+) {
+    val scheme = when {
+        paletteKey == CUSTOM_THEME_KEY && customColors != null ->
+            if (darkTheme) darkSchemeCustom(customColors) else lightScheme(customColors)
+        else -> {
+            val palette = AppPalette.fromKey(paletteKey)
+            if (darkTheme) darkScheme(palette) else lightScheme(palette.light)
+        }
+    }
     MaterialTheme(
-        colorScheme = if (darkTheme) darkScheme(palette) else lightScheme(palette.light),
+        colorScheme = scheme,
         typography = Typography,
         shapes = AppShapes,
         content = content

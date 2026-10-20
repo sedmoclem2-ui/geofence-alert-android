@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">هشدار محدوده</string>
+    <string name="app_name">محدوده هشدار</string>
     <string name="channel_alerts">هشدارها</string>
     <string name="channel_status">وضعیت پایش</string>
     <string name="widget_desc">نمایش تعداد محدوده‌های فعال و توقف سریع هشدار</string>

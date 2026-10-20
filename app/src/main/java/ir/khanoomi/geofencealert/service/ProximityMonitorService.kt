@@ -18,6 +18,7 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.tasks.Tasks
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.data.Zone
+import ir.khanoomi.geofencealert.domain.CheckInterval
 import ir.khanoomi.geofencealert.domain.GeoMath
 import ir.khanoomi.geofencealert.geofence.ZoneTransitionHandler
 import ir.khanoomi.geofencealert.notify.Notifications
@@ -231,7 +232,9 @@ class ProximityMonitorService : Service() {
                 continue
             }
             tickZone(zone)
-            val intervalMs = zone.checkIntervalSec.coerceIn(5, 3600) * 1000L
+            // حالت «مداوم» (۰) یعنی بررسی تقریباً پیوسته: هر ۲ ثانیه.
+            val intervalMs = if (CheckInterval.isContinuous(zone.checkIntervalSec)) 2_000L
+            else zone.checkIntervalSec.coerceIn(5, 3600) * 1000L
             armed[id] = now + intervalMs
         }
     }

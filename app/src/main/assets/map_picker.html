@@ -54,7 +54,7 @@
     if (!(radius > 0)) radius = 300;
     zoom = zoom || 15;
 
-    var map = L.map('map', { zoomControl: true }).setView([lat, lng], zoom);
+    var map = L.map('map', { zoomControl: false }).setView([lat, lng], zoom);
     window.__map = map;
 
     var tileIndex = 0;
@@ -100,6 +100,10 @@
         window.Android.onLocationSelected(p.lat, p.lng);
       }
     }
+
+    /** بزرگ‌نمایی/کوچک‌نمایی نقشه از دکمه‌های نوار پایین (کامپوز). */
+    window.zoomIn = function () { if (window.__map) window.__map.zoomIn(); };
+    window.zoomOut = function () { if (window.__map) window.__map.zoomOut(); };
 
     /** جابه‌جایی نمایش نقشه به یک نقطه (مثلاً موقعیت فعلی کاربر). */
     window.moveMap = function (mLat, mLng) {

@@ -13,10 +13,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.navigation.NavController
 import com.google.android.gms.location.LocationServices
@@ -173,9 +175,9 @@ fun MapPickerScreen(
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    Button(
+                    GradientButton(
                         onClick = {
-                            val (la, ln) = selected ?: return@Button
+                            val (la, ln) = selected ?: return@GradientButton
                             navController.previousBackStackEntry
                                 ?.savedStateHandle
                                 ?.set("picked_lat", la)
@@ -187,6 +189,25 @@ fun MapPickerScreen(
                         enabled = selected != null
                     ) {
                         Text("تأیید", fontWeight = FontWeight.Bold)
+                    }
+                    // دکمه‌های زوم از بالای نقشه به نوار پایین منتقل شدند
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalIconButton(
+                            onClick = {
+                                webViewRef?.evaluateJavascript("window.zoomIn()", null)
+                            },
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Text("+", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        }
+                        FilledTonalIconButton(
+                            onClick = {
+                                webViewRef?.evaluateJavascript("window.zoomOut()", null)
+                            },
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Text("−", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        }
                     }
                 }
             }

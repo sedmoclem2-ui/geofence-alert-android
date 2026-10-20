@@ -16,6 +16,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -224,7 +225,7 @@ fun HomeScreen(navController: NavController) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("هشدار محدوده", fontWeight = FontWeight.Bold) },
+                title = { Text("محدوده هشدار", fontWeight = FontWeight.Bold) },
                 actions = {
                     IconButton(onClick = { navController.navigate("stats") }) {
                         Icon(Icons.Filled.DateRange, contentDescription = "آمار")
@@ -239,10 +240,18 @@ fun HomeScreen(navController: NavController) {
             )
         },
         floatingActionButton = {
+            val scheme = MaterialTheme.colorScheme
             ExtendedFloatingActionButton(
                 onClick = { navController.navigate("edit") },
                 icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("محدوده جدید") }
+                text = { Text("محدوده جدید") },
+                modifier = Modifier.background(
+                    Brush.horizontalGradient(listOf(scheme.primary, scheme.secondary)),
+                    CircleShape
+                ),
+                containerColor = Color.Transparent,
+                contentColor = scheme.onPrimary,
+                shape = CircleShape
             )
         }
     ) { padding ->
@@ -372,10 +381,31 @@ private fun RadarHeroCard(
     // گرادیان همیشه تیره می‌ماند تا متن سفید در هر دو تم خوانا باشد.
     val gradient = Brush.verticalGradient(listOf(TealPrimary, TealOnContainer))
     val hasIssue = !monitoring || !locationOn || !permLocation || !permBackground || !permNotif
+    // درخشش متحرک روی لبه کارت: حس آینده‌نگرانه، با هزینه کم (فقط همین کارت بازسازی می‌شود)
+    val shimmerTransition = rememberInfiniteTransition(label = "heroShimmer")
+    val shimmerX by shimmerTransition.animateFloat(
+        initialValue = -0.4f,
+        targetValue = 1.4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmerX"
+    )
+    val shimmerBorder = Brush.linearGradient(
+        colors = listOf(
+            Color.Transparent,
+            Color.White.copy(alpha = 0.75f),
+            Color.Transparent
+        ),
+        start = Offset(shimmerX * 900f, 0f),
+        end = Offset(shimmerX * 900f + 320f, 420f)
+    )
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .height(200.dp),
+            .height(200.dp)
+            .border(2.dp, shimmerBorder, MaterialTheme.shapes.large),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = Color.Transparent)
     ) {
@@ -726,7 +756,7 @@ private fun EmptyState(onAdd: () -> Unit) {
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 32.dp)
         )
-        Button(onClick = onAdd) {
+        GradientButton(onClick = onAdd) {
             Icon(Icons.Default.Add, contentDescription = null)
             Spacer(Modifier.width(8.dp))
             Text("ساخت محدوده")

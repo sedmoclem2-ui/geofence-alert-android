@@ -12,8 +12,9 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ir.khanoomi.geofencealert.ui.AppNav
-import ir.khanoomi.geofencealert.ui.theme.AppPalette
 import ir.khanoomi.geofencealert.ui.theme.AppTheme
+import ir.khanoomi.geofencealert.ui.theme.CUSTOM_THEME_KEY
+import ir.khanoomi.geofencealert.ui.theme.buildCustomPalette
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,7 +23,16 @@ class MainActivity : ComponentActivity() {
         setContent {
             val paletteKey by app.prefs.themePalette
                 .collectAsStateWithLifecycle(initialValue = "teal")
-            AppTheme(palette = AppPalette.fromKey(paletteKey)) {
+            val customArgb by app.prefs.customPrimaryArgb
+                .collectAsStateWithLifecycle(initialValue = 0xFF0E6B5CL)
+            val customDark by app.prefs.customDark
+                .collectAsStateWithLifecycle(initialValue = false)
+            val customColors = if (paletteKey == CUSTOM_THEME_KEY) {
+                buildCustomPalette(customArgb, customDark)
+            } else {
+                null
+            }
+            AppTheme(paletteKey = paletteKey, customColors = customColors) {
                 // کل رابط کاربری فارسی و راست‌به‌چپ
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                     Surface(modifier = Modifier.fillMaxSize()) {

@@ -54,4 +54,29 @@ class CheckIntervalTest {
     fun `out of range gives range error`() {
         assertEquals("بازه مجاز: ۵ ثانیه تا ۶۰ دقیقه.", CheckInterval.errorFa(3))
     }
+
+    @Test
+    fun `continuous mode zero is valid`() {
+        assertEquals(CheckInterval.CONTINUOUS, 0)
+        assertNull(CheckInterval.errorFa(CheckInterval.CONTINUOUS))
+    }
+
+    @Test
+    fun `isContinuous detects zero only`() {
+        assertTrue(CheckInterval.isContinuous(0))
+        assertFalse(CheckInterval.isContinuous(20))
+        assertFalse(CheckInterval.isContinuous(5))
+    }
+
+    @Test
+    fun `continuous formats as modavem`() {
+        assertEquals("مداوم", CheckInterval.formatFa(0))
+        assertEquals("مداوم", CheckInterval.formatFa(CheckInterval.CONTINUOUS))
+    }
+
+    @Test
+    fun `nonzero formats with persian digits`() {
+        assertEquals("۲۰ ثانیه", CheckInterval.formatFa(20))
+        assertEquals("۳۶۰۰ ثانیه", CheckInterval.formatFa(3600))
+    }
 }
