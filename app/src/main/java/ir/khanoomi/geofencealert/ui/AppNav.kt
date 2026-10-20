@@ -16,7 +16,7 @@ import androidx.navigation.navArgument
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import kotlinx.coroutines.launch
 
-/** ناوبری اصلی برنامه؛ مقصد شروع به دیده‌شدن آموزش بستگی دارد. */
+/** ناوبری اصلی برنامه؛ مقصد شروع به دیده‌شدن آموزش و انتخاب زبان بستگی دارد. */
 @Composable
 fun AppNav() {
     val context = LocalContext.current
@@ -26,24 +26,45 @@ fun AppNav() {
 
     val onboardingDone by app.prefs.onboardingDone
         .collectAsStateWithLifecycle(initialValue = null)
+    val languageChosen by app.prefs.languageChosen
+        .collectAsStateWithLifecycle(initialValue = null)
+    val zones by app.zoneRepo.observeZones()
+        .collectAsStateWithLifecycle(initialValue = null)
 
     // تا خوانده‌شدن تنظیمات، صفحه خالی تا پرش ناخواسته دیده نشود
-    if (onboardingDone == null) {
+    if (onboardingDone == null || languageChosen == null || zones == null) {
         Box(Modifier.fillMaxSize())
         return
     }
+
+    // کاربر قدیمی (آموزش را دیده یا محدوده دارد) هرگز به صحنه انتخاب زبان
+    // برنمی‌گردد؛ انتخاب زبان فقط برای نصب تازه و پیش از آموزش است.
+    val isExistingUser = onboardingDone == true || zones!!.isNotEmpty()
+    val needsLanguageScene = languageChosen != true && !isExistingUser
 
     NavHost(
         navController = navController,
         startDestination = if (onboardingDone == true) "home" else "onboarding"
     ) {
         composable("onboarding") {
-            OnboardingScreen(onFinish = {
-                scope.launch { app.prefs.setOnboardingDone(true) }
-                navController.navigate("home") {
-                    popUpTo("onboarding") { inclusive = true }
+            OnboardingScreen(
+                startWithLanguage = needsLanguageScene,
+                onLanguageChosen = { key ->
+                    scope.launch {
+                        app.prefs.setAppLanguage(key)
+                        app.prefs.setLanguageChosen(true)
+                    }
+                },
+                onFinish = {
+                    scope.launch {
+                        app.prefs.setOnboardingDone(true)
+                        app.prefs.setLanguageChosen(true)
+                    }
+                    navController.navigate("home") {
+                        popUpTo("onboarding") { inclusive = true }
+                    }
                 }
-            })
+            )
         }
         composable("home") {
             HomeScreen(navController = navController)

@@ -19,9 +19,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -50,24 +48,59 @@ object AlertController {
     fun vibrationAllowed(mode: Int): Boolean =
         mode == Zone.ALERT_BOTH || mode == Zone.ALERT_VIBRATE
 
-    /** بلندی صدای تنظیم‌شده در تنظیمات (۰ تا ۱)؛ پیش‌فرض ۰٫۸. */
-    fun volume01(context: Context): Float = try {
-        runBlocking(Dispatchers.IO) {
-            (context.applicationContext as GeofenceAlertApp).prefs.alertVolume.first()
-        } / 100f
-    } catch (e: Exception) {
-        Log.w(TAG, "Cannot read alert volume, using 0.8", e)
-        0.8f
+    /**
+     * آخرین بلندی صدا / شدت لرزش خوانده‌شده از تنظیمات (۰ تا ۱).
+     *
+     * [volume01] و [vibration01] هم‌زمان (غیرتعلیقی) صدا زده می‌شوند، پس
+     * قبلاً با runBlocking مقدار را از DataStore می‌خواندند؛ runBlocking
+     * روی نخ فراخواننده خطر گیر کردن کل برنامه را دارد. حالا دو گردآورنده
+     * دائمی روی نخ IO این کش‌ها را تازه نگه می‌دارند و خواندن‌ها فوری و
+     * بدون مسدودسازی‌اند. پیش‌فرض‌ها با پیش‌فرض تنظیمات یکی‌اند (۰٫۸ و ۰٫۷)
+     * تا پیش از نخستین خواندن هم مقدار معقولی برگردد.
+     */
+    @Volatile
+    private var cachedVolume01 = 0.8f
+
+    @Volatile
+    private var cachedVibration01 = 0.7f
+
+    @Volatile
+    private var settingsObserverStarted = false
+
+    /** راه‌اندازی یک‌باره گردآورنده‌های تنظیمات صدا/لرزش (نخ IO). */
+    private fun ensureSettingsObserver(context: Context) {
+        if (settingsObserverStarted) return
+        synchronized(this) {
+            if (settingsObserverStarted) return
+            settingsObserverStarted = true
+        }
+        val app = context.applicationContext as GeofenceAlertApp
+        scope.launch {
+            try {
+                app.prefs.alertVolume.collect { cachedVolume01 = it / 100f }
+            } catch (e: Exception) {
+                Log.w(TAG, "Volume observer stopped", e)
+            }
+        }
+        scope.launch {
+            try {
+                app.prefs.vibrationIntensity.collect { cachedVibration01 = it / 100f }
+            } catch (e: Exception) {
+                Log.w(TAG, "Vibration observer stopped", e)
+            }
+        }
     }
 
-    /** شدت لرزش تنظیم‌شده در تنظیمات (۰ تا ۱)؛ پیش‌فرض ۰٫۷. */
-    fun vibration01(context: Context): Float = try {
-        runBlocking(Dispatchers.IO) {
-            (context.applicationContext as GeofenceAlertApp).prefs.vibrationIntensity.first()
-        } / 100f
-    } catch (e: Exception) {
-        Log.w(TAG, "Cannot read vibration intensity, using 0.7", e)
-        0.7f
+    /** بلندی صدای تنظیم‌شده در تنظیمات (۰ تا ۱)؛ از کش، بدون مسدودسازی. */
+    fun volume01(context: Context): Float {
+        ensureSettingsObserver(context)
+        return cachedVolume01
+    }
+
+    /** شدت لرزش تنظیم‌شده در تنظیمات (۰ تا ۱)؛ از کش، بدون مسدودسازی. */
+    fun vibration01(context: Context): Float {
+        ensureSettingsObserver(context)
+        return cachedVibration01
     }
 
     /**
@@ -138,7 +171,12 @@ object AlertController {
                 val intent = Intent(context, AlertService::class.java)
                     .setAction(AlertService.ACTION_STOP)
                     .putExtra(AlertService.EXTRA_ZONE_ID, zoneId)
-                ContextCompat.startForegroundService(context, intent)
+                // شروع عادی کافی است: سرویس از قبل در حالت پیش‌زمینه است و
+                // فقط فرمان توقف می‌گیرد. استفاده از startForegroundService
+                // برای این فرمان اشتباه است، چون مسیر توقف در سرویس هرگز
+                // startForeground صدا نمی‌زند و سیستم می‌تواند برنامه را با
+                // ForegroundServiceDidNotStartInTimeException بکشد.
+                context.startService(intent)
             } catch (e: Exception) {
                 Log.w(TAG, "Could not deliver STOP to service", e)
             }

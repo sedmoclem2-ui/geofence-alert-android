@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import ir.khanoomi.geofencealert.data.BackupManager
+import ir.khanoomi.geofencealert.receiver.GpsStateReceiver
 import ir.khanoomi.geofencealert.ui.AppNav
 import ir.khanoomi.geofencealert.ui.LocalStrings
 import ir.khanoomi.geofencealert.ui.appLangOf
@@ -26,6 +27,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+
+    /**
+     * شنونده تغییر وضعیت مکان‌یابی — پشتیبانِ شنونده سرویس پایش دقیق؛ تا
+     * وقتی برنامه در پیش‌زمینه است، خاموش شدن GPS بی‌درنگ دیده شود، حتی
+     * اگر سرویس پایش در حال اجرا نباشد.
+     */
+    private val gpsStateReceiver = GpsStateReceiver()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val app = application as GeofenceAlertApp
@@ -85,5 +94,17 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             BackupManager.writeAutoBackup(this@MainActivity)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        GpsStateReceiver.register(this, gpsStateReceiver)
+        // بررسی فوری وضعیت فعلی مکان‌یابی هنگام بازگشت به برنامه
+        lifecycleScope.launch { GpsStateReceiver.evaluate(this@MainActivity) }
+    }
+
+    override fun onPause() {
+        GpsStateReceiver.unregister(this, gpsStateReceiver)
+        super.onPause()
     }
 }

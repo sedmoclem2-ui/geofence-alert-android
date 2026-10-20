@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.location.LocationManager
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -146,33 +147,47 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleActive(zone: Zone) {
         viewModelScope.launch(Dispatchers.IO) {
-            // B1: اگر هنگام خاموش کردن محدوده، هشدارش فعال است، اول صدا را قطع کن.
-            if (zone.isAlerting) {
-                AlertController.stopAlert(getApplication(), zone.id, manual = true)
-            }
-            repo.upsert(
-                zone.copy(
-                    isActive = !zone.isActive,
-                    updatedAt = System.currentTimeMillis()
+            // مسیر تغییر وضعیت هرگز نباید برنامه را بکشد: هر خطای پلتفرمی
+            // (دیتابیس، ژئوفنس، سرویس) اینجا گرفته و فقط ثبت می‌شود.
+            try {
+                // B1: اگر هنگام خاموش کردن محدوده، هشدارش فعال است، اول صدا را قطع کن.
+                if (zone.isAlerting) {
+                    AlertController.stopAlert(getApplication(), zone.id, manual = true)
+                }
+                repo.upsert(
+                    zone.copy(
+                        isActive = !zone.isActive,
+                        updatedAt = System.currentTimeMillis()
+                    )
                 )
-            )
-            GeofenceHelper.refreshRegistrations(getApplication())
+                GeofenceHelper.refreshRegistrations(getApplication())
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "toggleActive failed for zone ${zone.id}", e)
+            }
         }
     }
 
     fun deleteZone(zone: Zone) {
         viewModelScope.launch(Dispatchers.IO) {
-            if (zone.isAlerting) AlertController.stopAlert(getApplication(), zone.id, manual = true)
-            repo.delete(zone)
-            GeofenceHelper.refreshRegistrations(getApplication())
+            try {
+                if (zone.isAlerting) AlertController.stopAlert(getApplication(), zone.id, manual = true)
+                repo.delete(zone)
+                GeofenceHelper.refreshRegistrations(getApplication())
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "deleteZone failed for zone ${zone.id}", e)
+            }
         }
     }
 
     fun setMonitoring(enabled: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
-            prefs.setMonitoringEnabled(enabled)
-            GeofenceHelper.refreshRegistrations(getApplication())
-            ZoneWidgetProvider.updateAll(getApplication())
+            try {
+                prefs.setMonitoringEnabled(enabled)
+                GeofenceHelper.refreshRegistrations(getApplication())
+                ZoneWidgetProvider.updateAll(getApplication())
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "setMonitoring($enabled) failed", e)
+            }
         }
     }
 

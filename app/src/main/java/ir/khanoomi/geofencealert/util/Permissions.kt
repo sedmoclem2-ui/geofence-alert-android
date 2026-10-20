@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -46,6 +47,26 @@ object Permissions {
         ContextCompat.checkSelfPermission(
             context, Manifest.permission.SEND_SMS
         ) == PackageManager.PERMISSION_GRANTED
+
+    /**
+     * آیا مکان‌یابی گوشی (GPS یا شبکه) روشن است.
+     * در اندروید ۹ به بالا از [LocationManager.isLocationEnabled] و در
+     * نسخه‌های قدیمی‌تر از وضعیت ارائه‌دهنده‌ها استفاده می‌شود.
+     */
+    fun isLocationEnabled(context: Context): Boolean {
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+            ?: return false
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                lm.isLocationEnabled
+            } else {
+                lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                    lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
 
     /** باز کردن صفحه تنظیمات همین برنامه برای اعطای دستی مجوزها. */
     fun openAppSettings(context: Context) {

@@ -7,12 +7,14 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import android.view.View
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import ir.khanoomi.geofencealert.MainActivity
 import ir.khanoomi.geofencealert.R
 import ir.khanoomi.geofencealert.domain.TimeFormat
+import ir.khanoomi.geofencealert.receiver.GpsActionReceiver
 import ir.khanoomi.geofencealert.receiver.StopAlertReceiver
 import ir.khanoomi.geofencealert.service.AlertService
 import ir.khanoomi.geofencealert.util.Permissions
@@ -27,8 +29,12 @@ object Notifications {
     const val ALERT_CHANNEL_ID = "alert_channel"
     const val STATUS_CHANNEL_ID = "status_channel"
     const val PROXIMITY_CHANNEL_ID = "proximity_channel"
+    const val GPS_CHANNEL_ID = "gps_channel"
 
     private const val STATUS_NOTIFICATION_ID = 9002
+
+    /** شناسه ثابت اعلان «جی‌پی‌اس خاموش است». */
+    const val GPS_NOTIFICATION_ID = 9004
 
     /** شناسه یکتای اعلان هر محدوده. */
     fun alertNotificationId(zoneId: Long): Int = (1000 + (zoneId % 100000)).toInt()
@@ -67,9 +73,17 @@ object Notifications {
         ).apply {
             description = "پایش دقیق محدوده‌های کوچک هنگام نزدیک شدن"
         }
+        val gps = NotificationChannel(
+            GPS_CHANNEL_ID,
+            "هشدار مکان",
+            NotificationManager.IMPORTANCE_HIGH
+        ).apply {
+            description = "هشدار خاموش بودن مکان‌یابی گوشی هنگام فعال بودن پایش"
+        }
         nm.createNotificationChannel(alert)
         nm.createNotificationChannel(status)
         nm.createNotificationChannel(proximity)
+        nm.createNotificationChannel(gps)
     }
 
     /** اعلان هشدار یک محدوده (برای سرویس پیش‌زمینه و مسیر جایگزین). */
@@ -189,6 +203,71 @@ object Notifications {
 
     fun cancelStatus(context: Context) {
         manager(context).cancel(STATUS_NOTIFICATION_ID)
+    }
+
+    /**
+     * اعلان «جی‌پی‌اس خاموش است» — وقتی پایش فعال است اما مکان‌یابی گوشی
+     * خاموش شده و هشدارها عملاً کار نمی‌کنند.
+     *
+     * دو کنش دارد:
+     * - «فعال کردن جی پی اس»: صفحه تنظیمات مکان سیستم را باز می‌کند (برنامه‌ها
+     *   نمی‌توانند مستقیم GPS را روشن کنند؛ کاربر آنجا با یک لمس فعالش می‌کند).
+     * - «غیر فعال کردن پایش»: پایش را از طریق [GpsActionReceiver] خاموش می‌کند.
+     */
+    fun gpsOffNotification(context: Context): Notification {
+        val contentIntent = PendingIntent.getActivity(
+            context,
+            GPS_NOTIFICATION_ID,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val enableGpsIntent = PendingIntent.getActivity(
+            context,
+            GPS_NOTIFICATION_ID + 1,
+            Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val disableIntent = PendingIntent.getBroadcast(
+            context,
+            GPS_NOTIFICATION_ID + 2,
+            Intent(context, GpsActionReceiver::class.java)
+                .setAction(GpsActionReceiver.ACTION_DISABLE_MONITORING),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val text = "پایش فعال است اما مکان‌یابی گوشی خاموش است؛ هشدارها کار نمی‌کنند."
+        return NotificationCompat.Builder(context, GPS_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle("جی‌پی‌اس خاموش است")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(contentIntent)
+            .addAction(
+                android.R.drawable.ic_menu_mylocation,
+                "فعال کردن جی پی اس",
+                enableGpsIntent
+            )
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "غیر فعال کردن پایش",
+                disableIntent
+            )
+            .build()
+    }
+
+    /** نمایش اعلان «جی‌پی‌اس خاموش است» (اگر مجوز اعلان داده شده باشد). */
+    fun notifyGpsOff(context: Context) {
+        if (!Permissions.hasNotifications(context)) return
+        manager(context).notify(GPS_NOTIFICATION_ID, gpsOffNotification(context))
+    }
+
+    /** حذف اعلان «جی‌پی‌اس خاموش است» (روشن شدن مکان یا خاموش شدن پایش). */
+    fun cancelGpsOff(context: Context) {
+        manager(context).cancel(GPS_NOTIFICATION_ID)
     }
 
     /**

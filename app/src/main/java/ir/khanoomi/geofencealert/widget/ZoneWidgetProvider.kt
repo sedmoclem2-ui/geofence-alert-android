@@ -78,7 +78,7 @@ class ZoneWidgetProvider : AppWidgetProvider() {
             )
             views.setTextColor(
                 R.id.tv_monitor,
-                if (monitoringOn) 0xFF2E7D32.toInt() else 0xFF9E9E9E.toInt()
+                if (monitoringOn) 0xFF0B2A52.toInt() else 0xFF9E9E9E.toInt()
             )
             // وضعیت هشدار: فقط هنگام پخش صدا نمایش داده می‌شود
             if (alerting) {

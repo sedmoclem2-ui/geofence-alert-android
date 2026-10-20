@@ -22,6 +22,7 @@ import ir.khanoomi.geofencealert.domain.CheckInterval
 import ir.khanoomi.geofencealert.domain.GeoMath
 import ir.khanoomi.geofencealert.geofence.ZoneTransitionHandler
 import ir.khanoomi.geofencealert.notify.Notifications
+import ir.khanoomi.geofencealert.receiver.GpsStateReceiver
 import ir.khanoomi.geofencealert.util.Permissions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,13 +58,41 @@ class ProximityMonitorService : Service() {
     private var loopJob: Job? = null
     private var tickerJob: Job? = null
 
+    /** شنونده تغییر وضعیت مکان‌یابی گوشی برای اعلان «جی‌پی‌اس خاموش است». */
+    private val gpsStateReceiver = GpsStateReceiver()
+
     override fun onCreate() {
         super.onCreate()
         Notifications.createChannels(this)
+        // تا وقتی این سرویس زنده است، خاموش/روشن شدن مکان‌یابی گوشی را
+        // زیر نظر بگیر تا اعلان «جی‌پی‌اس خاموش است» به‌روز بماند.
+        GpsStateReceiver.register(this, gpsStateReceiver)
         Log.i(TAG, "ProximityMonitorService created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // قرارداد سرویس پیش‌زمینه: این سرویس همیشه با startForegroundService
+        // شروع می‌شود، پس startForeground باید همین‌جا و هم‌زمان صدا زده
+        // شود — پیش از هر کار ناهمگام. قبلاً این فراخوانی داخل
+        // ensureLoopRunning و پس از خواندن تنظیمات/دیتابیس و گرفتن موقعیت
+        // فعلی (Tasks.await تا ۱۵ ثانیه در coarseArmPass) انجام می‌شد و
+        // وقتی مهلت ~۵ ثانیه‌ای سیستم می‌گذشت، اندروید با
+        // ForegroundServiceDidNotStartInTimeException کل برنامه را می‌کشت؛
+        // همچنین وقتی needsPolling نادرست بود، سرویس بدون startForeground
+        // خودش را متوقف می‌کرد که باز هم همان کرش را می‌ساخت. نشانه‌اش
+        // برای کاربر «هنگ و بسته شدن برنامه هنگام تغییر وضعیت پایش» بود.
+        try {
+            ServiceCompat.startForeground(
+                this,
+                FOREGROUND_NOTIFICATION_ID,
+                Notifications.proximityNotification(this),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed in onStartCommand", e)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         if (intent?.action == ACTION_SYNC) {
             scope.launch {
                 try {
@@ -134,21 +163,14 @@ class ProximityMonitorService : Service() {
         }
     }
 
-    /** شروع حلقه پایش (اگر در حال اجرا نیست) به‌همراه اعلان پیش‌زمینه. */
+    /**
+     * شروع حلقه پایش (اگر در حال اجرا نیست).
+     * اعلان پیش‌زمینه از قبل در [onStartCommand] به‌صورت هم‌زمان ثبت شده
+     * است (الزام قرارداد startForegroundService)؛ اینجا فقط حلقه و
+     * ثانیه‌شمار راه می‌افتند.
+     */
     private fun ensureLoopRunning() {
         if (loopJob?.isActive == true) return
-        try {
-            ServiceCompat.startForeground(
-                this,
-                FOREGROUND_NOTIFICATION_ID,
-                Notifications.proximityNotification(this),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "startForeground failed", e)
-            stopSelf()
-            return
-        }
         loopJob = scope.launch {
             while (isActive) {
                 try {
@@ -281,6 +303,7 @@ class ProximityMonitorService : Service() {
     }
 
     override fun onDestroy() {
+        GpsStateReceiver.unregister(this, gpsStateReceiver)
         loopJob?.cancel()
         tickerJob?.cancel()
         scope.cancel()

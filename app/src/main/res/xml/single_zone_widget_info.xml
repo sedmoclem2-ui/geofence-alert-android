@@ -4,6 +4,7 @@
     android:minHeight="110dp"
     android:updatePeriodMillis="0"
     android:initialLayout="@layout/widget_single_zone"
+    android:previewImage="@drawable/img_app_logo"
     android:description="@string/widget_single_desc"
     android:widgetCategory="home_screen"
     android:configure="ir.khanoomi.geofencealert.widget.ZoneWidgetConfigureActivity" />

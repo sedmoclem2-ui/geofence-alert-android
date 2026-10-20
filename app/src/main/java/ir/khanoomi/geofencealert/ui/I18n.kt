@@ -84,7 +84,19 @@ data class UiStrings(
     val noZonesYet: String,
     val noZonesYetSub: String,
     val historyEmpty: String,
-    val statsEmpty: String
+    val statsEmpty: String,
+    // صحنه انتخاب زبان و صحنه‌های معرفی نخستین اجرا
+    val langSceneTitle: String,
+    val ob1Title: String,
+    val ob1Desc: String,
+    val ob2Title: String,
+    val ob2Desc: String,
+    val ob3Title: String,
+    val ob3Desc: String,
+    val getStarted: String,
+    val next: String,
+    val skip: String,
+    val previous: String
 ) {
     companion object {
         val FA = UiStrings(
@@ -161,7 +173,18 @@ data class UiStrings(
             noZonesYet = "هنوز محدوده‌ای نساختی",
             noZonesYetSub = "اولین محدوده‌ات را بساز تا ورود به آن را به تو خبر بدهم",
             historyEmpty = "هنوز رویدادی ثبت نشده است.",
-            statsEmpty = "در این بازه رویدادی ثبت نشده است."
+            statsEmpty = "در این بازه رویدادی ثبت نشده است.",
+            langSceneTitle = "زبان برنامه را انتخاب کنید",
+            ob1Title = "محدوده‌ات را تعریف کن",
+            ob1Desc = "نقطه‌ای را که برایت مهم است روی نقشه انتخاب کن؛ خانه، محل کار، مدرسه یا هر جای دیگر. شعاعش را هم خودت تعیین می‌کنی.",
+            ob2Title = "مجوزها را بده",
+            ob2Desc = "برای این‌که ورودت را حتی وقتی برنامه باز نیست تشخیص بدهم، به دسترسی مکان «همیشه» و اعلان نیاز دارم؛ همه‌چیز فقط روی گوشی خودت می‌ماند.",
+            ob3Title = "وارد که شدی، خبرت می‌کنم",
+            ob3Desc = "با ورود به محدوده، هشدار صوتی و لرزش پخش می‌شود و نام محدوده هم خوانده می‌شود؛ توقفش هم دست خودت است.",
+            getStarted = "شروع",
+            next = "بعدی",
+            skip = "رد کردن",
+            previous = "قبلی"
         )
 
         val EN = UiStrings(
@@ -238,7 +261,18 @@ data class UiStrings(
             noZonesYet = "No zones yet",
             noZonesYetSub = "Create your first zone and we will alert you when you enter it",
             historyEmpty = "No events recorded yet.",
-            statsEmpty = "No events in this period."
+            statsEmpty = "No events in this period.",
+            langSceneTitle = "Choose your language",
+            ob1Title = "Define your zone",
+            ob1Desc = "Pick any place that matters to you on the map — home, work, school or anywhere else — and set its radius yourself.",
+            ob2Title = "Grant the permissions",
+            ob2Desc = "To detect your arrival even when the app is closed, I need «Always» location access and notifications. Everything stays only on your phone.",
+            ob3Title = "Get alerted on arrival",
+            ob3Desc = "When you enter a zone, a sound and vibration alert plays and the zone name is announced — and stopping it is up to you.",
+            getStarted = "Get started",
+            next = "Next",
+            skip = "Skip",
+            previous = "Back"
         )
 
         val AR = UiStrings(
@@ -315,7 +349,18 @@ data class UiStrings(
             noZonesYet = "لا توجد مناطق بعد",
             noZonesYetSub = "أنشئ منطقتك الأولى وسننبّهك عند دخولها",
             historyEmpty = "لم تُسجَّل أي أحداث بعد.",
-            statsEmpty = "لا توجد أحداث في هذه الفترة."
+            statsEmpty = "لا توجد أحداث في هذه الفترة.",
+            langSceneTitle = "اختر لغة التطبيق",
+            ob1Title = "عرّف منطقتك",
+            ob1Desc = "اختر على الخريطة أي مكان يهمّك؛ البيت أو العمل أو المدرسة أو أي مكان آخر، وحدّد نصف قطر المنطقة بنفسك.",
+            ob2Title = "امنح الأذونات",
+            ob2Desc = "لأكتشف وصولك حتى عندما يكون التطبيق مغلقاً، أحتاج إلى إذن الموقع «دائماً» والتنبيهات؛ كل شيء يبقى على هاتفك فقط.",
+            ob3Title = "تنبيه عند الوصول",
+            ob3Desc = "عند دخولك المنطقة يعمل تنبيه صوتي مع اهتزاز ويُقرأ اسم المنطقة؛ وإيقافه بيدك.",
+            getStarted = "ابدأ",
+            next = "التالي",
+            skip = "تخطي",
+            previous = "السابق"
         )
     }
 }

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="ir.khanoomi.geofencealert"
-    android:versionCode="15"
-    android:versionName="2.0.0" >
+    android:versionCode="16"
+    android:versionName="2.1.0" >
 
     <uses-sdk
         android:minSdkVersion="26"
@@ -86,6 +86,11 @@
         <!-- یادآور ماندن طولانی داخل محدوده (فقط از AlarmManager داخلی) -->
         <receiver
             android:name="ir.khanoomi.geofencealert.receiver.StayReminderReceiver"
+            android:exported="false" />
+
+        <!-- کنش «غیر فعال کردن پایش» از اعلان «جی‌پی‌اس خاموش است» -->
+        <receiver
+            android:name="ir.khanoomi.geofencealert.receiver.GpsActionReceiver"
             android:exported="false" />
 
         <!-- ثبت مجدد محدوده‌ها پس از راه‌اندازی مجدد گوشی -->

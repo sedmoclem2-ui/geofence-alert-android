@@ -1,9 +1,11 @@
 package ir.khanoomi.geofencealert.ui
 
 import android.Manifest
+import android.app.Activity
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.app.ActivityCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -82,6 +84,8 @@ fun SettingsScreen(navController: NavController) {
     var stLocation by remember { mutableStateOf(false) }
     var stBackground by remember { mutableStateOf(false) }
     var stNotif by remember { mutableStateOf(false) }
+    var stSms by remember { mutableStateOf(false) }
+    var showSmsBlockedDialog by remember { mutableStateOf(false) }
 
     val quietEnabled by app.prefs.quietEnabled.collectAsStateWithLifecycle(initialValue = false)
     val quietStart by app.prefs.quietStartMin.collectAsStateWithLifecycle(initialValue = 1380)
@@ -93,6 +97,7 @@ fun SettingsScreen(navController: NavController) {
     val alertVolumeVal by app.prefs.alertVolume.collectAsStateWithLifecycle(initialValue = 80)
     val vibrationIntensityVal by app.prefs.vibrationIntensity
         .collectAsStateWithLifecycle(initialValue = 70)
+    val smsAskedVal by app.prefs.smsAsked.collectAsStateWithLifecycle(initialValue = false)
     var showCustomTheme by remember { mutableStateOf(false) }
 
     // خروجی پشتیبان دستی (SAF): نوشتن JSON همه محدوده‌ها
@@ -130,6 +135,7 @@ fun SettingsScreen(navController: NavController) {
         stLocation = Permissions.hasAnyLocation(context)
         stBackground = Permissions.hasBackgroundLocation(context)
         stNotif = Permissions.hasNotifications(context)
+        stSms = Permissions.hasSendSms(context)
     }
 
     val fineLauncher = rememberLauncherForActivityResult(
@@ -141,6 +147,26 @@ fun SettingsScreen(navController: NavController) {
     val notifLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { refresh() }
+    val smsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        refresh()
+        if (!granted) {
+            // اگر قبلاً هم درخواست شده و سیستم دیگر توضیحی نشان نمی‌دهد
+            // (rationale = false)، یعنی درخواست مجوز مسدود شده است؛
+            // راهنمای «تنظیمات محدود» را به کاربر نشان بده.
+            val activity = context as? Activity
+            val rationale = activity?.let {
+                ActivityCompat.shouldShowRequestPermissionRationale(
+                    it, Manifest.permission.SEND_SMS
+                )
+            } ?: true
+            if (smsAskedVal && !rationale) {
+                showSmsBlockedDialog = true
+            }
+            scope.launch { app.prefs.setSmsAsked(true) }
+        }
+    }
 
     OnResume { refresh() }
     LaunchedEffect(Unit) { refresh() }
@@ -213,6 +239,23 @@ fun SettingsScreen(navController: NavController) {
                         }
                     )
                 }
+            }
+            item {
+                PermissionRow(
+                    title = "پیامک",
+                    desc = "برای ارسال پیامک اطلاع‌رسانی هنگام ورود به محدوده، " +
+                        "فقط به شماره‌هایی که خودتان در هر محدوده ثبت می‌کنید.",
+                    granted = stSms,
+                    onRequest = {
+                        if (Permissions.hasSendSms(context)) {
+                            scope.launch {
+                                snackbarHostState.showSnackbar("مجوز پیامک فعال است")
+                            }
+                        } else {
+                            smsLauncher.launch(Manifest.permission.SEND_SMS)
+                        }
+                    }
+                )
             }
             item {
                 QuietHoursCard(
@@ -308,6 +351,40 @@ fun SettingsScreen(navController: NavController) {
                     app.prefs.setThemePalette(CUSTOM_THEME_KEY)
                 }
                 showCustomTheme = false
+            }
+        )
+    }
+
+    if (showSmsBlockedDialog) {
+        AlertDialog(
+            onDismissRequest = { showSmsBlockedDialog = false },
+            title = {
+                Text("مجوز پیامک مسدود شده است", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text(
+                    "به نظر می‌رسد اندروید درخواست مجوز پیامک را مسدود کرده است؛ " +
+                        "این اتفاق برای برنامه‌هایی که خارج از فروشگاه نصب می‌شوند طبیعی است " +
+                        "و جای نگرانی نیست. برای فعال کردن مجوز این کارها را انجام دهید:\n" +
+                        "۱. روی «باز کردن تنظیمات برنامه» در پایین همین پیام بزنید.\n" +
+                        "۲. در صفحه‌ای که باز می‌شود، روی سه‌نقطهٔ بالای صفحه بزنید.\n" +
+                        "۳. گزینهٔ «اجازه به تنظیمات محدود» (Allow restricted settings) را انتخاب و تأیید کنید.\n" +
+                        "۴. سپس به بخش «مجوزها» (Permissions) بروید، «پیامک» (SMS) را انتخاب کنید و «اجازه دادن» (Allow) را بزنید.\n" +
+                        "۵. به برنامه برگردید؛ وضعیت مجوز به‌صورت خودکار به‌روز می‌شود."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSmsBlockedDialog = false
+                        Permissions.openAppSettings(context)
+                    }
+                ) { Text("باز کردن تنظیمات برنامه", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSmsBlockedDialog = false }) {
+                    Text("بعداً")
+                }
             }
         )
     }

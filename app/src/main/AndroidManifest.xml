@@ -74,6 +74,11 @@
             android:name=".receiver.StayReminderReceiver"
             android:exported="false" />
 
+        <!-- کنش «غیر فعال کردن پایش» از اعلان «جی‌پی‌اس خاموش است» -->
+        <receiver
+            android:name=".receiver.GpsActionReceiver"
+            android:exported="false" />
+
         <!-- ثبت مجدد محدوده‌ها پس از راه‌اندازی مجدد گوشی -->
         <receiver
             android:name=".receiver.BootReceiver"

@@ -162,4 +162,30 @@ class PrefsRepository(private val context: Context) {
         }
         context.prefsDataStore.edit { prefs -> prefs[KEY_APP_LANGUAGE] = normalized }
     }
+
+    private val KEY_LANGUAGE_CHOSEN = booleanPreferencesKey("language_chosen")
+
+    /**
+     * آیا کاربر در صحنه نخست اجرای برنامه، زبان را انتخاب کرده است
+     * (پیش‌فرض: نه). کاربران قدیمی (که آموزش را دیده‌اند یا محدوده دارند)
+     * در [ir.khanoomi.geofencealert.ui.AppNav] «انتخاب‌کرده» فرض می‌شوند.
+     */
+    val languageChosen: Flow<Boolean> = context.prefsDataStore.data
+        .map { prefs -> prefs[KEY_LANGUAGE_CHOSEN] ?: false }
+        .catch { emit(false) }
+
+    suspend fun setLanguageChosen(chosen: Boolean) {
+        context.prefsDataStore.edit { prefs -> prefs[KEY_LANGUAGE_CHOSEN] = chosen }
+    }
+
+    private val KEY_SMS_ASKED = booleanPreferencesKey("sms_perm_asked")
+
+    /** آیا مجوز پیامک دست‌کم یک بار از کاربر درخواست شده است (پیش‌فرض: نه). */
+    val smsAsked: Flow<Boolean> = context.prefsDataStore.data
+        .map { prefs -> prefs[KEY_SMS_ASKED] ?: false }
+        .catch { emit(false) }
+
+    suspend fun setSmsAsked(asked: Boolean) {
+        context.prefsDataStore.edit { prefs -> prefs[KEY_SMS_ASKED] = asked }
+    }
 }

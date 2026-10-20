@@ -15,6 +15,7 @@ import com.google.android.gms.location.GeofencingRequest
 import com.google.android.gms.location.LocationServices
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.data.Zone
+import ir.khanoomi.geofencealert.receiver.GpsStateReceiver
 import ir.khanoomi.geofencealert.receiver.SelfHealReceiver
 import ir.khanoomi.geofencealert.service.ProximityMonitorService
 import kotlinx.coroutines.flow.first
@@ -151,6 +152,16 @@ object GeofenceHelper {
                 TAG,
                 "Skipping registration (monitoring=$monitoringEnabled, permission=$hasLocationPermission)"
             )
+        }
+
+        // هشدار «جی‌پی‌اس خاموش است»: اگر پایش روشن و مکان‌یابی گوشی خاموش
+        // است اعلان هشدار نمایش داده شود و در غیر این صورت حذف شود. این
+        // بررسی روی هر تازه‌سازی ثبت‌ها (از جمله لحظه روشن شدن پایش) اجرا
+        // می‌شود تا کاربر بی‌درنگ خبردار شود.
+        try {
+            GpsStateReceiver.evaluate(context, monitoringEnabled)
+        } catch (e: Exception) {
+            Log.w(TAG, "GPS-off evaluation failed", e)
         }
 
         // همگام‌سازی سرویس پایش دقیق محدوده‌های کوچک (از هر نخی امن است)
