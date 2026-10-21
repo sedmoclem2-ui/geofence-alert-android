@@ -69,7 +69,14 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
     }
 }
 
-@Database(entities = [Zone::class, EventLog::class], version = 7, exportSchema = false)
+/** مهاجرت ۷ به ۸: رنگ اختصاصی هر محدوده (۰ = پیش‌فرض تم). */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `colorIndex` INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+@Database(entities = [Zone::class, EventLog::class], version = 8, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun zoneDao(): ZoneDao
     abstract fun eventDao(): EventDao

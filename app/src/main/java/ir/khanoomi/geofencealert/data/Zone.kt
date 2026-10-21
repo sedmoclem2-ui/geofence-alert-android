@@ -83,7 +83,9 @@ data class Zone(
     val stayReminded: Boolean = false,
     /** ترتیب دستی کاربر در فهرست محدوده‌ها (حالت مرتب‌سازی «دستی»). */
     val sortOrder: Int = 0,
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    /** رنگ اختصاصی محدوده: ۰ = پیش‌فرض تم، ۱ تا ۸ = رنگ‌های آماده ZoneColors. */
+    val colorIndex: Int = 0
 ) {
     companion object {
         const val STOP_AUTO = "AUTO"

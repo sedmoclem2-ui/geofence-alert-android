@@ -20,6 +20,7 @@ import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -43,12 +44,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -98,7 +100,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -121,11 +122,13 @@ import ir.khanoomi.geofencealert.domain.ZoneSort
 import ir.khanoomi.geofencealert.domain.formatRadiusFa
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.ui.theme.RedDeep
+import ir.khanoomi.geofencealert.ui.theme.ZoneColors
 import ir.khanoomi.geofencealert.ui.theme.mixColor
 import ir.khanoomi.geofencealert.util.Permissions
 import ir.khanoomi.geofencealert.util.promptEnableGpsIfNeeded
 import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.collect
@@ -429,6 +432,18 @@ fun HomeScreen(navController: NavController) {
 
     val activeCount = zones.count { it.isActive }
 
+    // آخرین رویداد ورود در کل محدوده‌ها برای خط زیر شمارنده‌های کارت
+    // قهرمان؛ اگر هنوز هیچ ورودی ثبت نشده باشد خطی نشان داده نمی‌شود.
+    val heroStrings = LocalStrings.current
+    val heroLang = LocalAppLang.current
+    val lastEventText = zones
+        .filter { it.lastTriggeredAt > 0 }
+        .maxByOrNull { it.lastTriggeredAt }
+        ?.let { z ->
+            "${heroStrings.lastEntry}: ${z.name} • " +
+                formatRelativeTimeLocalized(heroStrings, heroLang, z.lastTriggeredAt)
+        }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -521,6 +536,7 @@ fun HomeScreen(navController: NavController) {
                     monitoring = monitoring,
                     activeCount = activeCount,
                     alertingCount = alerting.size,
+                    lastEventText = lastEventText,
                     locationOn = locationOn,
                     permLocation = permLocation,
                     permBackground = permBackground,
@@ -604,7 +620,7 @@ fun HomeScreen(navController: NavController) {
                         }
                     }
                 }
-                items(shownZones, key = { it.id }) { zone ->
+                itemsIndexed(shownZones, key = { _, zone -> zone.id }) { index, zone ->
                     val isDragging = isManualSort &&
                         reorderController.draggingKey == zone.id
                     val cardModifier = if (isManualSort) {
@@ -644,15 +660,17 @@ fun HomeScreen(navController: NavController) {
                     } else {
                         Modifier.animateItem()
                     }
-                    ZoneCard(
-                        zone = zone,
-                        modifier = cardModifier,
-                        manualSort = isManualSort,
-                        onToggleActive = { vm.toggleActive(zone) },
-                        onEdit = { navController.navigate("edit?zoneId=${zone.id}") },
-                        onDelete = { zoneToDelete = zone },
-                        onStopAlert = { vm.stopAlert(zone.id) }
-                    )
+                    ZoneCardEntrance(index = index) {
+                        ZoneCard(
+                            zone = zone,
+                            modifier = cardModifier,
+                            manualSort = isManualSort,
+                            onToggleActive = { vm.toggleActive(zone) },
+                            onEdit = { navController.navigate("edit?zoneId=${zone.id}") },
+                            onDelete = { zoneToDelete = zone },
+                            onStopAlert = { vm.stopAlert(zone.id) }
+                        )
+                    }
                 }
             }
         }
@@ -1010,7 +1028,8 @@ private fun RadarHeroCard(
     permContacts: Boolean,
     batteryOk: Boolean,
     onMonitoringChange: (Boolean) -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    lastEventText: String? = null
 ) {
     // گرادیان از تم فعال ساخته می‌شود (دیگر همیشه سبز نیست):
     // بالای کارت تیره‌تر از رنگ اصلی و پایین آن آمیخته با رنگ مکمل (لهجه).
@@ -1043,6 +1062,18 @@ private fun RadarHeroCard(
         ),
         start = Offset(shimmerX * 900f, 0f),
         end = Offset(shimmerX * 900f + 320f, 420f)
+    )
+    // شمارنده‌های کارت قهرمان با انیمیشن عددی نرم عوض می‌شوند تا
+    // تغییر تعداد محدوده‌های فعال/هشدار جهشی دیده نشود.
+    val animatedActiveCount by animateIntAsState(
+        targetValue = activeCount,
+        animationSpec = tween(durationMillis = 400),
+        label = "heroActiveCount"
+    )
+    val animatedAlertingCount by animateIntAsState(
+        targetValue = alertingCount,
+        animationSpec = tween(durationMillis = 400),
+        label = "heroAlertingCount"
     )
     // لمس کل کارت = روشن/خاموش کردن پایش (جایگزین کلید قبلی)؛ با فشردن
     // فنری ملایم و بازخورد لمسی، مثل دکمه‌های کارت محدوده.
@@ -1090,11 +1121,20 @@ private fun RadarHeroCard(
                         color = scheme.onPrimary
                     )
                     Text(
-                        "$activeCount ${LocalStrings.current.activeZonesSuffix} • " +
-                            "$alertingCount ${LocalStrings.current.activeAlertsSuffix}",
+                        "$animatedActiveCount ${LocalStrings.current.activeZonesSuffix} • " +
+                            "$animatedAlertingCount ${LocalStrings.current.activeAlertsSuffix}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = scheme.onPrimary.copy(alpha = 0.85f)
                     )
+                    // آخرین رویداد ورود (نام محدوده + زمان نسبی)؛ وقتی
+                    // هنوز ورودی ثبت نشده باشد این خط اصلاً نیست.
+                    if (lastEventText != null) {
+                        Text(
+                            lastEventText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onPrimary.copy(alpha = 0.75f)
+                        )
+                    }
                     // چیپ وضعیت «همه» درخواست‌ها: مکان، پس‌زمینه، باتری،
                     // اعلان، پیامک، مخاطبین و GPS — نقطه سبز یعنی سالم،
                     // قرمز یعنی نیازمند اقدام.
@@ -1226,10 +1266,12 @@ private fun AlertBanner(zoneName: String, onStop: () -> Unit) {
 
 /**
  * مینی‌رادار کارت محدوده؛ شعاع دایره‌ها با لگاریتم شعاع محدوده مقیاس می‌شود.
- * محدوده فعال: سونار زنده (دو موج در حال گسترش + نقطه مرکزی تنفسی) با فازی
- * که از شناسه محدوده می‌آید تا کارت‌ها هم‌زمان نپالسند. هشدار فعال: همان
- * موج با چرخه سریع‌تر و رنگ خطای تم. غیرفعال: همان رندر ثابت و کم‌رنگ
- * قبلی، بدون هیچ ترنزیشن در حال اجرا.
+ * محدوده فعال: سونار زنده (دو موج در حال گسترش + نقطه مرکزی تنفسیِ پُر)
+ * با فازی که از شناسه محدوده می‌آید تا کارت‌ها هم‌زمان نپالسند؛ رنگ
+ * موج‌ها [tint] (رنگ اختصاصی محدوده) است اگر داده شده باشد، وگرنه رنگ
+ * اصلی تم. هشدار فعال: همان موج با چرخه سریع‌تر و رنگ خطای تم.
+ * غیرفعال: کاملاً خاکستری و ثابت با آلفای کمتر و هسته توخالی (حلقه
+ * دور + نقطه مرکزی محو) تا از دور با فعال اشتباه نشود.
  */
 @Composable
 private fun RadarMini(
@@ -1237,7 +1279,8 @@ private fun RadarMini(
     active: Boolean,
     modifier: Modifier = Modifier,
     alerting: Boolean = false,
-    phaseSeed: Int = 0
+    phaseSeed: Int = 0,
+    tint: Color? = null
 ) {
     val scheme = MaterialTheme.colorScheme
     // فاز قطعی و پخش‌شده برای هر کارت از روی شناسه‌اش (بدون تصادفی‌بودن).
@@ -1252,15 +1295,18 @@ private fun RadarMini(
         )
         active -> RadarMiniLive(
             radiusMeters = radiusMeters,
-            color = scheme.primary,
+            color = tint ?: scheme.primary,
             cycleMillis = 2000,
             phase = phase,
             modifier = modifier
         )
         else -> {
             val ringBase = scheme.outline
-            val dot = scheme.outline
-            Canvas(modifier = modifier.size(72.dp)) {
+            Canvas(
+                modifier = modifier
+                    .size(72.dp)
+                    .graphicsLayer { alpha = 0.6f }
+            ) {
                 val t = (log10(radiusMeters.toFloat()).coerceIn(1f, 6f) - 1f) / 5f
                 val maxR = size.minDimension / 2f
                 listOf(1f, 0.72f, 0.46f).forEachIndexed { i, frac ->
@@ -1270,7 +1316,17 @@ private fun RadarMini(
                         style = Stroke(width = 1.5.dp.toPx())
                     )
                 }
-                drawCircle(color = dot, radius = 6.dp.toPx())
+                // هسته توخالی: حلقه دور با یک نقطه مرکزی بسیار محو —
+                // نشانه خاموش بودن (مقایسه کن با هسته پُرِ حالت فعال).
+                drawCircle(
+                    color = ringBase.copy(alpha = 0.85f),
+                    radius = 6.dp.toPx(),
+                    style = Stroke(width = 1.5.dp.toPx())
+                )
+                drawCircle(
+                    color = ringBase.copy(alpha = 0.35f),
+                    radius = 1.8.dp.toPx()
+                )
             }
         }
     }
@@ -1369,6 +1425,33 @@ private fun StatusPill(zone: Zone) {
     }
 }
 
+/**
+ * ورود پلکانی کارت‌های محدوده هنگام نخستین نمایش فهرست: هر کارت با
+ * تأخیر پله‌ای (اندیس × ۶۰ms) از شفافیت صفر و ۲۴dp پایین‌تر به جایش
+ * می‌نشیند. حالت انیمیشن داخل خود آیتم لیزی (با کلید شناسه محدوده)
+ * نگه داشته می‌شود، پس با جابه‌جایی/درگ دوباره پخش نمی‌شود؛ این
+ * لفاف بیرون از مادیفایر درگ کارت می‌نشیند تا با آفست دستی نجنگد.
+ */
+@Composable
+private fun ZoneCardEntrance(index: Int, content: @Composable () -> Unit) {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        delay(index * 60L)
+        progress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing)
+        )
+    }
+    Box(
+        modifier = Modifier.graphicsLayer {
+            alpha = progress.value
+            translationY = (1f - progress.value) * 24.dp.toPx()
+        }
+    ) {
+        content()
+    }
+}
+
 @Composable
 private fun ZoneCard(
     zone: Zone,
@@ -1419,16 +1502,41 @@ private fun ZoneCard(
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box {
+                // لمس خود موج‌های کارت هم محدوده را فعال/غیرفعال
+                // می‌کند (در حالت مرتب‌سازی دستی هم کار می‌کند، چون
+                // لمس کوتاه پیش از شکل گرفتن لمس طولانیِ درگ مصرف
+                // می‌شود)؛ هنگام هشدار لمس موج غیرفعال است. رنگ
+                // اختصاصی محدوده اگر انتخاب شده باشد روی موج‌ها و
+                // موج یک‌باره می‌نشیند.
+                val zoneTint = ZoneColors.colorOrNull(zone.colorIndex)
+                val radarInteraction = remember { MutableInteractionSource() }
+                val radarScale = rememberPressScale(radarInteraction, pressedScale = 0.92f)
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .graphicsLayer {
+                            scaleX = radarScale
+                            scaleY = radarScale
+                        }
+                        .clickable(
+                            interactionSource = radarInteraction,
+                            indication = null,
+                            enabled = !zone.isAlerting
+                        ) {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onToggleActive()
+                        }
+                ) {
                     RadarMini(
                         radiusMeters = zone.radiusMeters,
                         active = zone.isActive,
                         alerting = zone.isAlerting,
-                        phaseSeed = zone.id.toInt()
+                        phaseSeed = zone.id.toInt(),
+                        tint = zoneTint
                     )
                     OneShotRipple(
                         active = zone.isActive,
-                        color = scheme.primary,
+                        color = zoneTint ?: scheme.primary,
                         modifier = Modifier.size(72.dp)
                     )
                 }
@@ -1463,16 +1571,15 @@ private fun ZoneCard(
                     }
                 }
             }
-            // کنترل خلاقانه ویرایش/حذف در پایین کارت: دایره بزرگ
-            // ویرایش در آغوش حلقه باریک قرمزِ هدف‌گیری و تراشه حذف
-            // نشسته روی پایین حلقه.
+            // داک کپسولی ویرایش/حذف در پایین کارت: جمع‌وجور و سبک تا
+            // کارت باریک بماند؛ حذف مثل قبل از دیالوگ تأیید می‌گذرد.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.End
             ) {
-                ZoneEditDeleteControl(onEdit = onEdit, onDelete = onDelete)
+                ZoneActionDock(onEdit = onEdit, onDelete = onDelete)
             }
             if (zone.isAlerting) {
                 Button(
@@ -1511,70 +1618,70 @@ private fun rememberPressScale(
 }
 
 /**
- * کنترل خلاقانه ویرایش/حذف کارت محدوده: دایره بزرگ ویرایش (۵۲dp) در
- * مرکز یک حلقه باریک قرمز (~۳dp) — حس حلقه هدف‌گیری GPS دور دکمه —
- * و تراشه حذف نشسته روی پایین حلقه؛ پس‌زمینه تراشه هم‌رنگ سطح کارت
- * است تا حلقه زیرش بریده و تراشه در حلقه فرو رفته دیده شود. ناحیه
- * لمس حذف یک مربع شفاف ۴۴dp است و تراشه ۳۰dp در مرکزش می‌نشیند؛
- * مرکزش تقریباً روی قوس پایینی حلقه می‌افتد. حذف مثل قبل از دیالوگ
- * تأیید می‌گذرد.
+ * داک کپسولی ویرایش/حذف کارت محدوده: یک کپسول کوتاه (~۴۲dp) با
+ * پس‌زمینه surfaceVariant و حاشیه ظریف؛ داخلش دکمه ویرایش (رنگ اصلی
+ * تم)، یک جداکننده عمودی باریک و دکمه حذف (رنگ خطا) — هر دو با ناحیه
+ * لمس ~۴۰dp، فشردن فنری و بازخورد لمسی. جمع‌وجور است تا کارت باریک
+ * بماند. حذف مثل قبل از دیالوگ تأیید می‌گذرد.
  */
 @Composable
-private fun ZoneEditDeleteControl(onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun ZoneActionDock(onEdit: () -> Unit, onDelete: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val strings = LocalStrings.current
     val haptics = LocalHapticFeedback.current
     val editInteraction = remember { MutableInteractionSource() }
-    val editScale = rememberPressScale(editInteraction, pressedScale = 0.9f)
-    Box(modifier = Modifier.size(width = 80.dp, height = 88.dp)) {
-        // حلقه هدف‌گیری و دایره ویرایش، هم‌مرکز در بالای کنترل.
+    val editScale = rememberPressScale(editInteraction, pressedScale = 0.88f)
+    val deleteInteraction = remember { MutableInteractionSource() }
+    val deleteScale = rememberPressScale(deleteInteraction, pressedScale = 0.88f)
+    Row(
+        modifier = Modifier
+            .height(42.dp)
+            .clip(CircleShape)
+            .background(scheme.surfaceVariant)
+            .border(1.dp, scheme.outlineVariant, CircleShape)
+            .padding(horizontal = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         Box(
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .size(68.dp),
+                .size(40.dp)
+                .graphicsLayer {
+                    scaleX = editScale
+                    scaleY = editScale
+                }
+                .clip(CircleShape)
+                .clickable(
+                    interactionSource = editInteraction,
+                    indication = null
+                ) {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onEdit()
+                },
             contentAlignment = Alignment.Center
         ) {
-            Canvas(modifier = Modifier.size(68.dp)) {
-                drawCircle(
-                    color = scheme.error.copy(alpha = 0.55f),
-                    radius = size.minDimension / 2f - 1.5.dp.toPx(),
-                    style = Stroke(width = 3.dp.toPx())
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .graphicsLayer {
-                        scaleX = editScale
-                        scaleY = editScale
-                    }
-                    .clip(CircleShape)
-                    .background(scheme.primaryContainer)
-                    .clickable(
-                        interactionSource = editInteraction,
-                        indication = null
-                    ) {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onEdit()
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = strings.editCd,
-                    tint = scheme.onPrimaryContainer,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
+            Icon(
+                Icons.Default.Edit,
+                contentDescription = strings.editCd,
+                tint = scheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
         }
-        // حذف: ناحیه لمس شفاف ۴۴dp در پایین کنترل و تراشه سطح‌رنگ
-        // ۳۰dp در مرکزش، نشسته روی قوس پایینی حلقه.
         Box(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .size(44.dp)
+                .width(1.dp)
+                .height(20.dp)
+                .background(scheme.outlineVariant)
+        )
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .graphicsLayer {
+                    scaleX = deleteScale
+                    scaleY = deleteScale
+                }
+                .clip(CircleShape)
                 .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
+                    interactionSource = deleteInteraction,
                     indication = null
                 ) {
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -1582,25 +1689,17 @@ private fun ZoneEditDeleteControl(onEdit: () -> Unit, onDelete: () -> Unit) {
                 },
             contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .clip(CircleShape)
-                    .background(scheme.surface),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = strings.delete,
-                    tint = scheme.error,
-                    modifier = Modifier.size(17.dp)
-                )
-            }
+            Icon(
+                Icons.Default.Delete,
+                contentDescription = strings.delete,
+                tint = scheme.error,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
 
-/** حالت خالی با تصویرسازی رادار. */
+/** حالت خالی با رادار زنده بزرگ بالای عنوان و دکمه ساخت. */
 @Composable
 private fun EmptyState(onAdd: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
@@ -1611,32 +1710,14 @@ private fun EmptyState(onAdd: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Canvas(modifier = Modifier.size(120.dp)) {
-            val maxR = size.minDimension / 2f
-            listOf(1f, 0.68f, 0.42f).forEach { f ->
-                drawCircle(color = scheme.primaryContainer, radius = maxR * f)
-                drawCircle(
-                    color = scheme.primary.copy(alpha = 0.55f),
-                    radius = maxR * f,
-                    style = Stroke(width = 2.dp.toPx())
-                )
-            }
-            // سنجاق مکان
-            val c = center
-            val pinPath = Path().apply {
-                moveTo(c.x - 11.dp.toPx(), c.y - 4.dp.toPx())
-                lineTo(c.x + 11.dp.toPx(), c.y - 4.dp.toPx())
-                lineTo(c.x, c.y + 16.dp.toPx())
-                close()
-            }
-            drawCircle(color = scheme.primary, radius = 13.dp.toPx(), center = c + Offset(0f, -12.dp.toPx()))
-            drawPath(path = pinPath, color = scheme.primary)
-            drawCircle(
-                color = scheme.onPrimary,
-                radius = 5.dp.toPx(),
-                center = c + Offset(0f, -12.dp.toPx())
-            )
-        }
+        // همان رادار زنده کارت قهرمان، این بار بزرگ و آرام بالای
+        // حالت خالی تا صفحه خالی هم جان داشته باشد.
+        RadarPulse(
+            modifier = Modifier.size(144.dp),
+            pulseColor = scheme.primary,
+            dotColor = scheme.primary,
+            active = true
+        )
         Text(
             LocalStrings.current.noZonesYet,
             style = MaterialTheme.typography.titleLarge,

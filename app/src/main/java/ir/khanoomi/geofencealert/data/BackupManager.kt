@@ -69,6 +69,7 @@ object BackupManager {
         o.put("stayReminded", zone.stayReminded)
         o.put("sortOrder", zone.sortOrder)
         o.put("updatedAt", zone.updatedAt)
+        o.put("colorIndex", zone.colorIndex)
         return o
     }
 
@@ -109,7 +110,8 @@ object BackupManager {
             insideSince = o.optLong("insideSince", 0),
             stayReminded = o.optBoolean("stayReminded", false),
             sortOrder = o.optInt("sortOrder", 0),
-            updatedAt = o.optLong("updatedAt", System.currentTimeMillis())
+            updatedAt = o.optLong("updatedAt", System.currentTimeMillis()),
+            colorIndex = o.optInt("colorIndex", 0)
         )
     }
 

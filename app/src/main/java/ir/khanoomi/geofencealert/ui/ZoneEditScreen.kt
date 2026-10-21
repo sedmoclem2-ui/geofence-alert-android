@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -97,6 +98,7 @@ import ir.khanoomi.geofencealert.domain.ExitSequenceValidator
 import ir.khanoomi.geofencealert.domain.ZoneValidator
 import ir.khanoomi.geofencealert.domain.toMeters
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
+import ir.khanoomi.geofencealert.ui.theme.ZoneColors
 import ir.khanoomi.geofencealert.util.LocationUtil
 import ir.khanoomi.geofencealert.util.Permissions
 import kotlinx.coroutines.Dispatchers
@@ -151,6 +153,8 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
 
     var existing: Zone? by mutableStateOf(null)
         private set
+    /** رنگ اختصاصی محدوده: ۰ = پیش‌فرض تم، ۱ تا ۸ = رنگ‌های آماده. */
+    var colorIndex by mutableStateOf(0)
     var wasActive = false
         private set
     var loaded by mutableStateOf(false)
@@ -197,6 +201,7 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
                         silentEnabled = z.silentEnabled
                         silentStartMin = z.silentStartMin
                         silentEndMin = z.silentEndMin
+                        colorIndex = z.colorIndex
                         // نمایش فاصله بررسی ذخیره‌شده: «مداوم» برای ۰؛ دقیقه اگر مضرب ۶۰ و دست‌کم ۶۰ ثانیه
                         if (z.checkIntervalSec == CheckInterval.CONTINUOUS) {
                             checkIntervalContinuous = true
@@ -283,6 +288,52 @@ private fun SectionCard(
                 )
             }
             content()
+        }
+    }
+}
+
+/**
+ * نمونه‌رنگ دایره‌ای برای انتخاب رنگ محدوده: پرشده با یک رنگ ثابت یا
+ * گرادیان (نمونه «پیش‌فرض تم»). نمونه انتخاب‌شده حلقه پررنگ دور و تیک
+ * سفید وسط می‌گیرد.
+ */
+@Composable
+private fun ColorSwatch(
+    selected: Boolean,
+    brush: Brush?,
+    color: Color?,
+    contentDescription: String?,
+    onClick: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .then(
+                when {
+                    brush != null -> Modifier.background(brush)
+                    color != null -> Modifier.background(color)
+                    else -> Modifier
+                }
+            )
+            .border(
+                BorderStroke(
+                    if (selected) 3.dp else 1.dp,
+                    if (selected) scheme.onSurface else scheme.outlineVariant
+                ),
+                CircleShape
+            )
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        if (selected) {
+            Icon(
+                Icons.Filled.Check,
+                contentDescription = contentDescription,
+                tint = Color.White,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }
@@ -643,6 +694,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             insideSince = vm.existing?.insideSince ?: 0,
                             stayReminded = vm.existing?.stayReminded ?: false,
                             sortOrder = vm.existing?.sortOrder ?: 0,
+                            colorIndex = vm.colorIndex,
                             postExitCount = ZoneValidator.parseDoubleFa(vm.postExitCountText)
                                 ?.toInt()?.coerceIn(1, 20) ?: 3,
                             postExitDurationSec = ZoneValidator.parseDoubleFa(vm.postExitDurationText)
@@ -754,6 +806,44 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp)
                 )
+                // رنگ اختصاصی محدوده: نمونه اول «پیش‌فرض تم» است و هشت
+                // نمونه بعدی رنگ‌های آماده‌اند؛ رنگ روی موج‌های کارت
+                // محدوده در صفحه اصلی می‌نشیند.
+                Text(
+                    strings.editColor,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ColorSwatch(
+                        selected = vm.colorIndex == 0,
+                        brush = Brush.horizontalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.secondary
+                            )
+                        ),
+                        color = null,
+                        contentDescription = strings.colorDefault,
+                        onClick = { vm.colorIndex = 0 }
+                    )
+                    ZoneColors.presets.forEachIndexed { i, preset ->
+                        ColorSwatch(
+                            selected = vm.colorIndex == i + 1,
+                            brush = null,
+                            color = preset,
+                            contentDescription = null,
+                            onClick = { vm.colorIndex = i + 1 }
+                        )
+                    }
+                }
+                if (vm.colorIndex == 0) {
+                    Text(
+                        strings.colorDefault,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             SectionCard(icon = Icons.Filled.LocationOn, title = strings.coordinates) {

@@ -837,6 +837,8 @@ data class UiStrings(
     val langSampleFa: String get() = ext.langSampleFa
     val langSampleEn: String get() = ext.langSampleEn
     val langSampleAr: String get() = ext.langSampleAr
+    val editColor: String get() = ext.editColor
+    val colorDefault: String get() = ext.colorDefault
 }
 
 /**
@@ -1049,7 +1051,10 @@ data class UiStringsExt(
     val langSceneSubtitle: String,
     val langSampleFa: String,
     val langSampleEn: String,
-    val langSampleAr: String
+    val langSampleAr: String,
+    // رنگ اختصاصی محدوده (نسخه ۳.۳.۰)
+    val editColor: String,
+    val colorDefault: String
 ) {
     companion object {
         val FA = UiStringsExt(
@@ -1256,7 +1261,9 @@ data class UiStringsExt(
             langSceneSubtitle = "Choose your language · اختر لغتك",
             langSampleFa = "سلام! خوش آمدید",
             langSampleEn = "Hello! Welcome",
-            langSampleAr = "مرحباً! أهلاً بك"
+            langSampleAr = "مرحباً! أهلاً بك",
+            editColor = "رنگ محدوده",
+            colorDefault = "پیش‌فرض"
         )
 
         val EN = UiStringsExt(
@@ -1463,7 +1470,9 @@ data class UiStringsExt(
             langSceneSubtitle = "Choose your language · اختر لغتك",
             langSampleFa = "سلام! خوش آمدید",
             langSampleEn = "Hello! Welcome",
-            langSampleAr = "مرحباً! أهلاً بك"
+            langSampleAr = "مرحباً! أهلاً بك",
+            editColor = "Zone color",
+            colorDefault = "Default"
         )
 
         val AR = UiStringsExt(
@@ -1670,7 +1679,9 @@ data class UiStringsExt(
             langSceneSubtitle = "Choose your language · اختر لغتك",
             langSampleFa = "سلام! خوش آمدید",
             langSampleEn = "Hello! Welcome",
-            langSampleAr = "مرحباً! أهلاً بك"
+            langSampleAr = "مرحباً! أهلاً بك",
+            editColor = "لون المنطقة",
+            colorDefault = "الافتراضي"
         )
     }
 }
