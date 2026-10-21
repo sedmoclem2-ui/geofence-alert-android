@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -19,6 +20,7 @@ import ir.khanoomi.geofencealert.ui.AppNav
 import ir.khanoomi.geofencealert.ui.LocalStrings
 import ir.khanoomi.geofencealert.ui.appLangOf
 import ir.khanoomi.geofencealert.ui.stringsFor
+import ir.khanoomi.geofencealert.ui.writeLangMirror
 import ir.khanoomi.geofencealert.ui.theme.AppTheme
 import ir.khanoomi.geofencealert.ui.theme.CUSTOM_THEME_KEY
 import ir.khanoomi.geofencealert.ui.theme.buildCustomPalette
@@ -64,6 +66,12 @@ class MainActivity : ComponentActivity() {
             val languageKey by app.prefs.appLanguage
                 .collectAsStateWithLifecycle(initialValue = "fa")
             val lang = appLangOf(languageKey)
+            // آینه هم‌گام زبان برای لایه‌های غیرکامپوزی (اعلان/ویجت/کاشی/
+            // سرویس‌ها)؛ با هر تغییر زبان تازه می‌شود تا کاربرانی که زبان
+            // را پیش از وجود آینه انتخاب کرده‌اند هم پوشش داده شوند.
+            LaunchedEffect(languageKey) {
+                writeLangMirror(this@MainActivity, languageKey)
+            }
             val customColors = if (paletteKey == CUSTOM_THEME_KEY) {
                 buildCustomPalette(customArgb, customDark)
             } else {

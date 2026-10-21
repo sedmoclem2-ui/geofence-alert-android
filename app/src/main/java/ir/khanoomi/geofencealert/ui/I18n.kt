@@ -130,7 +130,46 @@ data class UiStrings(
     val sortSmallest: String,
     val exitImmediate: String,
     val exitPattern: String,
-    val exitUntilManual: String
+    val exitUntilManual: String,
+    // کانال‌ها و اعلان‌ها، ویجت‌ها، کاشی و سرویس‌ها (لایه‌های غیرکامپوزی، نسخه ۲.۷.۰)
+    val chanAlerts: String,
+    val chanAlertsDesc: String,
+    val chanStatus: String,
+    val chanStatusDesc: String,
+    val chanProximity: String,
+    val chanProximityDesc: String,
+    val chanGps: String,
+    val chanGpsDesc: String,
+    val chanQuiet: String,
+    val chanQuietDesc: String,
+    val notifAlertTitle: String,
+    val notifAlertBody: String,
+    val notifApproachTitle: String,
+    val notifStayTitle: String,
+    val notifStayBody: String,
+    val notifStatusTitle: String,
+    val notifGpsOffTitle: String,
+    val notifGpsOffBody: String,
+    val notifEnableGps: String,
+    val notifDisableMonitoring: String,
+    val proxIdleZone: String,
+    val proxPreciseTitle: String,
+    val proxApproachingSmall: String,
+    val widgetActiveZones: String,
+    val widgetMonitoringOn: String,
+    val widgetMonitoringOff: String,
+    val widgetStopMonitoring: String,
+    val widgetStartMonitoring: String,
+    val widgetAlertPlaying: String,
+    val widgetToggle: String,
+    val widgetZoneDeleted: String,
+    val widgetZoneDeletedSub: String,
+    val widgetZoneNotSelected: String,
+    val widgetZoneNotSelectedSub: String,
+    val widgetPickTitle: String,
+    val widgetNoZones: String,
+    val widgetNoZonesSub: String,
+    val zoneFallbackName: String
 ) {
     companion object {
         val FA = UiStrings(
@@ -250,7 +289,45 @@ data class UiStrings(
             sortSmallest = "کوچک‌ترین",
             exitImmediate = "توقف فوری",
             exitPattern = "الگوی تکراری",
-            exitUntilManual = "تا توقف دستی"
+            exitUntilManual = "تا توقف دستی",
+            chanAlerts = "هشدارها",
+            chanAlertsDesc = "اعلان هشدار ورود به محدوده",
+            chanStatus = "وضعیت پایش",
+            chanStatusDesc = "وضعیت کلی پایش محدوده‌ها",
+            chanProximity = "پایش دقیق محدوده",
+            chanProximityDesc = "پایش دقیق محدوده‌های کوچک هنگام نزدیک شدن",
+            chanGps = "هشدار مکان",
+            chanGpsDesc = "هشدار خاموش بودن مکان‌یابی گوشی هنگام فعال بودن پایش",
+            chanQuiet = "پایش پس‌زمینه",
+            chanQuietDesc = "اعلان بی‌صدای سرویس پایش در حالت بیکار؛ بدون آیکن نوار وضعیت",
+            notifAlertTitle = "هشدار ورود به محدوده",
+            notifAlertBody = "%1\$s — برای توقف هشدار، دکمه زیر را بزنید",
+            notifApproachTitle = "نزدیک شدن به محدوده",
+            notifStayTitle = "یادآور ماندن",
+            notifStayBody = "بیش از %1\$s دقیقه است که در محدودهٔ %2\$s هستید.",
+            notifStatusTitle = "پایش محدوده‌ها",
+            notifGpsOffTitle = "جی‌پی‌اس خاموش است",
+            notifGpsOffBody = "پایش فعال است اما مکان‌یابی گوشی خاموش است؛ هشدارها کار نمی‌کنند.",
+            notifEnableGps = "فعال کردن جی پی اس",
+            notifDisableMonitoring = "غیر فعال کردن پایش",
+            proxIdleZone = "در حال پایش محدوده‌ها",
+            proxPreciseTitle = "پایش دقیق فعال است",
+            proxApproachingSmall = "نزدیک شدن به محدوده‌های کوچک",
+            widgetActiveZones = "%1\$s محدوده فعال",
+            widgetMonitoringOn = "پایش: فعال",
+            widgetMonitoringOff = "پایش: غیرفعال",
+            widgetStopMonitoring = "توقف پایش",
+            widgetStartMonitoring = "شروع پایش",
+            widgetAlertPlaying = "هشدار در حال پخش است",
+            widgetToggle = "فعال/غیرفعال",
+            widgetZoneDeleted = "محدوده حذف شده",
+            widgetZoneDeletedSub = "این محدوده دیگر وجود ندارد",
+            widgetZoneNotSelected = "محدوده انتخاب نشده",
+            widgetZoneNotSelectedSub = "برای انتخاب محدوده بزنید",
+            widgetPickTitle = "انتخاب محدوده برای ویجت",
+            widgetNoZones = "هنوز محدوده‌ای نساخته‌اید.",
+            widgetNoZonesSub = "اول در برنامه یک محدوده بسازید، بعد ویجت را اضافه کنید.",
+            zoneFallbackName = "محدوده"
         )
 
         val EN = UiStrings(
@@ -370,7 +447,45 @@ data class UiStrings(
             sortSmallest = "Smallest first",
             exitImmediate = "Stop immediately",
             exitPattern = "Repeating pattern",
-            exitUntilManual = "Until stopped manually"
+            exitUntilManual = "Until stopped manually",
+            chanAlerts = "Alerts",
+            chanAlertsDesc = "Zone entry alert notifications",
+            chanStatus = "Monitoring status",
+            chanStatusDesc = "Overall zone monitoring status",
+            chanProximity = "Precise zone monitoring",
+            chanProximityDesc = "Precise monitoring of small zones when approaching",
+            chanGps = "Location alert",
+            chanGpsDesc = "Alert when device location is off while monitoring is active",
+            chanQuiet = "Background monitoring",
+            chanQuietDesc = "Silent monitoring service notification while idle; no status bar icon",
+            notifAlertTitle = "Zone entry alert",
+            notifAlertBody = "%1\$s — tap the button below to stop the alert",
+            notifApproachTitle = "Approaching a zone",
+            notifStayTitle = "Stay reminder",
+            notifStayBody = "You have been in %2\$s for over %1\$s minutes.",
+            notifStatusTitle = "Zone monitoring",
+            notifGpsOffTitle = "GPS is off",
+            notifGpsOffBody = "Monitoring is on but device location is off; alerts won't work.",
+            notifEnableGps = "Turn on GPS",
+            notifDisableMonitoring = "Turn off monitoring",
+            proxIdleZone = "Monitoring zones",
+            proxPreciseTitle = "Precise monitoring is on",
+            proxApproachingSmall = "Approaching small zones",
+            widgetActiveZones = "%1\$s active zones",
+            widgetMonitoringOn = "Monitoring: on",
+            widgetMonitoringOff = "Monitoring: off",
+            widgetStopMonitoring = "Stop monitoring",
+            widgetStartMonitoring = "Start monitoring",
+            widgetAlertPlaying = "Alert is playing",
+            widgetToggle = "On/Off",
+            widgetZoneDeleted = "Zone deleted",
+            widgetZoneDeletedSub = "This zone no longer exists",
+            widgetZoneNotSelected = "No zone selected",
+            widgetZoneNotSelectedSub = "Tap to select a zone",
+            widgetPickTitle = "Choose a zone for the widget",
+            widgetNoZones = "You haven't created any zones yet.",
+            widgetNoZonesSub = "Create a zone in the app first, then add the widget.",
+            zoneFallbackName = "Zone"
         )
 
         val AR = UiStrings(
@@ -490,7 +605,45 @@ data class UiStrings(
             sortSmallest = "الأصغر",
             exitImmediate = "إيقاف فوري",
             exitPattern = "نمط متكرر",
-            exitUntilManual = "حتى الإيقاف اليدوي"
+            exitUntilManual = "حتى الإيقاف اليدوي",
+            chanAlerts = "التنبيهات",
+            chanAlertsDesc = "إشعارات تنبيه دخول المنطقة",
+            chanStatus = "حالة المراقبة",
+            chanStatusDesc = "الحالة العامة لمراقبة المناطق",
+            chanProximity = "مراقبة دقيقة للمنطقة",
+            chanProximityDesc = "مراقبة دقيقة للمناطق الصغيرة عند الاقتراب",
+            chanGps = "تنبيه الموقع",
+            chanGpsDesc = "تنبيه عند إيقاف موقع الجهاز أثناء تفعيل المراقبة",
+            chanQuiet = "المراقبة في الخلفية",
+            chanQuietDesc = "إشعار صامت لخدمة المراقبة في الخمول؛ بدون أيقونة في شريط الحالة",
+            notifAlertTitle = "تنبيه دخول المنطقة",
+            notifAlertBody = "%1\$s — اضغط الزر أدناه لإيقاف التنبيه",
+            notifApproachTitle = "الاقتراب من منطقة",
+            notifStayTitle = "تذكير البقاء",
+            notifStayBody = "أنت في منطقة %2\$s منذ أكثر من %1\$s دقيقة.",
+            notifStatusTitle = "مراقبة المناطق",
+            notifGpsOffTitle = "GPS متوقف",
+            notifGpsOffBody = "المراقبة مفعّلة لكن موقع الجهاز متوقف؛ لن تعمل التنبيهات.",
+            notifEnableGps = "تشغيل GPS",
+            notifDisableMonitoring = "إيقاف المراقبة",
+            proxIdleZone = "مراقبة المناطق",
+            proxPreciseTitle = "المراقبة الدقيقة مفعّلة",
+            proxApproachingSmall = "الاقتراب من مناطق صغيرة",
+            widgetActiveZones = "%1\$s مناطق نشطة",
+            widgetMonitoringOn = "المراقبة: مفعّلة",
+            widgetMonitoringOff = "المراقبة: متوقفة",
+            widgetStopMonitoring = "إيقاف المراقبة",
+            widgetStartMonitoring = "بدء المراقبة",
+            widgetAlertPlaying = "التنبيه يعمل الآن",
+            widgetToggle = "تشغيل/إيقاف",
+            widgetZoneDeleted = "تم حذف المنطقة",
+            widgetZoneDeletedSub = "هذه المنطقة لم تعد موجودة",
+            widgetZoneNotSelected = "لم تُختر منطقة",
+            widgetZoneNotSelectedSub = "اضغط لاختيار منطقة",
+            widgetPickTitle = "اختر منطقة للودجت",
+            widgetNoZones = "لم تنشئ أي مناطق بعد.",
+            widgetNoZonesSub = "أنشئ منطقة في التطبيق أولًا، ثم أضف الودجت.",
+            zoneFallbackName = "منطقة"
         )
     }
 }
@@ -518,3 +671,58 @@ fun stringsFor(lang: AppLang): UiStrings = when (lang) {
 
 /** رشته‌های فعال رابط کاربری؛ در MainActivity بر اساس زبان برنامه تأمین می‌شود. */
 val LocalStrings = compositionLocalOf { UiStrings.FA }
+
+// ---------------------------------------------------------------------------
+// آینه هم‌گام زبان برای لایه‌های غیرکامپوزی (اعلان‌ها، ویجت‌ها، کاشی تنظیمات
+// سریع و سرویس‌ها). این لایه‌ها نباید DataStore/Flow بخوانند؛ پس زبان
+// انتخاب‌شده در یک فایل SharedPreferences کوچک هم آینه می‌شود:
+// PrefsRepository هنگام هر تغییر زبان آن را می‌نویسد، MainActivity هنگام
+// مشاهده زبان فعلی آن را تازه نگه می‌دارد و این‌جا به‌صورت هم‌گام خوانده
+// می‌شود. نبود آینه یعنی هنوز زبانی انتخاب نشده است: پیش‌فرض فارسی.
+// ---------------------------------------------------------------------------
+
+/** نام فایل آینه زبان. */
+const val LANG_MIRROR_PREFS = "lang_mirror"
+
+/** کلید کد زبان در فایل آینه («fa»/«en»/«ar»). */
+const val LANG_MIRROR_KEY = "app_lang"
+
+/** نوشتن آینه زبان؛ هنگام ثبت زبان تازه صدا زده می‌شود. */
+fun writeLangMirror(context: android.content.Context, langKey: String) {
+    try {
+        context.getSharedPreferences(LANG_MIRROR_PREFS, android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putString(LANG_MIRROR_KEY, langKey)
+            .apply()
+    } catch (_: Exception) {
+    }
+}
+
+/** زبان فعلی برنامه از روی آینه هم‌گام؛ پیش‌فرض فارسی (هم‌خوان با DataStore). */
+fun appLangForContext(context: android.content.Context): AppLang {
+    val key = try {
+        context.getSharedPreferences(LANG_MIRROR_PREFS, android.content.Context.MODE_PRIVATE)
+            .getString(LANG_MIRROR_KEY, "fa") ?: "fa"
+    } catch (_: Exception) {
+        "fa"
+    }
+    return appLangOf(key)
+}
+
+/** رشته‌های زبان فعلی برای لایه‌های غیرکامپوزی. */
+fun stringsForContext(context: android.content.Context): UiStrings =
+    stringsFor(appLangForContext(context))
+
+private val AR_DIGITS = charArrayOf('٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩')
+private val FA_DIGITS = charArrayOf('۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹')
+
+/** تبدیل ارقام لاتین متن به ارقام بومی زبان (فارسی/عربی)؛ در انگلیسی دست‌نخورده. */
+fun localizedDigits(text: String, lang: AppLang): String {
+    if (lang == AppLang.EN) return text
+    val digits = if (lang == AppLang.AR) AR_DIGITS else FA_DIGITS
+    val sb = StringBuilder(text.length)
+    for (ch in text) {
+        sb.append(if (ch in '0'..'9') digits[ch - '0'] else ch)
+    }
+    return sb.toString()
+}

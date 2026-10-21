@@ -11,7 +11,9 @@ import android.widget.RemoteViews
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.MainActivity
 import ir.khanoomi.geofencealert.R
-import ir.khanoomi.geofencealert.domain.TimeFormat
+import ir.khanoomi.geofencealert.ui.appLangForContext
+import ir.khanoomi.geofencealert.ui.localizedDigits
+import ir.khanoomi.geofencealert.ui.stringsForContext
 import ir.khanoomi.geofencealert.receiver.StopAlertReceiver
 import ir.khanoomi.geofencealert.receiver.WidgetActionReceiver
 import ir.khanoomi.geofencealert.service.AlertService
@@ -66,15 +68,21 @@ class ZoneWidgetProvider : AppWidgetProvider() {
             monitoringOn: Boolean,
             alerting: Boolean
         ) {
+            val strings = stringsForContext(context)
+            val lang = appLangForContext(context)
             val views = RemoteViews(context.packageName, R.layout.widget_geofence)
+            views.setTextViewText(R.id.tv_app_name, strings.appTitle)
             views.setTextViewText(
                 R.id.tv_status,
-                "${TimeFormat.toFaDigits(activeCount.toString())} محدوده فعال"
+                String.format(
+                    strings.widgetActiveZones,
+                    localizedDigits(activeCount.toString(), lang)
+                )
             )
             // وضعیت پایش
             views.setTextViewText(
                 R.id.tv_monitor,
-                if (monitoringOn) "پایش: فعال" else "پایش: غیرفعال"
+                if (monitoringOn) strings.widgetMonitoringOn else strings.widgetMonitoringOff
             )
             views.setTextColor(
                 R.id.tv_monitor,
@@ -89,8 +97,10 @@ class ZoneWidgetProvider : AppWidgetProvider() {
             // دکمه معکوس‌کردن پایش
             views.setTextViewText(
                 R.id.btn_toggle,
-                if (monitoringOn) "توقف پایش" else "شروع پایش"
+                if (monitoringOn) strings.widgetStopMonitoring else strings.widgetStartMonitoring
             )
+            views.setTextViewText(R.id.btn_stop, strings.stopAlert)
+            views.setTextViewText(R.id.tv_alerting, strings.widgetAlertPlaying)
             val toggleIntent = PendingIntent.getBroadcast(
                 context,
                 2,
