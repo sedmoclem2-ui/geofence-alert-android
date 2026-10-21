@@ -42,6 +42,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.tasks.Tasks
+import ir.khanoomi.geofencealert.domain.TimeFormat
 import ir.khanoomi.geofencealert.util.Permissions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -75,8 +76,6 @@ fun MapPickerScreen(
         )
     }
     val context = LocalContext.current
-    val strings = LocalStrings.current
-    val lang = LocalAppLang.current
     val scope = rememberCoroutineScope()
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     val bridge = remember {
@@ -95,7 +94,7 @@ fun MapPickerScreen(
         if (!Permissions.hasAnyLocation(context)) {
             Toast.makeText(
                 context,
-                strings.mapLocationPermNeeded,
+                "برای این قابلیت مجوز مکان لازم است",
                 Toast.LENGTH_SHORT
             ).show()
             return
@@ -126,7 +125,7 @@ fun MapPickerScreen(
                 } else {
                     Toast.makeText(
                         context,
-                        strings.mapLocationFailed,
+                        "دریافت موقعیت ناموفق بود",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -159,7 +158,7 @@ fun MapPickerScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
                 }
                 Text(
                     LocalStrings.current.mapPickerTitle,
@@ -234,15 +233,15 @@ fun MapPickerScreen(
                 val (lat, lng) = selected ?: (0.0 to 0.0)
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        "${strings.latitude}: ${
-                            localizedDigits(String.format(Locale.US, "%.5f", lat), lang)
+                        "${LocalStrings.current.latitude}: ${
+                            TimeFormat.toFaDigits(String.format(Locale.US, "%.5f", lat))
                         }",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "${strings.longitude}: ${
-                            localizedDigits(String.format(Locale.US, "%.5f", lng), lang)
+                        "${LocalStrings.current.longitude}: ${
+                            TimeFormat.toFaDigits(String.format(Locale.US, "%.5f", lng))
                         }",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold
