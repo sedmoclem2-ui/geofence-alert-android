@@ -44,32 +44,7 @@ fun AppNav() {
 
     NavHost(
         navController = navController,
-        startDestination = if (onboardingDone == true) "home" else "onboarding",
-        // گذار ملایم بین صفحه‌ها: محو + لغزش افقی کوتاه (بدون بازطراحی ناوبری)
-        enterTransition = {
-            androidx.compose.animation.fadeIn(
-                androidx.compose.animation.core.tween(240)
-            ) + androidx.compose.animation.slideInHorizontally(
-                androidx.compose.animation.core.tween(240)
-            ) { it / 12 }
-        },
-        exitTransition = {
-            androidx.compose.animation.fadeOut(
-                androidx.compose.animation.core.tween(180)
-            )
-        },
-        popEnterTransition = {
-            androidx.compose.animation.fadeIn(
-                androidx.compose.animation.core.tween(220)
-            )
-        },
-        popExitTransition = {
-            androidx.compose.animation.fadeOut(
-                androidx.compose.animation.core.tween(180)
-            ) + androidx.compose.animation.slideOutHorizontally(
-                androidx.compose.animation.core.tween(220)
-            ) { it / 12 }
-        }
+        startDestination = if (onboardingDone == true) "home" else "onboarding"
     ) {
         composable("onboarding") {
             OnboardingScreen(

@@ -33,7 +33,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.data.Zone
-import ir.khanoomi.geofencealert.ui.stringsForContext
 import ir.khanoomi.geofencealert.ui.theme.AppTheme
 import kotlinx.coroutines.flow.Flow
 
@@ -58,13 +57,12 @@ class ZoneWidgetConfigureActivity : ComponentActivity() {
         }
         setContent {
             AppTheme {
-                val strings = stringsForContext(this)
                 Scaffold(
                     topBar = {
                         TopAppBar(
                             title = {
                                 Text(
-                                    strings.widgetPickTitle,
+                                    "انتخاب محدوده برای ویجت",
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -103,7 +101,6 @@ private fun ZonePickList(
     onPick: (Zone) -> Unit
 ) {
     val context = LocalContext.current
-    val strings = stringsForContext(context)
     val zonesFlow: Flow<List<Zone>> = remember {
         (context.applicationContext as GeofenceAlertApp).zoneRepo.observeZones()
     }
@@ -114,11 +111,11 @@ private fun ZonePickList(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                strings.widgetNoZones,
+                "هنوز محدوده‌ای نساخته‌اید.",
                 style = MaterialTheme.typography.bodyLarge
             )
             Text(
-                strings.widgetNoZonesSub,
+                "اول در برنامه یک محدوده بسازید، بعد ویجت را اضافه کنید.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp)
@@ -144,7 +141,7 @@ private fun ZonePickList(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(zone.name, fontWeight = FontWeight.Bold)
                     Text(
-                        if (zone.isActive) strings.active else strings.inactive,
+                        if (zone.isActive) "فعال" else "غیرفعال",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -264,9 +264,7 @@ class ProximityMonitorService : Service() {
                         }
                         val notification = Notifications.proximityNotification(
                             this@ProximityMonitorService,
-                            name ?: ir.khanoomi.geofencealert.ui.stringsForContext(
-                                this@ProximityMonitorService
-                            ).zoneFallbackName,
+                            name ?: "محدوده",
                             remaining
                         )
                         if (!visibleNotification) {
