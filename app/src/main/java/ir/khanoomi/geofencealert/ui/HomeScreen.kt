@@ -385,13 +385,13 @@ fun HomeScreen(navController: NavController) {
                 title = { Text(LocalStrings.current.appTitle, fontWeight = FontWeight.Bold) },
                 actions = {
                     IconButton(onClick = { navController.navigate("stats") }) {
-                        Icon(Icons.Filled.DateRange, contentDescription = "آمار")
+                        Icon(Icons.Filled.DateRange, contentDescription = LocalStrings.current.statistics)
                     }
                     IconButton(onClick = { navController.navigate("history") }) {
-                        Icon(Icons.Filled.List, contentDescription = "تاریخچه")
+                        Icon(Icons.Filled.List, contentDescription = LocalStrings.current.history)
                     }
                     IconButton(onClick = { navController.navigate("settings") }) {
-                        Icon(Icons.Default.Settings, contentDescription = "تنظیمات")
+                        Icon(Icons.Default.Settings, contentDescription = LocalStrings.current.settingsCd)
                     }
                     // مرتب‌سازی: دکمه چهارم هدر؛ وقتی حالت انتخاب‌شده غیر از
                     // «دستی» است یک نشان نقطه‌ای روی دکمه می‌نشیند. پنل آن
@@ -1280,7 +1280,7 @@ private fun EmptyState(onAdd: () -> Unit) {
         GradientButton(onClick = onAdd) {
             Icon(Icons.Default.Add, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("ساخت محدوده")
+            Text(LocalStrings.current.createZone)
         }
     }
 }
@@ -1514,7 +1514,7 @@ private fun BatteryWarningBanner(onDisableOptimization: () -> Unit) {
                     tint = scheme.onErrorContainer
                 )
                 Text(
-                    "بهینه‌سازی باتری فعال است؛ ممکن است هشدارها با تأخیر برسند یا متوقف شوند.",
+                    LocalStrings.current.batteryWarning,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = scheme.onErrorContainer
@@ -1528,7 +1528,7 @@ private fun BatteryWarningBanner(onDisableOptimization: () -> Unit) {
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("غیرفعال کردن بهینه‌سازی", fontWeight = FontWeight.Bold)
+                Text(LocalStrings.current.batteryWarningAction, fontWeight = FontWeight.Bold)
             }
         }
     }

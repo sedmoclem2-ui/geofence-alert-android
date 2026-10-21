@@ -13,11 +13,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import ir.khanoomi.geofencealert.domain.TimeFormat
 
-/** قالب‌بندی دقیقه‌از‌نیمه‌شب به صورت «ساعت:دقیقه» با ارقام فارسی. */
-fun formatClockFa(minutes: Int): String =
-    TimeFormat.toFaDigits("%02d:%02d".format(minutes / 60, minutes % 60))
+/** قالب‌بندی دقیقه‌از‌نیمه‌شب به صورت «ساعت:دقیقه» با ارقام بومی زبان. */
+@Composable
+fun formatClockLocalized(minutes: Int): String =
+    localizedDigits(
+        "%02d:%02d".format(minutes / 60, minutes % 60),
+        LocalAppLang.current
+    )
 
 /**
  * دکمه انتخاب ساعت (۲۴ساعته) با دیالوگ TimePicker متریال.
@@ -32,8 +35,9 @@ fun TimePickerField(
     modifier: Modifier = Modifier
 ) {
     var show by remember { mutableStateOf(false) }
+    val strings = LocalStrings.current
     OutlinedButton(onClick = { show = true }, modifier = modifier) {
-        Text("$label: ${formatClockFa(minutes)}")
+        Text("$label: ${formatClockLocalized(minutes)}")
     }
     if (show) {
         val state = rememberTimePickerState(
@@ -47,10 +51,10 @@ fun TimePickerField(
                 TextButton(onClick = {
                     show = false
                     onPick(state.hour * 60 + state.minute)
-                }) { Text("تأیید") }
+                }) { Text(strings.confirm) }
             },
             dismissButton = {
-                TextButton(onClick = { show = false }) { Text("انصراف") }
+                TextButton(onClick = { show = false }) { Text(strings.cancel) }
             },
             text = { TimePicker(state = state) }
         )
