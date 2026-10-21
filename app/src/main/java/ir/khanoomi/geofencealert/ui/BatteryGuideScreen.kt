@@ -24,17 +24,13 @@ import androidx.navigation.NavController
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BatteryGuideScreen(navController: NavController) {
-    val strings = LocalStrings.current
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(strings.batteryGuideTitle) },
+                title = { Text("راهنمای مصرف باتری") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = strings.back
-                        )
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
                     }
                 }
             )
@@ -49,26 +45,43 @@ fun BatteryGuideScreen(navController: NavController) {
         ) {
             item {
                 Text(
-                    strings.bgIntro,
+                    "برای این‌که هشدار ورود به محدوده حتی وقتی برنامه باز نیست کار کند، " +
+                        "اندروید نباید برنامه را به‌خاطر مصرف باتری متوقف کند. " +
+                        "مراحل زیر برای گوشی‌های سامسونگ است؛ در برندهای دیگر مسیر مشابهی دارد.",
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
             item {
                 GuideCard(
-                    title = strings.bg1Title,
-                    steps = strings.bg1Steps.split("\n")
+                    title = "۱. برداشتن محدودیت باتری",
+                    steps = listOf(
+                        "به «تنظیمات» گوشی بروید.",
+                        "«برنامه‌ها» را باز کنید و «محدوده هشدار» را پیدا کنید.",
+                        "وارد بخش «باتری» شوید.",
+                        "گزینه «بدون محدودیت» (Unrestricted) را انتخاب کنید."
+                    )
                 )
             }
             item {
                 GuideCard(
-                    title = strings.bg2Title,
-                    steps = strings.bg2Steps.split("\n")
+                    title = "۲. خارج کردن از برنامه‌های در خواب",
+                    steps = listOf(
+                        "در تنظیمات، به «مراقبت از باتری و دستگاه» بروید.",
+                        "«باتری» و سپس «محدودیت‌های استفاده پس‌زمینه» را باز کنید.",
+                        "«برنامه‌های در خواب عمیق» (Deep sleeping apps) را بررسی کنید.",
+                        "اگر «محدوده هشدار» آن‌جاست، آن را حذف کنید تا در خواب عمیق نرود."
+                    )
                 )
             }
             item {
                 GuideCard(
-                    title = strings.bg3Title,
-                    steps = strings.bg3Steps.split("\n")
+                    title = "۳. نکات مهم",
+                    steps = listOf(
+                        "از «Force Stop» (توقف اجباری) برنامه از تنظیمات خودداری کنید؛ " +
+                            "پس از آن ژئوفنس‌ها تا باز شدن دوباره برنامه کار نمی‌کنند.",
+                        "دسترسی مکان را روی «همیشه» (Allow all the time) بگذارید.",
+                        "حالت «صرفه‌جویی در مصرف باتری» ممکن است رویدادها را با تأخیر برساند."
+                    )
                 )
             }
         }

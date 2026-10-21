@@ -17,7 +17,6 @@ import ir.khanoomi.geofencealert.audio.AlertVibrator
 import ir.khanoomi.geofencealert.data.PrefsRepository
 import ir.khanoomi.geofencealert.data.Zone
 import ir.khanoomi.geofencealert.notify.Notifications
-import ir.khanoomi.geofencealert.ui.stringsForContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -73,8 +72,7 @@ class AlertService : Service() {
 
     private fun handleStart(intent: Intent) {
         val zoneId = intent.getLongExtra(EXTRA_ZONE_ID, -1L)
-        val zoneName = intent.getStringExtra(EXTRA_ZONE_NAME)
-            ?: stringsForContext(this).genericZone
+        val zoneName = intent.getStringExtra(EXTRA_ZONE_NAME) ?: "محدوده"
         val soundKey = intent.getStringExtra(EXTRA_SOUND_KEY) ?: "alarm"
         val soundUri = intent.getStringExtra(EXTRA_SOUND_URI)
         if (zoneId == -1L) {

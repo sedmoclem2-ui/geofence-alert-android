@@ -27,9 +27,9 @@ class ZoneRepository(private val dao: ZoneDao) {
 
     suspend fun setSortOrder(id: Long, order: Int) = dao.setSortOrder(id, order)
 
-    /** ثبت ترتیب دستی تازه: به هر محدوده، اندیسش در فهرست داده‌شده داده می‌شود (اتمیک، در سطح DAO). */
+    /** ثبت ترتیب دستی تازه: به هر محدوده، اندیسش در فهرست داده‌شده داده می‌شود. */
     suspend fun updateSortOrders(orderedIds: List<Long>) {
-        dao.updateSortOrders(orderedIds)
+        orderedIds.forEachIndexed { index, id -> dao.setSortOrder(id, index) }
     }
 
     suspend fun getAll(): List<Zone> = dao.getAll()

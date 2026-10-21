@@ -1,7 +1,6 @@
 package ir.khanoomi.geofencealert
 
 import android.app.Application
-import android.util.Log
 import androidx.room.Room
 import ir.khanoomi.geofencealert.data.AppDatabase
 import ir.khanoomi.geofencealert.data.MIGRATION_1_2
@@ -15,49 +14,16 @@ import ir.khanoomi.geofencealert.data.ZoneRepository
 import ir.khanoomi.geofencealert.audio.VoiceAnnouncer
 import ir.khanoomi.geofencealert.notify.Notifications
 import ir.khanoomi.geofencealert.util.CrashGuard
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 
 class GeofenceAlertApp : Application() {
 
-    /**
-     * کلید زبان ذخیره‌شده («fa»/«en»/«ar») به‌صورت هم‌گام و همیشه تازه؛
-     * لایه‌هایی که نمی‌توانند Flow بخوانند (اعلان‌ها، ویجت‌ها، کاشی تنظیمات
-     * سریع و سرویس‌ها) از همین‌جا زبان فعلی را می‌گیرند تا هیچ متنی به
-     * زبان اشتباه نمایش داده نشود.
-     */
-    @Volatile
-    var currentLanguageKey: String = "fa"
-        private set
-
-    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
     override fun onCreate() {
         super.onCreate()
-        // نگهبان خطا باید قبل از هر کار دیگری نصب شود تا هیچ بسته‌شدن
-        // ناگهانی‌ای بی‌گزارش نماند (صفحه گزارش در MainActivity خوانده می‌شود).
         CrashGuard.install(this)
-        try {
-            Notifications.createChannels(this)
-        } catch (e: Exception) {
-            Log.e(TAG, "createChannels failed", e)
-        }
+        Notifications.createChannels(this)
         // گرم کردن زودهنگام موتور گفتار گوشی تا هنگام ورود به محدوده،
         // اعلام صوتی نام بدون تأخیر راه‌اندازی موتور شروع شود.
-        try {
-            VoiceAnnouncer.init(this)
-        } catch (e: Exception) {
-            Log.e(TAG, "VoiceAnnouncer.init failed", e)
-        }
-        // نگهداری نسخه هم‌گامِ زبان انتخاب‌شده برای لایه‌های غیرکامپوزی.
-        appScope.launch {
-            try {
-                prefs.appLanguage.collect { currentLanguageKey = it }
-            } catch (_: Exception) {
-            }
-        }
+        VoiceAnnouncer.init(this)
     }
 
     val db: AppDatabase by lazy {
@@ -69,8 +35,4 @@ class GeofenceAlertApp : Application() {
     val zoneRepo: ZoneRepository by lazy { ZoneRepository(db.zoneDao()) }
 
     val prefs: PrefsRepository by lazy { PrefsRepository(this) }
-
-    private companion object {
-        const val TAG = "GeofenceAlertApp"
-    }
 }

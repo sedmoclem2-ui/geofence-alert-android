@@ -8,9 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
@@ -19,15 +16,12 @@ import androidx.lifecycle.lifecycleScope
 import ir.khanoomi.geofencealert.data.BackupManager
 import ir.khanoomi.geofencealert.receiver.GpsStateReceiver
 import ir.khanoomi.geofencealert.ui.AppNav
-import ir.khanoomi.geofencealert.ui.CrashScreen
-import ir.khanoomi.geofencealert.ui.LocalAppLang
 import ir.khanoomi.geofencealert.ui.LocalStrings
 import ir.khanoomi.geofencealert.ui.appLangOf
 import ir.khanoomi.geofencealert.ui.stringsFor
 import ir.khanoomi.geofencealert.ui.theme.AppTheme
 import ir.khanoomi.geofencealert.ui.theme.CUSTOM_THEME_KEY
 import ir.khanoomi.geofencealert.ui.theme.buildCustomPalette
-import ir.khanoomi.geofencealert.util.CrashGuard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -54,7 +48,7 @@ class MainActivity : ComponentActivity() {
             if (restored) {
                 Toast.makeText(
                     this@MainActivity,
-                    stringsFor(appLangOf(app.currentLanguageKey)).backupRestored,
+                    "محدوده‌ها از فایل پشتیبان بازیابی شدند",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -79,7 +73,6 @@ class MainActivity : ComponentActivity() {
                 // زبان برنامه: فارسی و عربی راست‌به‌چپ، انگلیسی چپ‌به‌راست.
                 CompositionLocalProvider(
                     LocalStrings provides stringsFor(lang),
-                    LocalAppLang provides lang,
                     LocalLayoutDirection provides
                         if (lang == ir.khanoomi.geofencealert.ui.AppLang.EN) {
                             LayoutDirection.Ltr
@@ -88,24 +81,7 @@ class MainActivity : ComponentActivity() {
                         }
                 ) {
                     Surface(modifier = Modifier.fillMaxSize()) {
-                        // دروازه گزارش خطا: اگر اجرای قبلی با خطا بسته شده
-                        // باشد، اول فقط صفحه گزارش نشان داده می‌شود و تا
-                        // کاربر آن را پاک نکند، رابط اصلی ساخته نمی‌شود.
-                        var crashText by remember {
-                            mutableStateOf(CrashGuard.read(app))
-                        }
-                        val trace = crashText
-                        if (trace != null) {
-                            CrashScreen(
-                                trace = trace,
-                                onEnterApp = {
-                                    CrashGuard.clear(app)
-                                    crashText = null
-                                }
-                            )
-                        } else {
-                            AppNav()
-                        }
+                        AppNav()
                     }
                 }
             }

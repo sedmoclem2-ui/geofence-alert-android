@@ -138,7 +138,7 @@ private fun LanguageScene(onSelect: (String) -> Unit) {
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                strings.langSceneSub,
+                "Choose your language · اختر لغتك",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Color.White.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center
@@ -146,15 +146,15 @@ private fun LanguageScene(onSelect: (String) -> Unit) {
             Spacer(Modifier.height(36.dp))
             LanguageOptionCard(
                 visible = shown, index = 0,
-                title = strings.langNameFa, sample = strings.langSampleFa
+                title = "فارسی", sample = "سلام! خوش آمدید"
             ) { onSelect("fa") }
             LanguageOptionCard(
                 visible = shown, index = 1,
-                title = strings.langNameEn, sample = strings.langSampleEn
+                title = "English", sample = "Hello! Welcome"
             ) { onSelect("en") }
             LanguageOptionCard(
                 visible = shown, index = 2,
-                title = strings.langNameAr, sample = strings.langSampleAr
+                title = "العربية", sample = "مرحباً! أهلاً بك"
             ) { onSelect("ar") }
         }
     }
