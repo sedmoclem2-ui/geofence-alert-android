@@ -12,7 +12,6 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -135,6 +134,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.log10
 import kotlin.math.sin
@@ -170,6 +170,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ZoneSort.MANUAL)
 
     /**
+     * آیا پیام راهنمای «نگه دار و بکش» مصرف شده است؛ بعد از اولین درگ
+     * موفق true می‌شود و پیام دیگر نشان داده نمی‌شود (پیش‌فرض: نه).
+     */
+    val dragHintSeen = prefs.dragHintSeen
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    /**
      * ترتیب دستیِ تازه رها‌شده که هنوز از دیتابیس برنگشته است. تا وقتی
      * انتشار فهرست محدوده‌ها دقیقاً همین ترتیب را نشان ندهد، نمایش بر
      * اساس همین نگه داشته می‌شود تا یک انتشار کهنه، کارت را به جای
@@ -201,6 +208,18 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 prefs.setZoneSortMode(mode)
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "setSortMode($mode) failed", e)
+            }
+        }
+    }
+
+    /** ثبت اینکه پیام راهنمای کشیدن مصرف شده است (فراخوانی در شروع اولین درگ). */
+    fun markDragHintSeen() {
+        if (dragHintSeen.value) return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                prefs.setDragHintSeen(true)
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "markDragHintSeen failed", e)
             }
         }
     }
@@ -298,6 +317,7 @@ fun HomeScreen(navController: NavController) {
     val sortMode by vm.sortMode.collectAsStateWithLifecycle()
     val monitoring by vm.monitoringEnabled.collectAsStateWithLifecycle()
     val alerting by vm.alertingZones.collectAsStateWithLifecycle()
+    val dragHintSeen by vm.dragHintSeen.collectAsStateWithLifecycle()
 
     var locationOn by remember { mutableStateOf(true) }
     var permLocation by remember { mutableStateOf(false) }
@@ -327,7 +347,11 @@ fun HomeScreen(navController: NavController) {
                     localZones = m
                 }
             },
-            onDragStart = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
+            onDragStart = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                // شروع اولین درگ: پیام راهنمای کشیدن برای همیشه بازنشسته می‌شود.
+                vm.markDragHintSeen()
+            },
             onDragEnd = {
                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                 vm.reorderZones(localZones.map { it.id })
@@ -339,11 +363,34 @@ fun HomeScreen(navController: NavController) {
     LaunchedEffect(zones) {
         vm.confirmPendingOrder(zones.map { it.id })
     }
-    // آینه محلی فقط وقتی با داده واقعی همگام می‌شود که درگ در جریان نیست
-    // تا وسط کشیدن، فهرست زیر دست کاربر جابه‌جا نشود.
-    LaunchedEffect(displayZones, sortMode, reorderController.isDragging) {
-        if (isManualSort && !reorderController.isDragging) {
+    // ورود به حالت «دستی»: فهرست محلی یک‌جا از روی فهرست نمایشی همگام
+    // می‌شود؛ از آن لحظه به بعد در این حالت، ترتیب محلی مرجع نمایش است.
+    LaunchedEffect(sortMode) {
+        if (isManualSort) {
             localZones = displayZones
+        }
+    }
+    // همگام‌سازی ادغامی در حالت دستی: انتشار تازه هرگز ترتیب محلی را
+    // به هم نمی‌زند — اگر مجموعه شناسه‌ها همان قبلی باشد فقط شیء تازه
+    // هر کارت سر جایش می‌نشیند (بدون هیچ بازچینی)، و اگر شناسه‌ای
+    // کم/زیاد شده باشد ترتیب محلیِ باقی‌مانده‌ها حفظ و تازه‌ها به
+    // ترتیب انتشار به انتها اضافه می‌شوند. (رفع پرش پایان درگ:
+    // انتشار کهنه‌ای که لحظه رها کردن می‌رسد دیگر نمی‌تواند کارت را
+    // به جای قبلی برگرداند، چون ترتیب از خود فهرست محلی خوانده
+    // می‌شود.) وسط درگ هم دست نمی‌خورد تا فهرست زیر انگشت نپرد.
+    LaunchedEffect(displayZones, isManualSort, reorderController.isDragging) {
+        if (!isManualSort || reorderController.isDragging) return@LaunchedEffect
+        val incoming = displayZones
+        val incomingById = incoming.associateBy { it.id }
+        localZones = if (localZones.map { it.id }.toSet() == incomingById.keys) {
+            // همان مجموعه: فقط تازه‌سازی اشیا سر جای خودشان.
+            localZones.map { incomingById[it.id] ?: it }
+        } else {
+            // مجموعه عوض شده: باقی‌مانده‌ها به ترتیب محلی + تازه‌ها
+            // به ترتیب انتشار؛ حذف‌شده‌ها خودبه‌خود می‌افتند.
+            val kept = localZones.mapNotNull { incomingById[it.id] }
+            val keptIds = kept.map { it.id }.toSet()
+            kept + incoming.filter { it.id !in keptIds }
         }
     }
     val shownZones = if (isManualSort) localZones else displayZones
@@ -393,18 +440,28 @@ fun HomeScreen(navController: NavController) {
                     IconButton(onClick = { navController.navigate("history") }) {
                         Icon(Icons.Filled.List, contentDescription = LocalStrings.current.history)
                     }
-                    IconButton(onClick = { navController.navigate("settings") }) {
-                        Icon(Icons.Default.Settings, contentDescription = LocalStrings.current.settingsCd)
-                    }
-                    // مرتب‌سازی: دکمه چهارم هدر؛ وقتی حالت انتخاب‌شده غیر از
-                    // «دستی» است یک نشان نقطه‌ای روی دکمه می‌نشیند. پنل آن
-                    // به‌صورت روکش روی محتوای صفحه باز می‌شود.
+                    // مرتب‌سازی: وقتی حالت انتخاب‌شده غیر از «دستی» است
+                    // یک نشان نقطه‌ای روی دکمه می‌نشیند. پنل آن به‌صورت
+                    // روکش روی محتوای صفحه باز می‌شود. آیکنش دو پیکان
+                    // روی هم (بالا/پایین) است تا با آیکن فهرست تاریخچه
+                    // اشتباه نشود.
                     Box {
                         IconButton(onClick = { sortPanelOpen = !sortPanelOpen }) {
-                            Icon(
-                                Icons.Filled.List,
-                                contentDescription = LocalStrings.current.sortTitle
-                            )
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy((-4).dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.KeyboardArrowUp,
+                                    contentDescription = LocalStrings.current.sortTitle,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Icon(
+                                    Icons.Filled.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
                         }
                         if (ZoneSort.normalize(sortMode) != ZoneSort.MANUAL) {
                             Box(
@@ -418,6 +475,11 @@ fun HomeScreen(navController: NavController) {
                                     )
                             )
                         }
+                    }
+                    // تنظیمات آخرین دکمه در کد است تا در نوار راست‌به‌چپ
+                    // اولین (چپ‌ترین) دکمه دیده شود.
+                    IconButton(onClick = { navController.navigate("settings") }) {
+                        Icon(Icons.Default.Settings, contentDescription = LocalStrings.current.settingsCd)
                     }
                 }
             )
@@ -524,7 +586,9 @@ fun HomeScreen(navController: NavController) {
             if (zones.isEmpty()) {
                 item { EmptyState(onAdd = { navController.navigate("edit") }) }
             } else {
-                if (isManualSort) {
+                // پیام راهنمای کشیدن فقط تا پیش از اولین درگ دیده می‌شود
+                // و فقط وقتی دست‌کم دو کارت برای جابه‌جایی هست.
+                if (isManualSort && zones.size >= 2 && !dragHintSeen) {
                     item {
                         Surface(
                             color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -544,8 +608,12 @@ fun HomeScreen(navController: NavController) {
                     val isDragging = isManualSort &&
                         reorderController.draggingKey == zone.id
                     val cardModifier = if (isManualSort) {
-                        Modifier
-                            .animateItem()
+                        // کارتِ در حال کشیده شدن animateItem ندارد:
+                        // انیمیشن جای‌گذاریِ لیزی با آفست دستی
+                        // translationY می‌جنگد و درگ را پرپر و ناپایدار
+                        // می‌کند؛ بقیه کارت‌ها برای نشستن نرم در جای
+                        // تازه‌شان همچنان انیمیت می‌شوند.
+                        (if (isDragging) Modifier else Modifier.animateItem())
                             .zIndex(if (isDragging) 1f else 0f)
                             .graphicsLayer {
                                 translationY = if (isDragging) {
@@ -725,6 +793,18 @@ private fun RadarPulseLive(
     pulseColor: Color,
     dotColor: Color
 ) {
+    // جرقه شروع: وقتی نسخه زنده نخستین بار ترکیب می‌شود (روشن شدن
+    // پایش یا ورود به برنامه با پایش روشن)، رادار در ~۹۰۰ms «روشن»
+    // می‌شود — حلقه‌ها از هسته باز می‌شوند، جاروب با همین ضریب
+    // می‌چرخد و هسته با یک جهش ملایم سر جایش می‌نشیند؛ بعد از آن
+    // رفتار دقیقاً همان رادار زنده همیشگی است.
+    val ignition = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        ignition.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing)
+        )
+    }
     val infinite = rememberInfiniteTransition(label = "radar")
     val sonar by infinite.animateFloat(
         initialValue = 0f,
@@ -768,6 +848,10 @@ private fun RadarPulseLive(
         val cy = size.height / 2f
         val center = Offset(cx, cy)
         val strokeWidth = 2.dp.toPx()
+        // ضرایب جرقه شروع: آلفای کلی و گسترش حلقه‌ها با intro مقیاس
+        // می‌شوند و شعاع هسته از ۰٫۳ با جهش ملایم به اندازه کامل می‌رسد.
+        val intro = ignition.value
+        val corePop = 0.3f + 0.7f * easeOutBack(intro)
 
         // ۱) حلقه قطعه‌قطعه خلاف‌جهت: ۱۲ قطعه کمانی کوچک که آرام می‌چرخند.
         val segR = maxR * 0.8f
@@ -775,7 +859,7 @@ private fun RadarPulseLive(
         val segSize = Size(segR * 2f, segR * 2f)
         for (i in 0 until 12) {
             drawArc(
-                color = pulseColor.copy(alpha = 0.30f),
+                color = pulseColor.copy(alpha = 0.30f * intro),
                 startAngle = -counter + i * 30f,
                 sweepAngle = 16f,
                 useCenter = false,
@@ -786,24 +870,28 @@ private fun RadarPulseLive(
         }
 
         // ۲) سونار: سه حلقه با فاز پلکانی که از هسته تا لبه گسترش می‌یابند
-        // و هرچه بزرگ‌تر می‌شوند کم‌رنگ‌تر می‌شوند.
+        // و هرچه بزرگ‌تر می‌شوند کم‌رنگ‌تر می‌شوند؛ هنگام جرقه، گسترش
+        // هر حلقه در ضریب شروع ضرب می‌شود تا از هسته باز شوند.
         for (i in 0 until 3) {
             val f = (sonar + i / 3f) % 1f
             drawCircle(
-                color = pulseColor.copy(alpha = 0.55f * (1f - f)),
-                radius = maxR * (0.12f + 0.88f * f),
+                color = pulseColor.copy(alpha = 0.55f * (1f - f) * intro),
+                radius = maxR * (0.12f + 0.88f * f) * intro,
                 center = center,
                 style = Stroke(width = strokeWidth)
             )
         }
 
-        // ۳) جاروب چرخان: قوس دنباله‌دار + سرِ روشن‌تر و نقطه در لبه پیشرو.
+        // ۳) جاروب چرخان: قوس دنباله‌دار + سرِ روشن‌تر و نقطه در لبه
+        // پیشرو؛ زاویه مؤثر جاروب هنگام جرقه با ضریب شروع گیت می‌شود
+        // تا چرخش از صفر «روشن» شود.
+        val sweepNow = sweep * intro
         val sweepR = maxR * 0.95f
         val sweepTopLeft = Offset(cx - sweepR, cy - sweepR)
         val sweepSize = Size(sweepR * 2f, sweepR * 2f)
         drawArc(
-            color = pulseColor.copy(alpha = 0.45f),
-            startAngle = sweep - 80f,
+            color = pulseColor.copy(alpha = 0.45f * intro),
+            startAngle = sweepNow - 80f,
             sweepAngle = 80f,
             useCenter = false,
             topLeft = sweepTopLeft,
@@ -811,17 +899,17 @@ private fun RadarPulseLive(
             style = Stroke(width = 3.dp.toPx())
         )
         drawArc(
-            color = pulseColor.copy(alpha = 0.8f),
-            startAngle = sweep - 22f,
+            color = pulseColor.copy(alpha = 0.8f * intro),
+            startAngle = sweepNow - 22f,
             sweepAngle = 22f,
             useCenter = false,
             topLeft = sweepTopLeft,
             size = sweepSize,
             style = Stroke(width = 3.dp.toPx())
         )
-        val headRad = Math.toRadians(sweep.toDouble())
+        val headRad = Math.toRadians(sweepNow.toDouble())
         drawCircle(
-            color = pulseColor.copy(alpha = 0.95f),
+            color = pulseColor.copy(alpha = 0.95f * intro),
             radius = 2.5.dp.toPx(),
             center = Offset(
                 cx + cos(headRad).toFloat() * sweepR,
@@ -829,19 +917,28 @@ private fun RadarPulseLive(
             )
         )
 
-        // ۴) هسته تنفسی با حلقه راهنمای ظریف دور آن.
+        // ۴) هسته تنفسی با حلقه راهنمای ظریف دور آن؛ هنگام جرقه شعاعش
+        // با ضریب جهش‌دار از کوچک به اندازه کامل می‌رسد.
         drawCircle(
-            color = dotColor.copy(alpha = 0.30f),
+            color = dotColor.copy(alpha = 0.30f * intro),
             radius = maxR * 0.24f,
             center = center,
             style = Stroke(width = 1.5.dp.toPx())
         )
         drawCircle(
-            color = dotColor.copy(alpha = 0.7f + 0.3f * breath),
-            radius = (5.5f + 3f * breath).dp.toPx(),
+            color = dotColor.copy(alpha = (0.7f + 0.3f * breath) * intro),
+            radius = (5.5f + 3f * breath).dp.toPx() * corePop,
             center = center
         )
     }
+}
+
+/** منحنی «جهش ملایم» (easeOutBack): از ۰ به ۱ می‌رسد و کمی از ۱ می‌گذرد تا نشستن هسته رادار هنگام جرقه حس فنری بگیرد. */
+private fun easeOutBack(t: Float): Float {
+    val c1 = 1.70158f
+    val c3 = c1 + 1f
+    val u = t - 1f
+    return 1f + c3 * u * u * u + c1 * u * u
 }
 
 /**
@@ -1366,29 +1463,16 @@ private fun ZoneCard(
                     }
                 }
             }
-            // دکمه‌های ویرایش/حذف: دایره‌ای نرم ۴۲dp در پایین کارت، با
-            // انیمیشن فشردن فنری و بازخورد لمسی.
+            // کنترل خلاقانه ویرایش/حذف در پایین کارت: دایره بزرگ
+            // ویرایش در آغوش حلقه باریک قرمزِ هدف‌گیری و تراشه حذف
+            // نشسته روی پایین حلقه.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
                 horizontalArrangement = Arrangement.End
             ) {
-                ZoneActionButton(
-                    icon = Icons.Default.Edit,
-                    contentDescription = LocalStrings.current.editCd,
-                    containerColor = scheme.primaryContainer,
-                    iconColor = scheme.onPrimaryContainer,
-                    onClick = onEdit
-                )
-                Spacer(Modifier.width(10.dp))
-                ZoneActionButton(
-                    icon = Icons.Default.Delete,
-                    contentDescription = LocalStrings.current.delete,
-                    containerColor = scheme.errorContainer,
-                    iconColor = scheme.error,
-                    onClick = onDelete
-                )
+                ZoneEditDeleteControl(onEdit = onEdit, onDelete = onDelete)
             }
             if (zone.isAlerting) {
                 Button(
@@ -1426,43 +1510,93 @@ private fun rememberPressScale(
     return scale
 }
 
-/** دکمهٔ گرد نرم کارت محدوده (ویرایش/حذف) با فشردن فنری و هپتیک. */
+/**
+ * کنترل خلاقانه ویرایش/حذف کارت محدوده: دایره بزرگ ویرایش (۵۲dp) در
+ * مرکز یک حلقه باریک قرمز (~۳dp) — حس حلقه هدف‌گیری GPS دور دکمه —
+ * و تراشه حذف نشسته روی پایین حلقه؛ پس‌زمینه تراشه هم‌رنگ سطح کارت
+ * است تا حلقه زیرش بریده و تراشه در حلقه فرو رفته دیده شود. ناحیه
+ * لمس حذف یک مربع شفاف ۴۴dp است و تراشه ۳۰dp در مرکزش می‌نشیند؛
+ * مرکزش تقریباً روی قوس پایینی حلقه می‌افتد. حذف مثل قبل از دیالوگ
+ * تأیید می‌گذرد.
+ */
 @Composable
-private fun ZoneActionButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String,
-    containerColor: Color,
-    iconColor: Color,
-    onClick: () -> Unit
-) {
+private fun ZoneEditDeleteControl(onEdit: () -> Unit, onDelete: () -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val strings = LocalStrings.current
     val haptics = LocalHapticFeedback.current
-    val interaction = remember { MutableInteractionSource() }
-    val scale = rememberPressScale(interaction, pressedScale = 0.86f)
-    val bg by animateColorAsState(containerColor, tween(300), label = "zoneBtnBg")
-    Box(
-        modifier = Modifier
-            .size(42.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+    val editInteraction = remember { MutableInteractionSource() }
+    val editScale = rememberPressScale(editInteraction, pressedScale = 0.9f)
+    Box(modifier = Modifier.size(width = 80.dp, height = 88.dp)) {
+        // حلقه هدف‌گیری و دایره ویرایش، هم‌مرکز در بالای کنترل.
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .size(68.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.size(68.dp)) {
+                drawCircle(
+                    color = scheme.error.copy(alpha = 0.55f),
+                    radius = size.minDimension / 2f - 1.5.dp.toPx(),
+                    style = Stroke(width = 3.dp.toPx())
+                )
             }
-            .clip(CircleShape)
-            .background(bg)
-            .clickable(
-                interactionSource = interaction,
-                indication = null
+            Box(
+                modifier = Modifier
+                    .size(52.dp)
+                    .graphicsLayer {
+                        scaleX = editScale
+                        scaleY = editScale
+                    }
+                    .clip(CircleShape)
+                    .background(scheme.primaryContainer)
+                    .clickable(
+                        interactionSource = editInteraction,
+                        indication = null
+                    ) {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onEdit()
+                    },
+                contentAlignment = Alignment.Center
             ) {
-                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                onClick()
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            icon,
-            contentDescription = contentDescription,
-            tint = iconColor,
-            modifier = Modifier.size(20.dp)
-        )
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = strings.editCd,
+                    tint = scheme.onPrimaryContainer,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+        // حذف: ناحیه لمس شفاف ۴۴dp در پایین کنترل و تراشه سطح‌رنگ
+        // ۳۰dp در مرکزش، نشسته روی قوس پایینی حلقه.
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .size(44.dp)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onDelete()
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(scheme.surface),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = strings.delete,
+                    tint = scheme.error,
+                    modifier = Modifier.size(17.dp)
+                )
+            }
+        }
     }
 }
 
@@ -1527,10 +1661,10 @@ private fun EmptyState(onAdd: () -> Unit) {
  * نگهدارنده وضعیت کشیدن و جابه‌جایی کارت‌ها در حالت مرتب‌سازی «دستی».
  *
  * الگوی استاندارد بدون کتابخانه: با لمس طولانی، کارت بلند می‌شود؛ هنگام
- * کشیدن، هر وقت مرکز کارت از مرز آیتم همسایه رد شد جابه‌جایی (swap) روی
- * فهرست آینه‌ای اعمال می‌شود و [dragOffsetY] به‌اندازه اختلاف جایگاه دو
- * آیتم اصلاح می‌شود تا کارت زیر انگشت نپرد. در پایان، ترتیب تازه از راه
- * [onDragEnd] به لایه داده سپرده می‌شود.
+ * کشیدن، هر وقت مرکز کارت از مرکز آیتم همسایه رد شد (قانون نقطه
+ * میانی) جابه‌جایی (swap) روی فهرست محلی اعمال می‌شود و [dragOffsetY]
+ * به‌اندازه اختلاف جایگاه دو آیتم اصلاح می‌شود تا کارت زیر انگشت نپرد.
+ * در پایان، ترتیب تازه از راه [onDragEnd] به لایه داده سپرده می‌شود.
  */
 private class ZoneReorderController(
     private val listState: LazyListState,
@@ -1572,12 +1706,31 @@ private class ZoneReorderController(
         val list = currentList()
         val currentIndex = list.indexOfFirst { it.id == key }
         if (currentIndex < 0) return
-        val draggedCenter =
-            draggingItem.offset + dragOffsetY + draggingItem.size / 2f
-        val target = info.visibleItemsInfo.firstOrNull { item ->
-            item.key != key &&
-                draggedCenter.toInt() in item.offset until (item.offset + item.size)
-        } ?: return
+        val ownCenter = draggingItem.offset + draggingItem.size / 2f
+        val draggedCenter = ownCenter + dragOffsetY
+        // قانون نقطه میانی: جابه‌جایی وقتی رخ می‌دهد که مرکز کارت
+        // کشیده‌شده از مرکز آیتم همسایه بگذرد. آیتم هدف یا مرکز
+        // کشیده‌شده را در مرزهایش دارد یا مرکزش در جهت کشیدن رد شده
+        // است — پس حتی وقتی انگشت در فاصله ۱۲dp بین دو کارت است،
+        // رد شدن از مرکز همسایه همان لحظه جابه‌جایی می‌دهد و نقطه
+        // مرده‌ای نمی‌ماند. از میان نامزدها، نزدیک‌ترین مرکز به
+        // مرکز کشیده‌شده انتخاب می‌شود.
+        val target = info.visibleItemsInfo
+            .filter { item -> item.key != key }
+            .filter { item ->
+                val itemCenter = item.offset + item.size / 2f
+                val containsCenter = draggedCenter >= item.offset &&
+                    draggedCenter < item.offset + item.size
+                val crossedCenter = if (draggedCenter >= ownCenter) {
+                    itemCenter > ownCenter && itemCenter <= draggedCenter
+                } else {
+                    itemCenter < ownCenter && itemCenter >= draggedCenter
+                }
+                containsCenter || crossedCenter
+            }
+            .minByOrNull { item ->
+                abs(item.offset + item.size / 2f - draggedCenter)
+            } ?: return
         val targetIndex = list.indexOfFirst { it.id == target.key }
         if (targetIndex < 0 || targetIndex == currentIndex) return
         onSwap(currentIndex, targetIndex)

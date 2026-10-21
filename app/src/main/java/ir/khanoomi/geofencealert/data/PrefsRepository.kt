@@ -192,6 +192,21 @@ class PrefsRepository(private val context: Context) {
         context.prefsDataStore.edit { prefs -> prefs[KEY_SMS_ASKED] = asked }
     }
 
+    private val KEY_DRAG_HINT_SEEN = booleanPreferencesKey("drag_hint_seen")
+
+    /**
+     * آیا پیام راهنمای «برای جابه‌جایی، کارت را نگه دار و بکش» مصرف شده
+     * است؛ با اولین درگ موفق true می‌شود و پیام دیگر هرگز نمایش داده
+     * نمی‌شود (پیش‌فرض: نه).
+     */
+    val dragHintSeen: Flow<Boolean> = context.prefsDataStore.data
+        .map { prefs -> prefs[KEY_DRAG_HINT_SEEN] ?: false }
+        .catch { emit(false) }
+
+    suspend fun setDragHintSeen(seen: Boolean) {
+        context.prefsDataStore.edit { prefs -> prefs[KEY_DRAG_HINT_SEEN] = seen }
+    }
+
     private val KEY_ZONE_SORT_MODE = stringPreferencesKey("zone_sort_mode")
 
     /**
