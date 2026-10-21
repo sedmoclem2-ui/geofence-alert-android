@@ -16,9 +16,11 @@ import androidx.lifecycle.lifecycleScope
 import ir.khanoomi.geofencealert.data.BackupManager
 import ir.khanoomi.geofencealert.receiver.GpsStateReceiver
 import ir.khanoomi.geofencealert.ui.AppNav
+import ir.khanoomi.geofencealert.ui.LocalAppLang
 import ir.khanoomi.geofencealert.ui.LocalStrings
 import ir.khanoomi.geofencealert.ui.appLangOf
 import ir.khanoomi.geofencealert.ui.stringsFor
+import ir.khanoomi.geofencealert.ui.stringsForContext
 import ir.khanoomi.geofencealert.ui.theme.AppTheme
 import ir.khanoomi.geofencealert.ui.theme.CUSTOM_THEME_KEY
 import ir.khanoomi.geofencealert.ui.theme.buildCustomPalette
@@ -48,7 +50,7 @@ class MainActivity : ComponentActivity() {
             if (restored) {
                 Toast.makeText(
                     this@MainActivity,
-                    "محدوده‌ها از فایل پشتیبان بازیابی شدند",
+                    stringsForContext(this@MainActivity).backupRestored,
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -73,6 +75,7 @@ class MainActivity : ComponentActivity() {
                 // زبان برنامه: فارسی و عربی راست‌به‌چپ، انگلیسی چپ‌به‌راست.
                 CompositionLocalProvider(
                     LocalStrings provides stringsFor(lang),
+                    LocalAppLang provides lang,
                     LocalLayoutDirection provides
                         if (lang == ir.khanoomi.geofencealert.ui.AppLang.EN) {
                             LayoutDirection.Ltr

@@ -9,6 +9,7 @@
     android:background="@android:color/white">
 
     <TextView
+        android:id="@+id/tv_app_name"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="محدوده هشدار"

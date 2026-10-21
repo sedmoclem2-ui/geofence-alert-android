@@ -14,6 +14,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.ActivityCompat
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -81,9 +88,9 @@ import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.data.BackupManager
 import ir.khanoomi.geofencealert.data.PrefsRepository
 import ir.khanoomi.geofencealert.domain.ColorMath.complementArgb
-import ir.khanoomi.geofencealert.domain.TimeFormat
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.ui.theme.AppPalette
+import ir.khanoomi.geofencealert.ui.theme.titleFor
 import ir.khanoomi.geofencealert.ui.theme.CUSTOM_THEME_KEY
 import ir.khanoomi.geofencealert.util.Permissions
 import kotlinx.coroutines.Dispatchers
@@ -91,10 +98,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * صفحه تنظیمات — از نسخه ۲.۳.۰ با چیدمان آکاردئونی مدرن: پنج بخش تاشو
- * (دسترسی‌ها و مجوزها / هشدار و اعلان / ظاهر و زبان / پشتیبان و داده‌ها /
- * راهنما و درباره) که هر کدام با یک سربرگ آیکن‌دار باز و بسته می‌شوند.
- * بخش اول به‌صورت پیش‌فرض باز است و بقیه بسته تا صفحه کوتاه و مرتب بماند.
+ * صفحه تنظیمات — چیدمان آکاردئونی مدرن: پنج بخش تاشو (ظاهر و زبان /
+ * دسترسی‌ها و مجوزها / هشدار و اعلان / پشتیبان و داده‌ها / راهنما و
+ * درباره) که هر کدام با یک سربرگ آیکن‌دار باز و بسته می‌شوند.
+ * بخش «ظاهر و زبان» از نسخه ۲.۵.۰ اولین بخش است و پیش‌فرض باز می‌ماند.
  * همه رفتارهای قبلی (لانچرها، دیالوگ‌ها و وضعیت‌ها) بدون تغییر حفظ شده‌اند.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -102,6 +109,7 @@ import kotlinx.coroutines.launch
 fun SettingsScreen(navController: NavController) {
     val context = LocalContext.current
     val strings = LocalStrings.current
+    val lang = LocalAppLang.current
     val app = context.applicationContext as GeofenceAlertApp
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -114,7 +122,7 @@ fun SettingsScreen(navController: NavController) {
     var stBattery by remember { mutableStateOf(false) }
     var contactsAsked by remember { mutableStateOf(false) }
     var showSmsBlockedDialog by remember { mutableStateOf(false) }
-    // تنها یک بخش در هر لحظه باز است؛ بخش اول (مجوزها) به‌صورت پیش‌فرض باز.
+    // تنها یک بخش در هر لحظه باز است؛ بخش «ظاهر و زبان» پیش‌فرض باز است.
     var expandedSection by remember { mutableStateOf(0) }
 
     val quietEnabled by app.prefs.quietEnabled.collectAsStateWithLifecycle(initialValue = false)
@@ -247,7 +255,7 @@ fun SettingsScreen(navController: NavController) {
                 title = { Text(strings.settingsTitle) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back)
                     }
                 }
             )
@@ -260,24 +268,44 @@ fun SettingsScreen(navController: NavController) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // ---- بخش ۱: دسترسی‌ها و مجوزها ----
+            // ---- بخش ۱: ظاهر و زبان ----
+            item {
+                SettingsSection(
+                    icon = Icons.Filled.Star,
+                    iconColor = MaterialTheme.colorScheme.tertiary,
+                    title = strings.sectionAppearance,
+                    expanded = expandedSection == 0,
+                    onToggle = { expandedSection = if (expandedSection == 0) -1 else 0 }
+                ) {
+                    LanguageCard(
+                        selectedKey = languageKey,
+                        onSelect = { key -> scope.launch { app.prefs.setAppLanguage(key) } }
+                    )
+                    ThemePaletteCard(
+                        selectedKey = themeKey,
+                        onSelect = { key -> scope.launch { app.prefs.setThemePalette(key) } },
+                        onCustomize = { showCustomTheme = true }
+                    )
+                }
+            }
+
+            // ---- بخش ۲: دسترسی‌ها و مجوزها ----
             item {
                 SettingsSection(
                     icon = Icons.Filled.Lock,
                     iconColor = MaterialTheme.colorScheme.primary,
-                    title = "دسترسی‌ها و مجوزها",
-                    expanded = expandedSection == 0,
-                    onToggle = { expandedSection = if (expandedSection == 0) -1 else 0 }
+                    title = strings.sectionPermissions,
+                    expanded = expandedSection == 1,
+                    onToggle = { expandedSection = if (expandedSection == 1) -1 else 1 }
                 ) {
                     Text(
-                        "برای کارکرد درست هشدارها، مجوزهای زیر لازم است. اگر مجوزی رد شده، " +
-                            "از همین‌جا دوباره درخواست کنید یا به تنظیمات برنامه بروید.",
+                        strings.permIntro,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     PermissionRow(
-                        title = "مکان دقیق",
-                        desc = "برای تشخیص ورود به محدوده لازم است.",
+                        title = strings.permPreciseLocation,
+                        desc = strings.permPreciseLocationDesc,
                         granted = stLocation,
                         onRequest = {
                             fineLauncher.launch(
@@ -289,8 +317,8 @@ fun SettingsScreen(navController: NavController) {
                         }
                     )
                     PermissionRow(
-                        title = "مکان در پس‌زمینه",
-                        desc = "برای هشدار وقتی برنامه باز نیست (اندروید ۱۰ به بالا).",
+                        title = strings.permBackgroundLocation,
+                        desc = strings.permBackgroundLocationDesc,
                         granted = stBackground,
                         onRequest = {
                             // در اندروید ۱۱ به بالا باید از تنظیمات سیستم داده شود
@@ -303,8 +331,8 @@ fun SettingsScreen(navController: NavController) {
                     )
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         PermissionRow(
-                            title = "اعلان‌ها",
-                            desc = "برای نمایش هشدار و دکمه توقف (اندروید ۱۳ به بالا).",
+                            title = strings.chipNotif,
+                            desc = strings.permNotificationsDesc,
                             granted = stNotif,
                             onRequest = {
                                 notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -312,14 +340,13 @@ fun SettingsScreen(navController: NavController) {
                         )
                     }
                     PermissionRow(
-                        title = "پیامک",
-                        desc = "برای ارسال پیامک اطلاع‌رسانی هنگام ورود به محدوده، " +
-                            "فقط به شماره‌هایی که خودتان در هر محدوده ثبت می‌کنید.",
+                        title = strings.permSmsTitle,
+                        desc = strings.permSmsDesc,
                         granted = stSms,
                         onRequest = {
                             if (Permissions.hasSendSms(context)) {
                                 scope.launch {
-                                    snackbarHostState.showSnackbar("مجوز پیامک فعال است")
+                                    snackbarHostState.showSnackbar(strings.smsPermGranted)
                                 }
                             } else {
                                 smsLauncher.launch(Manifest.permission.SEND_SMS)
@@ -328,12 +355,12 @@ fun SettingsScreen(navController: NavController) {
                     )
                     PermissionRow(
                         title = strings.permContacts,
-                        desc = "برای انتخاب شماره پیامک از دفترچه تلفن، هنگام ویرایش محدوده.",
+                        desc = strings.permContactsDesc,
                         granted = stContacts,
                         onRequest = {
                             if (Permissions.hasContacts(context)) {
                                 scope.launch {
-                                    snackbarHostState.showSnackbar("مجوز مخاطبین فعال است")
+                                    snackbarHostState.showSnackbar(strings.contactsPermGranted)
                                 }
                             } else {
                                 // اگر قبلاً درخواست شده و سیستم دیگر دیالوگ
@@ -357,11 +384,11 @@ fun SettingsScreen(navController: NavController) {
                     )
                     PermissionRow(
                         title = strings.permBattery,
-                        desc = "بدون محدودیت باتری، پایش در پس‌زمینه متوقف نمی‌شود.",
+                        desc = strings.permBatteryDesc,
                         granted = stBattery,
                         statusText = if (stBattery) strings.batteryUnrestricted
                         else strings.batteryRestricted,
-                        actionLabel = "تنظیم",
+                        actionLabel = strings.permAdjust,
                         onRequest = {
                             try {
                                 context.startActivity(
@@ -385,18 +412,18 @@ fun SettingsScreen(navController: NavController) {
                     OutlinedButton(
                         onClick = { Permissions.openAppSettings(context) },
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text("باز کردن تنظیمات برنامه") }
+                    ) { Text(strings.openAppSettings) }
                 }
             }
 
-            // ---- بخش ۲: هشدار و اعلان ----
+            // ---- بخش ۳: هشدار و اعلان ----
             item {
                 SettingsSection(
                     icon = Icons.Filled.Notifications,
                     iconColor = MaterialTheme.colorScheme.secondary,
-                    title = "هشدار و اعلان",
-                    expanded = expandedSection == 1,
-                    onToggle = { expandedSection = if (expandedSection == 1) -1 else 1 }
+                    title = strings.sectionAlerts,
+                    expanded = expandedSection == 2,
+                    onToggle = { expandedSection = if (expandedSection == 2) -1 else 2 }
                 ) {
                     SoundVibrationCard(
                         volume = alertVolumeVal,
@@ -427,33 +454,12 @@ fun SettingsScreen(navController: NavController) {
                 }
             }
 
-            // ---- بخش ۳: ظاهر و زبان ----
-            item {
-                SettingsSection(
-                    icon = Icons.Filled.Star,
-                    iconColor = MaterialTheme.colorScheme.tertiary,
-                    title = "ظاهر و زبان",
-                    expanded = expandedSection == 2,
-                    onToggle = { expandedSection = if (expandedSection == 2) -1 else 2 }
-                ) {
-                    LanguageCard(
-                        selectedKey = languageKey,
-                        onSelect = { key -> scope.launch { app.prefs.setAppLanguage(key) } }
-                    )
-                    ThemePaletteCard(
-                        selectedKey = themeKey,
-                        onSelect = { key -> scope.launch { app.prefs.setThemePalette(key) } },
-                        onCustomize = { showCustomTheme = true }
-                    )
-                }
-            }
-
             // ---- بخش ۴: پشتیبان و داده‌ها ----
             item {
                 SettingsSection(
                     icon = Icons.Filled.List,
                     iconColor = MaterialTheme.colorScheme.primary,
-                    title = "پشتیبان و داده‌ها",
+                    title = strings.sectionBackupData,
                     expanded = expandedSection == 3,
                     onToggle = { expandedSection = if (expandedSection == 3) -1 else 3 }
                 ) {
@@ -470,7 +476,7 @@ fun SettingsScreen(navController: NavController) {
                 SettingsSection(
                     icon = Icons.Filled.Info,
                     iconColor = MaterialTheme.colorScheme.secondary,
-                    title = "راهنما و درباره",
+                    title = strings.sectionHelpAbout,
                     expanded = expandedSection == 4,
                     onToggle = { expandedSection = if (expandedSection == 4) -1 else 4 }
                 ) {
@@ -485,7 +491,7 @@ fun SettingsScreen(navController: NavController) {
                             pm.getApplicationInfo(context.packageName, 0)
                         ).toString()
                     } catch (_: Exception) {
-                        "محدوده هشدار"
+                        strings.appTitle
                     }
                     val versionName = try {
                         val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -502,7 +508,7 @@ fun SettingsScreen(navController: NavController) {
                         ""
                     }
                     Text(
-                        "$appLabel — ${strings.version} ${TimeFormat.toFaDigits(versionName)}",
+                        "$appLabel — ${strings.version} ${localizedDigits(versionName, lang)}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -532,19 +538,10 @@ fun SettingsScreen(navController: NavController) {
         AlertDialog(
             onDismissRequest = { showSmsBlockedDialog = false },
             title = {
-                Text("مجوز پیامک مسدود شده است", fontWeight = FontWeight.Bold)
+                Text(strings.smsBlockedTitle, fontWeight = FontWeight.Bold)
             },
             text = {
-                Text(
-                    "به نظر می‌رسد اندروید درخواست مجوز پیامک را مسدود کرده است؛ " +
-                        "این اتفاق برای برنامه‌هایی که خارج از فروشگاه نصب می‌شوند طبیعی است " +
-                        "و جای نگرانی نیست. برای فعال کردن مجوز این کارها را انجام دهید:\n" +
-                        "۱. روی «باز کردن تنظیمات برنامه» در پایین همین پیام بزنید.\n" +
-                        "۲. در صفحه‌ای که باز می‌شود، روی سه‌نقطهٔ بالای صفحه بزنید.\n" +
-                        "۳. گزینهٔ «اجازه به تنظیمات محدود» (Allow restricted settings) را انتخاب و تأیید کنید.\n" +
-                        "۴. سپس به بخش «مجوزها» (Permissions) بروید، «پیامک» (SMS) را انتخاب کنید و «اجازه دادن» (Allow) را بزنید.\n" +
-                        "۵. به برنامه برگردید؛ وضعیت مجوز به‌صورت خودکار به‌روز می‌شود."
-                )
+                Text(strings.smsBlockedBody)
             },
             confirmButton = {
                 TextButton(
@@ -552,11 +549,11 @@ fun SettingsScreen(navController: NavController) {
                         showSmsBlockedDialog = false
                         Permissions.openAppSettings(context)
                     }
-                ) { Text("باز کردن تنظیمات برنامه", fontWeight = FontWeight.Bold) }
+                ) { Text(strings.openAppSettings, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
                 TextButton(onClick = { showSmsBlockedDialog = false }) {
-                    Text("بعداً")
+                    Text(strings.later)
                 }
             }
         )
@@ -614,11 +611,27 @@ private fun SettingsSection(
                     tint = scheme.onSurfaceVariant
                 )
             }
-            AnimatedVisibility(visible = expanded) {
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    )
+                ) + fadeIn(),
+                exit = shrinkVertically(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    )
+                ) + fadeOut()
+            ) {
                 Column(
-                    modifier = Modifier.padding(
-                        start = 14.dp, end = 14.dp, bottom = 14.dp
-                    ),
+                    modifier = Modifier
+                        .animateContentSize()
+                        .padding(
+                            start = 14.dp, end = 14.dp, bottom = 14.dp
+                        ),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     content = content
                 )
@@ -637,9 +650,10 @@ private fun PermissionRow(
     desc: String,
     granted: Boolean,
     statusText: String? = null,
-    actionLabel: String = "درخواست",
+    actionLabel: String? = null,
     onRequest: () -> Unit
 ) {
+    val strings = LocalStrings.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -659,7 +673,7 @@ private fun PermissionRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
-                statusText ?: if (granted) "داده شده" else "داده نشده",
+                statusText ?: if (granted) strings.permGranted else strings.permNotGranted,
                 color = if (granted) MaterialTheme.colorScheme.primary
                 else MaterialTheme.colorScheme.error,
                 fontWeight = FontWeight.Bold,
@@ -667,7 +681,7 @@ private fun PermissionRow(
             )
         }
         if (!granted) {
-            OutlinedButton(onClick = onRequest) { Text(actionLabel) }
+            OutlinedButton(onClick = onRequest) { Text(actionLabel ?: strings.permRequest) }
         }
     }
 }
@@ -762,7 +776,7 @@ private fun QuietHoursCard(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    "در این بازه، هشدار فقط با اعلان و بدون صدا نمایش داده می‌شود.",
+                    LocalStrings.current.quietHoursSub,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -775,13 +789,13 @@ private fun QuietHoursCard(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 TimePickerField(
-                    label = "از",
+                    label = LocalStrings.current.fromLabel,
                     minutes = startMin,
                     onPick = onStartChange,
                     modifier = Modifier.weight(1f)
                 )
                 TimePickerField(
-                    label = "تا",
+                    label = LocalStrings.current.toLabel,
                     minutes = endMin,
                     onPick = onEndChange,
                     modifier = Modifier.weight(1f)
@@ -822,7 +836,7 @@ private fun ThemePaletteCard(
                 rowChoices.forEach { choice ->
                     when (choice) {
                         is ThemeChoice.Preset -> PaletteTile(
-                            title = choice.palette.titleFa,
+                            title = choice.palette.titleFor(LocalAppLang.current),
                             selected = choice.palette.key == selectedKey,
                             circleModifier = Modifier.background(choice.palette.light.primary),
                             onClick = { onSelect(choice.palette.key) }
@@ -909,10 +923,10 @@ private fun CustomThemeDialog(
     val complement = complementArgb(picked)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("شخصی‌سازی تم", fontWeight = FontWeight.Bold) },
+        title = { Text(LocalStrings.current.customThemeTitle, fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("رنگ اصلی", fontWeight = FontWeight.Bold)
+                Text(LocalStrings.current.primaryColor, fontWeight = FontWeight.Bold)
                 CUSTOM_SWATCHES.chunked(4).forEach { rowSwatches ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -937,7 +951,7 @@ private fun CustomThemeDialog(
                         }
                     }
                 }
-                Text("پیش‌نمایش", fontWeight = FontWeight.Bold)
+                Text(LocalStrings.current.preview, fontWeight = FontWeight.Bold)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -961,7 +975,7 @@ private fun CustomThemeDialog(
                                 .background(Color(picked.toInt()))
                                 .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                         )
-                        Text("رنگ اصلی", style = MaterialTheme.typography.bodySmall)
+                        Text(LocalStrings.current.primaryColor, style = MaterialTheme.typography.bodySmall)
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(
@@ -971,33 +985,33 @@ private fun CustomThemeDialog(
                                 .background(Color(complement.toInt()))
                                 .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                         )
-                        Text("رنگ مکمل (خودکار)", style = MaterialTheme.typography.bodySmall)
+                        Text(LocalStrings.current.complementColorAuto, style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                Text("تم پایه", fontWeight = FontWeight.Bold)
+                Text(LocalStrings.current.baseTheme, fontWeight = FontWeight.Bold)
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                     SegmentedButton(
                         selected = !dark,
                         onClick = { dark = false },
                         shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                        label = { Text("روشن") }
+                        label = { Text(LocalStrings.current.lightTheme) }
                     )
                     SegmentedButton(
                         selected = dark,
                         onClick = { dark = true },
                         shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                        label = { Text("تیره") }
+                        label = { Text(LocalStrings.current.darkTheme) }
                     )
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = { onSave(picked, dark) }) {
-                Text("ذخیره", fontWeight = FontWeight.Bold)
+                Text(LocalStrings.current.save, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("انصراف") }
+            TextButton(onClick = onDismiss) { Text(LocalStrings.current.cancel) }
         }
     )
 }
@@ -1013,14 +1027,10 @@ private fun LimitationsCard() {
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold
         )
+        val st = LocalStrings.current
         val items = listOf(
-            "حداکثر ۱۰۰ ژئوفنس هم‌زمان توسط اندروید پشتیبانی می‌شود.",
-            "پس از «Force Stop» کردن برنامه از تنظیمات، ژئوفنس‌ها توسط سیستم حذف می‌شوند و تا باز شدن دوباره برنامه کار نمی‌کنند.",
-            "در حالت ذخیره باتری (Doze) یا بهینه‌سازی تهاجمی باتری — به‌ویژه در گوشی‌های سامسونگ — ممکن است رویداد ورود/خروج با تأخیر برسد.",
-            "برای هشدار در پس‌زمینه باید دسترسی مکان «همیشه» (Allow all the time) داده شود.",
-            "دقت تشخیص به GPS و شبکه بستگی دارد؛ داخل ساختمان ممکن است خطا داشته باشد.",
-            "اگر هنگام ثبت محدوده داخل آن باشید، هشداری فعال نمی‌شود؛ فقط «ورود جدید» هشدار می‌دهد.",
-            "خاموش بودن گوشی یا لغو مجوزها، تشخیص ورود را متوقف می‌کند؛ برنامه چنین چیزی را تضمین نمی‌کند."
+            st.limit1, st.limit2, st.limit3, st.limit4,
+            st.limit5, st.limit6, st.limit7
         )
         items.forEach { Text("• $it", style = MaterialTheme.typography.bodySmall) }
     }
@@ -1085,20 +1095,20 @@ private fun LanguageCard(
         )
         SettingsPrettyOptionRow(
             selected = selectedKey == "fa",
-            title = "فارسی",
-            subtitle = "Persian",
+            title = strings.langNameFa,
+            subtitle = strings.langSubFa,
             onClick = { onSelect("fa") }
         )
         SettingsPrettyOptionRow(
             selected = selectedKey == "en",
-            title = "English",
-            subtitle = "English",
+            title = strings.langNameEn,
+            subtitle = strings.langSubEn,
             onClick = { onSelect("en") }
         )
         SettingsPrettyOptionRow(
             selected = selectedKey == "ar",
-            title = "العربية",
-            subtitle = "Arabic",
+            title = strings.langNameAr,
+            subtitle = strings.langSubAr,
             onClick = { onSelect("ar") }
         )
     }
@@ -1123,7 +1133,7 @@ private fun SoundVibrationCard(
             fontWeight = FontWeight.Bold
         )
         Text(
-            "${strings.volume}: ٪${TimeFormat.toFaDigits(volume.toString())}",
+            "${strings.volume}: ${formatPercent(volume)}",
             style = MaterialTheme.typography.bodyMedium
         )
         Slider(
@@ -1133,7 +1143,7 @@ private fun SoundVibrationCard(
             modifier = Modifier.fillMaxWidth()
         )
         Text(
-            "${strings.vibrationIntensity}: ٪${TimeFormat.toFaDigits(vibration.toString())}",
+            "${strings.vibrationIntensity}: ${formatPercent(vibration)}",
             style = MaterialTheme.typography.bodyMedium
         )
         Slider(
@@ -1163,8 +1173,7 @@ private fun BackupCard(
             fontWeight = FontWeight.Bold
         )
         Text(
-            "برنامه به‌طور خودکار از محدوده‌ها در پوشه Documents گوشی پشتیبان می‌گیرد؛ " +
-                "اگر برنامه را حذف و دوباره نصب کنید، محدوده‌ها خودبه‌خود برمی‌گردند.",
+            strings.backupAutoNote,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1177,7 +1186,7 @@ private fun BackupCard(
             modifier = Modifier.fillMaxWidth()
         ) { Text(strings.backupImport) }
         Text(
-            "ورودی پشتیبان همه محدوده‌های فعلی را با محتوای فایل جایگزین می‌کند.",
+            strings.backupReplaceWarning,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.error
         )
@@ -1186,4 +1195,12 @@ private fun BackupCard(
             modifier = Modifier.fillMaxWidth()
         ) { Text(strings.csvExport) }
     }
+}
+
+/** نمایش درصد با ارقام و نشانه بومی زبان فعال (٪ در فارسی/عربی، % در انگلیسی). */
+@Composable
+private fun formatPercent(value: Int): String {
+    val lang = LocalAppLang.current
+    val digits = localizedDigits(value.toString(), lang)
+    return if (lang == AppLang.EN) "$digits%" else "٪$digits"
 }

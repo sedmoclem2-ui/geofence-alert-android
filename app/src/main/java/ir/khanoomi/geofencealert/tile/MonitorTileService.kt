@@ -4,6 +4,7 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
+import ir.khanoomi.geofencealert.ui.stringsForContext
 import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +33,7 @@ class MonitorTileService : TileService() {
                 withContext(Dispatchers.Main) {
                     qsTile?.let {
                         it.state = if (on) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-                        it.label = "محدوده هشدار"
+                        it.label = stringsForContext(applicationContext).appTitle
                         it.updateTile()
                     }
                 }

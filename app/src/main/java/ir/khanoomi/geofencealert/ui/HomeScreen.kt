@@ -12,6 +12,8 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -19,14 +21,13 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,7 +44,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -54,8 +55,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
@@ -71,8 +70,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -85,6 +82,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -111,9 +109,7 @@ import androidx.navigation.NavController
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.alert.AlertController
 import ir.khanoomi.geofencealert.data.Zone
-import ir.khanoomi.geofencealert.domain.TimeFormat
 import ir.khanoomi.geofencealert.domain.ZoneSort
-import ir.khanoomi.geofencealert.domain.formatRadiusFa
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.ui.theme.RedDeep
 import ir.khanoomi.geofencealert.ui.theme.mixColor
@@ -160,10 +156,32 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     val sortMode = prefs.zoneSortMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ZoneSort.MANUAL)
 
+    /**
+     * ترتیب دستیِ تازه رها‌شده که هنوز از دیتابیس برنگشته است. تا وقتی
+     * انتشار فهرست محدوده‌ها دقیقاً همین ترتیب را نشان ندهد، نمایش بر
+     * اساس همین نگه داشته می‌شود تا یک انتشار کهنه، کارت را به جای
+     * قبلی‌اش برنگرداند (رفع پرش در پایان درگ).
+     */
+    private val pendingOrderIds =
+        kotlinx.coroutines.flow.MutableStateFlow<List<Long>?>(null)
+
     /** فهرست نمایشی محدوده‌ها، مرتب‌شده بر اساس حالت انتخاب‌شده. */
-    val displayZones = combine(zones, sortMode) { list, mode ->
-        ZoneSort.sortZones(list, mode)
+    val displayZones = combine(zones, sortMode, pendingOrderIds) { list, mode, pending ->
+        if (mode == ZoneSort.MANUAL && pending != null) {
+            val byId = list.associateBy { it.id }
+            val ordered = pending.mapNotNull { byId[it] }
+            val rest = list.filter { it.id !in pending.toSet() }
+            ordered + rest
+        } else {
+            ZoneSort.sortZones(list, mode)
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** پاک‌کردن ترتیب معلق وقتی فهرست واقعی دقیقاً همان را نشان می‌دهد. */
+    fun confirmPendingOrder(currentIds: List<Long>) {
+        val pending = pendingOrderIds.value ?: return
+        if (pending == currentIds) pendingOrderIds.value = null
+    }
 
     fun setSortMode(mode: String) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -175,8 +193,11 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** ثبت ترتیب دستی تازه پس از کشیدن و رها کردن کارت‌ها. */
+    /** ثبت ترتیب دستی تازه پس از کشیدن و رها کردن کارت‌ها (یک تراکنش). */
     fun reorderZones(orderedIds: List<Long>) {
+        // اول ترتیب معلق ثبت می‌شود تا فهرست نمایشی فوراً همان بماند و
+        // انتشار کهنه دیتابیس آن را برنگرداند؛ بعد در پس‌زمینه ذخیره می‌شود.
+        pendingOrderIds.value = orderedIds
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 repo.updateSortOrders(orderedIds)
@@ -257,6 +278,8 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 @Composable
 fun HomeScreen(navController: NavController) {
     val context = LocalContext.current
+    val strings = LocalStrings.current
+    val lang = LocalAppLang.current
     val app = context.applicationContext as GeofenceAlertApp
     val vm: HomeViewModel = viewModel { HomeViewModel(app) }
 
@@ -301,6 +324,12 @@ fun HomeScreen(navController: NavController) {
             }
         )
     }
+    // وقتی انتشار واقعی دیتابیس دقیقاً ترتیب رهاشده را نشان داد،
+    // نگه‌داری معلق تمام می‌شود.
+    LaunchedEffect(zones) {
+        vm.confirmPendingOrder(zones.map { it.id })
+    }
+
     // آینه محلی فقط وقتی با داده واقعی همگام می‌شود که درگ در جریان نیست
     // تا وسط کشیدن، فهرست زیر دست کاربر جابه‌جا نشود.
     LaunchedEffect(displayZones, sortMode, reorderController.isDragging) {
@@ -350,13 +379,30 @@ fun HomeScreen(navController: NavController) {
                 title = { Text(LocalStrings.current.appTitle, fontWeight = FontWeight.Bold) },
                 actions = {
                     IconButton(onClick = { navController.navigate("stats") }) {
-                        Icon(Icons.Filled.DateRange, contentDescription = "آمار")
+                        Icon(Icons.Filled.DateRange, contentDescription = strings.statistics)
                     }
                     IconButton(onClick = { navController.navigate("history") }) {
-                        Icon(Icons.Filled.List, contentDescription = "تاریخچه")
+                        Icon(Icons.Filled.List, contentDescription = strings.history)
+                    }
+                    Box {
+                        IconButton(onClick = { sortPanelOpen = !sortPanelOpen }) {
+                            Icon(Icons.Filled.List, contentDescription = strings.sortTitle)
+                        }
+                        if (ZoneSort.normalize(sortMode) != ZoneSort.MANUAL) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(6.dp)
+                                    .size(9.dp)
+                                    .background(
+                                        MaterialTheme.colorScheme.error,
+                                        CircleShape
+                                    )
+                            )
+                        }
                     }
                     IconButton(onClick = { navController.navigate("settings") }) {
-                        Icon(Icons.Default.Settings, contentDescription = "تنظیمات")
+                        Icon(Icons.Default.Settings, contentDescription = strings.settingsCd)
                     }
                 }
             )
@@ -377,35 +423,22 @@ fun HomeScreen(navController: NavController) {
             )
         }
     ) { padding ->
-        LazyColumn(
-            state = listState,
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+        ) {
+        LazyColumn(
+            state = listState,
+            // هنگام درگ، اسکرول فهرست قفل است تا کارت زیر انگشت نپرد یا
+            // فهرست هم‌زمان اسکرول نشود.
+            userScrollEnabled = !reorderController.isDragging,
+            modifier = Modifier
+                .fillMaxSize()
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SortToggleButton(
-                        sortMode = sortMode,
-                        expanded = sortPanelOpen,
-                        onClick = { sortPanelOpen = !sortPanelOpen }
-                    )
-                    AnimatedVisibility(
-                        visible = sortPanelOpen,
-                        enter = expandVertically() + fadeIn(),
-                        exit = shrinkVertically() + fadeOut()
-                    ) {
-                        SortPanel(
-                            sortMode = sortMode,
-                            onSelect = { vm.setSortMode(it) }
-                        )
-                    }
-                }
-            }
-
             item {
                 RadarHeroCard(
                     monitoring = monitoring,
@@ -483,7 +516,7 @@ fun HomeScreen(navController: NavController) {
                             shape = CircleShape
                         ) {
                             Text(
-                                "برای جابه‌جایی، کارت را نگه دار و بکش",
+                                strings.dragHint,
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer,
@@ -492,12 +525,27 @@ fun HomeScreen(navController: NavController) {
                         }
                     }
                 }
-                items(shownZones, key = { it.id }) { zone ->
+                itemsIndexed(shownZones, key = { _, zone -> zone.id }) { index, zone ->
+                    // ورود پلکانی کارت‌ها در نخستین ترکیب: محو + سرخوردن ملایم
+                    val entrance = remember(zone.id) { Animatable(0f) }
+                    LaunchedEffect(zone.id) {
+                        entrance.animateTo(
+                            1f,
+                            tween(
+                                durationMillis = 420,
+                                delayMillis = (index % 10) * 55
+                            )
+                        )
+                    }
                     val isDragging = isManualSort &&
                         reorderController.draggingKey == zone.id
                     val cardModifier = if (isManualSort) {
                         Modifier
                             .animateItem()
+                            .graphicsLayer {
+                                alpha = entrance.value
+                                translationY = (1f - entrance.value) * 26.dp.toPx()
+                            }
                             .zIndex(if (isDragging) 1f else 0f)
                             .graphicsLayer {
                                 translationY = if (isDragging) {
@@ -526,11 +574,17 @@ fun HomeScreen(navController: NavController) {
                                 )
                             }
                     } else {
-                        Modifier.animateItem()
+                        Modifier
+                            .animateItem()
+                            .graphicsLayer {
+                                alpha = entrance.value
+                                translationY = (1f - entrance.value) * 26.dp.toPx()
+                            }
                     }
                     ZoneCard(
                         zone = zone,
                         modifier = cardModifier,
+                        toggleEnabled = !isManualSort,
                         onToggleActive = { vm.toggleActive(zone) },
                         onEdit = { navController.navigate("edit?zoneId=${zone.id}") },
                         onDelete = { zoneToDelete = zone },
@@ -539,6 +593,57 @@ fun HomeScreen(navController: NavController) {
                 }
             }
         }
+
+        // پنل مرتب‌سازی: روکش واقعی بالای کارت پایش — با اسکریم محو و
+        // پنل شناور زیر هدر؛ محتوای صفحه اصلاً جابه‌جا نمی‌شود.
+        AnimatedVisibility(
+            visible = sortPanelOpen,
+            enter = fadeIn(tween(180)),
+            exit = fadeOut(tween(150))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.32f))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { sortPanelOpen = false }
+            )
+        }
+        AnimatedVisibility(
+            visible = sortPanelOpen,
+            enter = fadeIn(tween(200)) +
+                androidx.compose.animation.slideInVertically(
+                    tween(240)
+                ) { -it / 3 } +
+                androidx.compose.animation.scaleIn(
+                    animationSpec = tween(240),
+                    initialScale = 0.96f
+                ),
+            exit = fadeOut(tween(140)) +
+                androidx.compose.animation.slideOutVertically(
+                    tween(180)
+                ) { -it / 3 } +
+                androidx.compose.animation.scaleOut(
+                    animationSpec = tween(180),
+                    targetScale = 0.97f
+                ),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            SortPanel(
+                sortMode = sortMode,
+                onSelect = { mode ->
+                    // انتخاب حالت، پنل را نمی‌بندد؛ بستن با اسکریم یا
+                    // دکمه مرتب‌سازی است. لمس ردیف جهت‌دار فعال فقط جهتش
+                    // را برعکس می‌کند و پنل باز می‌ماند.
+                    vm.setSortMode(mode)
+                }
+            )
+        }
+        }
     }
 
     zoneToDelete?.let { zone ->
@@ -546,48 +651,17 @@ fun HomeScreen(navController: NavController) {
             onDismissRequest = { zoneToDelete = null },
             containerColor = MaterialTheme.colorScheme.surface,
             title = { Text(LocalStrings.current.deleteZoneTitle, fontWeight = FontWeight.Bold) },
-            text = { Text("«${zone.name}» حذف شود؟") },
+            text = { Text(String.format(strings.deleteZoneConfirm, zone.name)) },
             confirmButton = {
                 TextButton(onClick = {
                     vm.deleteZone(zone)
                     zoneToDelete = null
-                }) { Text("حذف", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
+                }) { Text(strings.delete, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold) }
             },
             dismissButton = {
-                TextButton(onClick = { zoneToDelete = null }) { Text("انصراف") }
+                TextButton(onClick = { zoneToDelete = null }) { Text(strings.cancel) }
             }
         )
-    }
-}
-
-/** پالس رادار: سه دایره متحدالمرکز با انیمیشن بی‌پایان. */
-@Composable
-private fun RadarPulse(
-    modifier: Modifier = Modifier,
-    pulseColor: Color,
-    dotColor: Color
-) {
-    val infinite = rememberInfiniteTransition(label = "radar")
-    val progress by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "radarProgress"
-    )
-    Canvas(modifier = modifier) {
-        val maxR = size.minDimension / 2f
-        for (i in 0 until 3) {
-            val f = (progress + i / 3f) % 1f
-            drawCircle(
-                color = pulseColor.copy(alpha = 0.5f * (1f - f)),
-                radius = maxR * (0.55f + 0.45f * f),
-                style = Stroke(width = 2.dp.toPx())
-            )
-        }
-        drawCircle(color = dotColor, radius = 7.dp.toPx())
     }
 }
 
@@ -618,6 +692,10 @@ private fun RadarHeroCard(
             mixColor(scheme.primary, scheme.secondary, 0.45f)
         )
     )
+    val strings = LocalStrings.current
+    val haptics = LocalHapticFeedback.current
+    val heroInteraction = remember { MutableInteractionSource() }
+    val heroPressScale = rememberPressScale(heroInteraction, pressedScale = 0.985f)
     val hasIssue = !monitoring || !locationOn || !permLocation || !permBackground ||
         !permNotif || !permSms || !permContacts || !batteryOk
     // درخشش متحرک روی لبه کارت: حس آینده‌نگرانه، با هزینه کم (فقط همین کارت بازسازی می‌شود)
@@ -641,11 +719,20 @@ private fun RadarHeroCard(
         end = Offset(shimmerX * 900f + 320f, 420f)
     )
     Card(
+        onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            onMonitoringChange(!monitoring)
+        },
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = heroPressScale
+                scaleY = heroPressScale
+            }
             .border(2.dp, shimmerBorder, MaterialTheme.shapes.large),
         shape = MaterialTheme.shapes.large,
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        interactionSource = heroInteraction
     ) {
         Box(
             modifier = Modifier
@@ -663,47 +750,41 @@ private fun RadarHeroCard(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        val titleColor by animateColorAsState(
+                            targetValue = if (monitoring) scheme.onPrimary
+                            else scheme.onPrimary.copy(alpha = 0.72f),
+                            animationSpec = tween(400),
+                            label = "heroTitleColor"
+                        )
                         Text(
-                            text = if (monitoring) LocalStrings.current.monitoringOn
-                            else LocalStrings.current.monitoringOff,
+                            text = if (monitoring) strings.monitoringOn
+                            else strings.monitoringOff,
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
-                            color = scheme.onPrimary,
+                            color = titleColor,
                             modifier = Modifier.weight(1f)
-                        )
-                        Switch(
-                            checked = monitoring,
-                            onCheckedChange = onMonitoringChange,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = scheme.onPrimary,
-                                checkedTrackColor = scheme.onPrimary.copy(alpha = 0.35f),
-                                checkedBorderColor = Color.Transparent,
-                                uncheckedThumbColor = scheme.onPrimary.copy(alpha = 0.75f),
-                                uncheckedTrackColor = scheme.onPrimary.copy(alpha = 0.18f),
-                                uncheckedBorderColor = Color.Transparent
-                            )
                         )
                     }
                     Text(
-                        "$activeCount ${LocalStrings.current.activeZonesSuffix} • " +
-                            "$alertingCount ${LocalStrings.current.activeAlertsSuffix}",
+                        "${localizedDigits(activeCount.toString(), LocalAppLang.current)} ${strings.activeZonesSuffix} • " +
+                            "${localizedDigits(alertingCount.toString(), LocalAppLang.current)} ${strings.activeAlertsSuffix}",
                         style = MaterialTheme.typography.bodyMedium,
                         color = scheme.onPrimary.copy(alpha = 0.85f)
                     )
-                    // چیپ وضعیت «همه» درخواست‌ها: مکان، پس‌زمینه، GPS،
-                    // اعلان، پیامک، مخاطبین و باتری — نقطه سبز یعنی سالم،
-                    // قرمز یعنی نیازمند اقدام.
+                    // چیپ‌های وضعیت: مکان، پس‌زمینه، باتری، اعلان،
+                    // پیامک، مخاطبین و GPS — نقطه سبز یعنی سالم، قرمز
+                    // یعنی نیازمند اقدام.
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        HeroPermChip("مکان", permLocation)
-                        HeroPermChip("پس‌زمینه", permBackground)
+                        HeroPermChip(strings.chipLocation, permLocation)
+                        HeroPermChip(strings.chipBackground, permBackground)
+                        HeroPermChip(strings.chipBattery, batteryOk)
+                        HeroPermChip(strings.chipNotif, permNotif)
+                        HeroPermChip(strings.permSmsTitle, permSms)
+                        HeroPermChip(strings.permContacts, permContacts)
                         HeroPermChip("GPS", locationOn)
-                        HeroPermChip("اعلان", permNotif)
-                        HeroPermChip("پیامک", permSms)
-                        HeroPermChip("مخاطبین", permContacts)
-                        HeroPermChip("باتری", batteryOk)
                     }
                     if (hasIssue) {
                         TextButton(
@@ -715,10 +796,12 @@ private fun RadarHeroCard(
                         }
                     }
                 }
-                RadarPulse(
+                RadarWaves(
+                    active = monitoring,
+                    waveColor = Color.White,
+                    idleColor = Color.White.copy(alpha = 0.55f),
                     modifier = Modifier.size(96.dp),
-                    pulseColor = scheme.secondary,
-                    dotColor = Color.White
+                    coreRadiusDp = 7.dp
                 )
             }
         }
@@ -728,6 +811,11 @@ private fun RadarHeroCard(
 @Composable
 private fun HeroPermChip(label: String, ok: Boolean) {
     val onGradient = MaterialTheme.colorScheme.onPrimary
+    val dotColor by animateColorAsState(
+        targetValue = if (ok) Color(0xFF7CFC9A) else Color(0xFFFF8A80),
+        animationSpec = tween(400),
+        label = "chipDot"
+    )
     Surface(
         color = onGradient.copy(alpha = 0.16f),
         shape = CircleShape
@@ -740,10 +828,7 @@ private fun HeroPermChip(label: String, ok: Boolean) {
             Box(
                 modifier = Modifier
                     .size(8.dp)
-                    .background(
-                        if (ok) Color(0xFF7CFC9A) else Color(0xFFFF8A80),
-                        CircleShape
-                    )
+                    .background(dotColor, CircleShape)
             )
             Text(
                 label,
@@ -811,26 +896,6 @@ private fun AlertBanner(zoneName: String, onStop: () -> Unit) {
     }
 }
 
-/** مینی‌رادار کارت محدوده؛ شعاع دایره‌ها با لگاریتم شعاع محدوده مقیاس می‌شود. */
-@Composable
-private fun RadarMini(radiusMeters: Double, active: Boolean, modifier: Modifier = Modifier) {
-    val scheme = MaterialTheme.colorScheme
-    val ringBase = if (active) scheme.primary else scheme.outline
-    val dot = if (active) scheme.primary else scheme.outline
-    Canvas(modifier = modifier.size(72.dp)) {
-        val t = (log10(radiusMeters.toFloat()).coerceIn(1f, 6f) - 1f) / 5f
-        val maxR = size.minDimension / 2f
-        listOf(1f, 0.72f, 0.46f).forEachIndexed { i, frac ->
-            drawCircle(
-                color = ringBase.copy(alpha = 0.55f - i * 0.12f),
-                radius = maxR * frac * (0.72f + 0.28f * t),
-                style = Stroke(width = 1.5.dp.toPx())
-            )
-        }
-        drawCircle(color = dot, radius = 6.dp.toPx())
-    }
-}
-
 @Composable
 private fun TonalChip(text: String) {
     Surface(
@@ -850,11 +915,13 @@ private fun TonalChip(text: String) {
 private fun StatusPill(zone: Zone) {
     val scheme = MaterialTheme.colorScheme
     val strings = LocalStrings.current
-    val (bg, fg, label) = when {
+    val (targetBg, targetFg, label) = when {
         zone.isAlerting -> Triple(scheme.errorContainer, scheme.onErrorContainer, strings.alertActive)
         !zone.isActive -> Triple(scheme.surfaceVariant, scheme.onSurfaceVariant, strings.inactive)
         else -> Triple(scheme.primaryContainer, scheme.onPrimaryContainer, strings.waitingEntry)
     }
+    val bg by animateColorAsState(targetBg, tween(400), label = "pillBg")
+    val fg by animateColorAsState(targetFg, tween(400), label = "pillFg")
     Surface(color = bg, shape = CircleShape) {
         Text(
             label,
@@ -870,16 +937,51 @@ private fun StatusPill(zone: Zone) {
 private fun ZoneCard(
     zone: Zone,
     modifier: Modifier = Modifier,
+    toggleEnabled: Boolean = true,
     onToggleActive: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onStopAlert: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val strings = LocalStrings.current
+    val lang = LocalAppLang.current
+    val haptics = LocalHapticFeedback.current
+    val cardInteraction = remember { MutableInteractionSource() }
+    val cardPressScale = rememberPressScale(cardInteraction, pressedScale = 0.98f)
+    // مقیاس حلقه‌های مینی‌رادار با لگاریتم شعاع محدوده (مثل قبل)
+    val ringScale = remember(zone.radiusMeters) {
+        val t = (log10(zone.radiusMeters.toFloat()).coerceIn(1f, 6f) - 1f) / 5f
+        0.72f + 0.28f * t
+    }
+    val borderColor by animateColorAsState(
+        targetValue = when {
+            zone.isAlerting -> scheme.error
+            zone.isActive -> scheme.primary.copy(alpha = 0.55f)
+            else -> scheme.outlineVariant
+        },
+        animationSpec = tween(450),
+        label = "zoneBorder"
+    )
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .animateContentSize(),
+            .animateContentSize()
+            .graphicsLayer {
+                scaleX = cardPressScale
+                scaleY = cardPressScale
+            }
+            .border(1.5.dp, borderColor, MaterialTheme.shapes.medium)
+            .clickable(
+                interactionSource = cardInteraction,
+                indication = null,
+                // کارت در حال هشدار با لمس خاموش/روشن نمی‌شود؛ در حالت
+                // مرتب‌سازی دستی هم لمس برای درگ نگه داشته می‌شود.
+                enabled = toggleEnabled && !zone.isAlerting
+            ) {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onToggleActive()
+            },
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 2.dp,
         color = scheme.surface
@@ -891,7 +993,14 @@ private fun ZoneCard(
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                RadarMini(radiusMeters = zone.radiusMeters, active = zone.isActive)
+                RadarWaves(
+                    active = zone.isActive,
+                    waveColor = scheme.primary,
+                    idleColor = scheme.outline,
+                    modifier = Modifier.size(72.dp),
+                    ringScale = ringScale,
+                    coreRadiusDp = 6.dp
+                )
                 Spacer(Modifier.width(12.dp))
                 Column(
                     modifier = Modifier.weight(1f),
@@ -903,40 +1012,51 @@ private fun ZoneCard(
                         fontWeight = FontWeight.Bold
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TonalChip(formatRadiusFa(zone.radiusMeters))
+                        TonalChip(formatRadiusLocalized(zone.radiusMeters, strings, lang))
                         TonalChip(
                             when (zone.exitBehavior) {
-                                Zone.EXIT_SEQUENCE -> "الگوی تکراری"
-                                Zone.EXIT_CONTINUE -> "تا توقف دستی"
-                                else -> "توقف فوری"
+                                Zone.EXIT_SEQUENCE -> strings.exitPattern
+                                Zone.EXIT_CONTINUE -> strings.exitUntilManual
+                                else -> strings.exitImmediate
                             }
                         )
                     }
                     StatusPill(zone = zone)
                     if (zone.lastTriggeredAt > 0) {
                         Text(
-                            "${LocalStrings.current.lastEntry}: " +
-                                TimeFormat.formatRelativeTimeFa(zone.lastTriggeredAt),
+                            "${strings.lastEntry}: " +
+                                formatRelativeTimeLocalized(
+                                    strings, lang, zone.lastTriggeredAt
+                                ),
                             style = MaterialTheme.typography.bodySmall,
                             color = scheme.onSurfaceVariant
                         )
                     }
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                    Switch(checked = zone.isActive, onCheckedChange = { onToggleActive() })
-                    Row {
-                        IconButton(onClick = onEdit) {
-                            Icon(Icons.Default.Edit, contentDescription = "ویرایش")
-                        }
-                        IconButton(onClick = onDelete) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "حذف",
-                                tint = scheme.error
-                            )
-                        }
-                    }
-                }
+            }
+            // دکمه‌های ویرایش/حذف: دایره‌ای نرم ۴۲dp در پایین کارت، با
+            // انیمیشن فشردن فنری و بازخورد لمسی.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.End
+            ) {
+                ZoneActionButton(
+                    icon = Icons.Default.Edit,
+                    contentDescription = strings.editCd,
+                    containerColor = scheme.primaryContainer,
+                    iconColor = scheme.onPrimaryContainer,
+                    onClick = onEdit
+                )
+                Spacer(Modifier.width(10.dp))
+                ZoneActionButton(
+                    icon = Icons.Default.Delete,
+                    contentDescription = strings.delete,
+                    containerColor = scheme.errorContainer,
+                    iconColor = scheme.error,
+                    onClick = onDelete
+                )
             }
             if (zone.isAlerting) {
                 Button(
@@ -949,10 +1069,50 @@ private fun ZoneCard(
                         .fillMaxWidth()
                         .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
                 ) {
-                    Text(LocalStrings.current.stopAlert, fontWeight = FontWeight.Bold)
+                    Text(strings.stopAlert, fontWeight = FontWeight.Bold)
                 }
             }
         }
+    }
+}
+
+/** دکمهٔ گرد نرم کارت محدوده (ویرایش/حذف) با فشردن فنری و هپتیک. */
+@Composable
+private fun ZoneActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    containerColor: Color,
+    iconColor: Color,
+    onClick: () -> Unit
+) {
+    val haptics = LocalHapticFeedback.current
+    val interaction = remember { MutableInteractionSource() }
+    val scale = rememberPressScale(interaction, pressedScale = 0.86f)
+    val bg by animateColorAsState(containerColor, tween(300), label = "zoneBtnBg")
+    Box(
+        modifier = Modifier
+            .size(42.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(CircleShape)
+            .background(bg)
+            .clickable(
+                interactionSource = interaction,
+                indication = null
+            ) {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = iconColor,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 
@@ -960,6 +1120,7 @@ private fun ZoneCard(
 @Composable
 private fun EmptyState(onAdd: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
+    val strings = LocalStrings.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1008,7 +1169,7 @@ private fun EmptyState(onAdd: () -> Unit) {
         GradientButton(onClick = onAdd) {
             Icon(Icons.Default.Add, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("ساخت محدوده")
+            Text(strings.createZone)
         }
     }
 }
@@ -1086,63 +1247,16 @@ private class ZoneReorderController(
     }
 }
 
-/** خلاصه خوانای حالت مرتب‌سازی فعلی برای نمایش روی دکمه مرتب‌سازی. */
-private fun sortSummaryText(mode: String): String = when (ZoneSort.normalize(mode)) {
-    ZoneSort.NAME_ASC -> "نام — ترتیب الفبا"
-    ZoneSort.NAME_DESC -> "نام — برعکس الفبا"
-    ZoneSort.NEWEST -> "ایجاد — تازه‌ترین"
-    ZoneSort.OLDEST -> "ایجاد — قدیمی‌ترین"
-    ZoneSort.RADIUS_DESC -> "شعاع — بزرگ‌ترین"
-    ZoneSort.RADIUS_ASC -> "شعاع — کوچک‌ترین"
-    else -> "دستی"
-}
-
 /**
- * دکمه یگانه مرتب‌سازی بالای کارت پایش: آیکن فهرست + «مرتب‌سازی» +
- * خلاصه حالت فعلی + پیکان باز/بسته. لمسش پنل کشویی زیرش را باز می‌کند.
- */
-@Composable
-private fun SortToggleButton(sortMode: String, expanded: Boolean, onClick: () -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = scheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(Icons.Filled.List, contentDescription = null, tint = scheme.primary)
-            Text("مرتب‌سازی", fontWeight = FontWeight.Bold)
-            Text(
-                sortSummaryText(sortMode),
-                style = MaterialTheme.typography.bodySmall,
-                color = scheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-            Icon(
-                if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                contentDescription = null,
-                tint = scheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-/**
- * پنل کشویی مرتب‌سازی: چهار ردیف بزرگ (دستی/نام/ایجاد/شعاع). ردیف‌های
- * جهت‌دار با هر لمس جهتشان برعکس می‌شود؛ لمس اول روی «شعاع» از
- * «بزرگ‌ترین» شروع می‌کند و روی بقیه از حالت پیش‌فرضشان (الفبا/تازه‌ترین).
+ * پنل مرتب‌سازی (روکش شناور زیر هدر): چهار ردیف (دستی/نام/ایجاد/شعاع).
+ * پیکان‌ها یکدست‌اند: جهت اصلی هر ردیف KeyboardArrowDown و جهت برعکس
+ * KeyboardArrowUp است. لمس ردیف جهت‌دارِ فعال، جهتش را برعکس می‌کند
+ * (و پنل باز می‌ماند)؛ نخستین لمس روی «شعاع» از «بزرگ‌ترین» شروع می‌کند
+ * و روی بقیه از جهت پیش‌فرضشان (الفبا/تازه‌ترین).
  */
 @Composable
 private fun SortPanel(sortMode: String, onSelect: (String) -> Unit) {
+    val strings = LocalStrings.current
     val mode = ZoneSort.normalize(sortMode)
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1150,23 +1264,24 @@ private fun SortPanel(sortMode: String, onSelect: (String) -> Unit) {
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
     ) {
         Column(
             modifier = Modifier.padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             SortPanelRow(
-                title = "دستی",
-                caption = "ترتیب دلخواه من",
+                title = strings.sortManual,
+                caption = strings.sortManualCaption,
                 arrowUp = null,
                 selected = mode == ZoneSort.MANUAL,
                 onClick = { onSelect(ZoneSort.MANUAL) }
             )
             SortPanelRow(
-                title = "نام",
-                caption = if (mode == ZoneSort.NAME_DESC) "برعکس الفبا" else "ترتیب الفبا",
-                arrowUp = mode != ZoneSort.NAME_DESC,
+                title = strings.sortName,
+                caption = if (mode == ZoneSort.NAME_DESC) strings.sortNameDesc
+                else strings.sortNameAsc,
+                arrowUp = mode == ZoneSort.NAME_DESC,
                 selected = mode == ZoneSort.NAME_ASC || mode == ZoneSort.NAME_DESC,
                 onClick = {
                     onSelect(
@@ -1176,8 +1291,9 @@ private fun SortPanel(sortMode: String, onSelect: (String) -> Unit) {
                 }
             )
             SortPanelRow(
-                title = "ایجاد",
-                caption = if (mode == ZoneSort.OLDEST) "قدیمی‌ترین" else "تازه‌ترین",
+                title = strings.sortCreated,
+                caption = if (mode == ZoneSort.OLDEST) strings.sortOldest
+                else strings.sortNewest,
                 arrowUp = mode == ZoneSort.OLDEST,
                 selected = mode == ZoneSort.NEWEST || mode == ZoneSort.OLDEST,
                 onClick = {
@@ -1188,8 +1304,9 @@ private fun SortPanel(sortMode: String, onSelect: (String) -> Unit) {
                 }
             )
             SortPanelRow(
-                title = "شعاع",
-                caption = if (mode == ZoneSort.RADIUS_ASC) "کوچک‌ترین" else "بزرگ‌ترین",
+                title = strings.radius,
+                caption = if (mode == ZoneSort.RADIUS_ASC) strings.sortSmallest
+                else strings.sortLargest,
                 arrowUp = mode == ZoneSort.RADIUS_ASC,
                 selected = mode == ZoneSort.RADIUS_DESC || mode == ZoneSort.RADIUS_ASC,
                 onClick = {
@@ -1287,7 +1404,7 @@ private fun BatteryWarningBanner(onDisableOptimization: () -> Unit) {
                     tint = scheme.onErrorContainer
                 )
                 Text(
-                    "بهینه‌سازی باتری فعال است؛ ممکن است هشدارها با تأخیر برسند یا متوقف شوند.",
+                    LocalStrings.current.batteryWarning,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = scheme.onErrorContainer
@@ -1301,7 +1418,7 @@ private fun BatteryWarningBanner(onDisableOptimization: () -> Unit) {
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("غیرفعال کردن بهینه‌سازی", fontWeight = FontWeight.Bold)
+                Text(LocalStrings.current.batteryWarningAction, fontWeight = FontWeight.Bold)
             }
         }
     }

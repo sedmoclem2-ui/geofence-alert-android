@@ -72,7 +72,8 @@ class AlertService : Service() {
 
     private fun handleStart(intent: Intent) {
         val zoneId = intent.getLongExtra(EXTRA_ZONE_ID, -1L)
-        val zoneName = intent.getStringExtra(EXTRA_ZONE_NAME) ?: "محدوده"
+        val zoneName = intent.getStringExtra(EXTRA_ZONE_NAME)
+            ?: ir.khanoomi.geofencealert.ui.stringsForContext(this).zoneFallbackName
         val soundKey = intent.getStringExtra(EXTRA_SOUND_KEY) ?: "alarm"
         val soundUri = intent.getStringExtra(EXTRA_SOUND_URI)
         if (zoneId == -1L) {

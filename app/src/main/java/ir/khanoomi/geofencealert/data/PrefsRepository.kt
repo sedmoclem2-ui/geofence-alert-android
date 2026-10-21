@@ -162,6 +162,8 @@ class PrefsRepository(private val context: Context) {
             else -> "fa"
         }
         context.prefsDataStore.edit { prefs -> prefs[KEY_APP_LANGUAGE] = normalized }
+        // آینه هم‌گام برای لایه‌های غیرکامپوزی (اعلان/ویجت/کاشی/سرویس‌ها)
+        ir.khanoomi.geofencealert.ui.writeLangMirror(context, normalized)
     }
 
     private val KEY_LANGUAGE_CHOSEN = booleanPreferencesKey("language_chosen")
