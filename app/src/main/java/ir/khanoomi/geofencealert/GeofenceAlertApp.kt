@@ -1,6 +1,7 @@
 package ir.khanoomi.geofencealert
 
 import android.app.Application
+import android.util.Log
 import androidx.room.Room
 import ir.khanoomi.geofencealert.data.AppDatabase
 import ir.khanoomi.geofencealert.data.MIGRATION_1_2
@@ -13,6 +14,7 @@ import ir.khanoomi.geofencealert.data.PrefsRepository
 import ir.khanoomi.geofencealert.data.ZoneRepository
 import ir.khanoomi.geofencealert.audio.VoiceAnnouncer
 import ir.khanoomi.geofencealert.notify.Notifications
+import ir.khanoomi.geofencealert.util.CrashGuard
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -34,10 +36,21 @@ class GeofenceAlertApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        Notifications.createChannels(this)
+        // نگهبان خطا باید قبل از هر کار دیگری نصب شود تا هیچ بسته‌شدن
+        // ناگهانی‌ای بی‌گزارش نماند (صفحه گزارش در MainActivity خوانده می‌شود).
+        CrashGuard.install(this)
+        try {
+            Notifications.createChannels(this)
+        } catch (e: Exception) {
+            Log.e(TAG, "createChannels failed", e)
+        }
         // گرم کردن زودهنگام موتور گفتار گوشی تا هنگام ورود به محدوده،
         // اعلام صوتی نام بدون تأخیر راه‌اندازی موتور شروع شود.
-        VoiceAnnouncer.init(this)
+        try {
+            VoiceAnnouncer.init(this)
+        } catch (e: Exception) {
+            Log.e(TAG, "VoiceAnnouncer.init failed", e)
+        }
         // نگهداری نسخه هم‌گامِ زبان انتخاب‌شده برای لایه‌های غیرکامپوزی.
         appScope.launch {
             try {
@@ -56,4 +69,8 @@ class GeofenceAlertApp : Application() {
     val zoneRepo: ZoneRepository by lazy { ZoneRepository(db.zoneDao()) }
 
     val prefs: PrefsRepository by lazy { PrefsRepository(this) }
+
+    private companion object {
+        const val TAG = "GeofenceAlertApp"
+    }
 }
