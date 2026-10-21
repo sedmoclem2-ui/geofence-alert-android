@@ -98,6 +98,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
@@ -134,7 +135,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.cos
 import kotlin.math.log10
+import kotlin.math.sin
 
 /** اجرای [onResume] هر بار که صفحه به پیش‌زمینه برمی‌گردد. */
 @Composable
@@ -667,7 +670,11 @@ fun HomeScreen(navController: NavController) {
     }
 }
 
-/** پالس رادار: سه دایره متحدالمرکز با انیمیشن بی‌پایان؛ در حالت خاموش ثابت و کم‌رنگ. */
+/**
+ * پالس رادار قهرمان. وقتی پایش روشن است نسخه زنده (سونار + جاروب چرخان +
+ * هسته تنفسی) ترکیب می‌شود و وقتی خاموش است فقط رندر ثابت و کم‌رنگ؛
+ * ترنزیشن بی‌پایان فقط در حالت روشن ساخته می‌شود.
+ */
 @Composable
 private fun RadarPulse(
     modifier: Modifier = Modifier,
@@ -675,41 +682,173 @@ private fun RadarPulse(
     dotColor: Color,
     active: Boolean = true
 ) {
-    val infinite = rememberInfiniteTransition(label = "radar")
-    val progress by infinite.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "radarProgress"
-    )
+    if (active) {
+        RadarPulseLive(modifier = modifier, pulseColor = pulseColor, dotColor = dotColor)
+    } else {
+        RadarPulseStatic(modifier = modifier, pulseColor = pulseColor, dotColor = dotColor)
+    }
+}
+
+/** حالت خاموش رادار: همان سه دایره آشنا با فاز ثابت و آلفای کمتر، بدون هیچ حرکتی. */
+@Composable
+private fun RadarPulseStatic(
+    modifier: Modifier = Modifier,
+    pulseColor: Color,
+    dotColor: Color
+) {
     Canvas(modifier = modifier) {
         val maxR = size.minDimension / 2f
-        // خاموش: همان دایره‌ها، اما با فاز ثابت و آلفای کمتر (بدون حرکت).
-        val p = if (active) progress else 0.3f
-        val alphaScale = if (active) 1f else 0.45f
+        val p = 0.3f
         for (i in 0 until 3) {
             val f = (p + i / 3f) % 1f
             drawCircle(
-                color = pulseColor.copy(alpha = 0.5f * (1f - f) * alphaScale),
+                color = pulseColor.copy(alpha = 0.5f * (1f - f) * 0.45f),
                 radius = maxR * (0.55f + 0.45f * f),
                 style = Stroke(width = 2.dp.toPx())
             )
         }
         drawCircle(
-            color = if (active) dotColor else dotColor.copy(alpha = 0.55f),
+            color = dotColor.copy(alpha = 0.55f),
             radius = 7.dp.toPx()
         )
     }
 }
 
 /**
- * موج یک‌باره بازخورد لمس هنگام تغییر وضعیت (روشن/خاموش‌شدن): دو حلقه
- * ساده در حال گسترش (روشن) یا جمع‌شدن (خاموش) با آلفای محوشونده — فقط
- * drawCircle ساده، بدون هیچ افکت گرافیکی تازه. در اولین ترکیب صفحه
- * اجرا نمی‌شود؛ فقط روی تغییر واقعی وضعیت.
+ * رادار زنده پایش: فقط با واژگان گرافیکی اثبات‌شده (دایره و کمان ساده با
+ * آلفا) — سونار سه‌حلقه‌ای از هسته تا لبه با فاز پلکانی، جاروب چرخان
+ * ۳۶۰ درجه با سرِ روشن، حلقه قطعه‌قطعه خلاف‌جهتِ آرام و هسته تنفسی.
+ */
+@Composable
+private fun RadarPulseLive(
+    modifier: Modifier = Modifier,
+    pulseColor: Color,
+    dotColor: Color
+) {
+    val infinite = rememberInfiniteTransition(label = "radar")
+    val sonar by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "radarSonar"
+    )
+    val sweep by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3600, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "radarSweep"
+    )
+    val counter by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(12000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "radarCounter"
+    )
+    val breath by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1300, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "radarBreath"
+    )
+    Canvas(modifier = modifier) {
+        val maxR = size.minDimension / 2f
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val center = Offset(cx, cy)
+        val strokeWidth = 2.dp.toPx()
+
+        // ۱) حلقه قطعه‌قطعه خلاف‌جهت: ۱۲ قطعه کمانی کوچک که آرام می‌چرخند.
+        val segR = maxR * 0.8f
+        val segTopLeft = Offset(cx - segR, cy - segR)
+        val segSize = Size(segR * 2f, segR * 2f)
+        for (i in 0 until 12) {
+            drawArc(
+                color = pulseColor.copy(alpha = 0.30f),
+                startAngle = -counter + i * 30f,
+                sweepAngle = 16f,
+                useCenter = false,
+                topLeft = segTopLeft,
+                size = segSize,
+                style = Stroke(width = strokeWidth)
+            )
+        }
+
+        // ۲) سونار: سه حلقه با فاز پلکانی که از هسته تا لبه گسترش می‌یابند
+        // و هرچه بزرگ‌تر می‌شوند کم‌رنگ‌تر می‌شوند.
+        for (i in 0 until 3) {
+            val f = (sonar + i / 3f) % 1f
+            drawCircle(
+                color = pulseColor.copy(alpha = 0.55f * (1f - f)),
+                radius = maxR * (0.12f + 0.88f * f),
+                center = center,
+                style = Stroke(width = strokeWidth)
+            )
+        }
+
+        // ۳) جاروب چرخان: قوس دنباله‌دار + سرِ روشن‌تر و نقطه در لبه پیشرو.
+        val sweepR = maxR * 0.95f
+        val sweepTopLeft = Offset(cx - sweepR, cy - sweepR)
+        val sweepSize = Size(sweepR * 2f, sweepR * 2f)
+        drawArc(
+            color = pulseColor.copy(alpha = 0.45f),
+            startAngle = sweep - 80f,
+            sweepAngle = 80f,
+            useCenter = false,
+            topLeft = sweepTopLeft,
+            size = sweepSize,
+            style = Stroke(width = 3.dp.toPx())
+        )
+        drawArc(
+            color = pulseColor.copy(alpha = 0.8f),
+            startAngle = sweep - 22f,
+            sweepAngle = 22f,
+            useCenter = false,
+            topLeft = sweepTopLeft,
+            size = sweepSize,
+            style = Stroke(width = 3.dp.toPx())
+        )
+        val headRad = Math.toRadians(sweep.toDouble())
+        drawCircle(
+            color = pulseColor.copy(alpha = 0.95f),
+            radius = 2.5.dp.toPx(),
+            center = Offset(
+                cx + cos(headRad).toFloat() * sweepR,
+                cy + sin(headRad).toFloat() * sweepR
+            )
+        )
+
+        // ۴) هسته تنفسی با حلقه راهنمای ظریف دور آن.
+        drawCircle(
+            color = dotColor.copy(alpha = 0.30f),
+            radius = maxR * 0.24f,
+            center = center,
+            style = Stroke(width = 1.5.dp.toPx())
+        )
+        drawCircle(
+            color = dotColor.copy(alpha = 0.7f + 0.3f * breath),
+            radius = (5.5f + 3f * breath).dp.toPx(),
+            center = center
+        )
+    }
+}
+
+/**
+ * موج یک‌باره بازخورد لمس هنگام تغییر وضعیت (روشن/خاموش‌شدن): هنگام
+ * روشن‌شدن سه حلقه در حال گسترش و هنگام خاموش‌شدن دو حلقه جمع‌شونده با
+ * آلفای محوشونده — فقط drawCircle ساده، بدون هیچ افکت گرافیکی تازه. در
+ * اولین ترکیب صفحه اجرا نمی‌شود؛ فقط روی تغییر واقعی وضعیت.
  */
 @Composable
 private fun OneShotRipple(
@@ -741,11 +880,15 @@ private fun OneShotRipple(
             val maxR = size.minDimension / 2f
             val base = if (expanding) p else 1f - p
             val alpha = (1f - p) * 0.55f
-            for (i in 0 until 2) {
-                val frac = (base - i * 0.18f).coerceIn(0f, 1f)
+            // روشن‌شدن پرتر است: سه حلقه پلکانی؛ خاموش‌شدن همان دو حلقه قبلی.
+            val ringCount = if (expanding) 3 else 2
+            val stagger = if (expanding) 0.15f else 0.18f
+            val falloff = if (expanding) 0.25f else 0.3f
+            for (i in 0 until ringCount) {
+                val frac = (base - i * stagger).coerceIn(0f, 1f)
                 if (frac > 0f) {
                     drawCircle(
-                        color = color.copy(alpha = alpha * (1f - i * 0.3f)),
+                        color = color.copy(alpha = alpha * (1f - i * falloff)),
                         radius = maxR * frac,
                         style = Stroke(width = 2.dp.toPx())
                     )
@@ -984,23 +1127,113 @@ private fun AlertBanner(zoneName: String, onStop: () -> Unit) {
     }
 }
 
-/** مینی‌رادار کارت محدوده؛ شعاع دایره‌ها با لگاریتم شعاع محدوده مقیاس می‌شود. */
+/**
+ * مینی‌رادار کارت محدوده؛ شعاع دایره‌ها با لگاریتم شعاع محدوده مقیاس می‌شود.
+ * محدوده فعال: سونار زنده (دو موج در حال گسترش + نقطه مرکزی تنفسی) با فازی
+ * که از شناسه محدوده می‌آید تا کارت‌ها هم‌زمان نپالسند. هشدار فعال: همان
+ * موج با چرخه سریع‌تر و رنگ خطای تم. غیرفعال: همان رندر ثابت و کم‌رنگ
+ * قبلی، بدون هیچ ترنزیشن در حال اجرا.
+ */
 @Composable
-private fun RadarMini(radiusMeters: Double, active: Boolean, modifier: Modifier = Modifier) {
+private fun RadarMini(
+    radiusMeters: Double,
+    active: Boolean,
+    modifier: Modifier = Modifier,
+    alerting: Boolean = false,
+    phaseSeed: Int = 0
+) {
     val scheme = MaterialTheme.colorScheme
-    val ringBase = if (active) scheme.primary else scheme.outline
-    val dot = if (active) scheme.primary else scheme.outline
+    // فاز قطعی و پخش‌شده برای هر کارت از روی شناسه‌اش (بدون تصادفی‌بودن).
+    val phase = ((phaseSeed * 37) % 100) / 100f
+    when {
+        alerting -> RadarMiniLive(
+            radiusMeters = radiusMeters,
+            color = scheme.error,
+            cycleMillis = 900,
+            phase = phase,
+            modifier = modifier
+        )
+        active -> RadarMiniLive(
+            radiusMeters = radiusMeters,
+            color = scheme.primary,
+            cycleMillis = 2000,
+            phase = phase,
+            modifier = modifier
+        )
+        else -> {
+            val ringBase = scheme.outline
+            val dot = scheme.outline
+            Canvas(modifier = modifier.size(72.dp)) {
+                val t = (log10(radiusMeters.toFloat()).coerceIn(1f, 6f) - 1f) / 5f
+                val maxR = size.minDimension / 2f
+                listOf(1f, 0.72f, 0.46f).forEachIndexed { i, frac ->
+                    drawCircle(
+                        color = ringBase.copy(alpha = 0.55f - i * 0.12f),
+                        radius = maxR * frac * (0.72f + 0.28f * t),
+                        style = Stroke(width = 1.5.dp.toPx())
+                    )
+                }
+                drawCircle(color = dot, radius = 6.dp.toPx())
+            }
+        }
+    }
+}
+
+/**
+ * موج زنده کارت محدوده: فقط دایره‌های ساده — یک حلقه راهنمای ثابت در لبه،
+ * دو موج در حال گسترش با فاز اختصاصی کارت و نقطه مرکزی تنفسی.
+ */
+@Composable
+private fun RadarMiniLive(
+    radiusMeters: Double,
+    color: Color,
+    cycleMillis: Int,
+    phase: Float,
+    modifier: Modifier = Modifier
+) {
+    val infinite = rememberInfiniteTransition(label = "radarMini")
+    val progress by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(cycleMillis, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "miniSonar"
+    )
+    val breath by infinite.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1100, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "miniBreath"
+    )
     Canvas(modifier = modifier.size(72.dp)) {
         val t = (log10(radiusMeters.toFloat()).coerceIn(1f, 6f) - 1f) / 5f
         val maxR = size.minDimension / 2f
-        listOf(1f, 0.72f, 0.46f).forEachIndexed { i, frac ->
+        val rim = maxR * (0.72f + 0.28f * t)
+        // حلقه راهنمای ثابت در لبه بیرونی (مقیاس آشنا از روی شعاع محدوده).
+        drawCircle(
+            color = color.copy(alpha = 0.30f),
+            radius = rim,
+            style = Stroke(width = 1.5.dp.toPx())
+        )
+        // دو موج در حال گسترش با فاز پلکانی و فاز اختصاصی این کارت.
+        for (i in 0 until 2) {
+            val f = (progress + phase + i / 2f) % 1f
             drawCircle(
-                color = ringBase.copy(alpha = 0.55f - i * 0.12f),
-                radius = maxR * frac * (0.72f + 0.28f * t),
+                color = color.copy(alpha = 0.60f * (1f - f)),
+                radius = rim * (0.25f + 0.75f * f),
                 style = Stroke(width = 1.5.dp.toPx())
             )
         }
-        drawCircle(color = dot, radius = 6.dp.toPx())
+        // نقطه مرکزی تنفسی.
+        drawCircle(
+            color = color.copy(alpha = 0.7f + 0.3f * breath),
+            radius = (4.5f + 1.5f * breath).dp.toPx()
+        )
     }
 }
 
@@ -1090,7 +1323,12 @@ private fun ZoneCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box {
-                    RadarMini(radiusMeters = zone.radiusMeters, active = zone.isActive)
+                    RadarMini(
+                        radiusMeters = zone.radiusMeters,
+                        active = zone.isActive,
+                        alerting = zone.isAlerting,
+                        phaseSeed = zone.id.toInt()
+                    )
                     OneShotRipple(
                         active = zone.isActive,
                         color = scheme.primary,
