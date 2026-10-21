@@ -43,15 +43,25 @@
         android:supportsRtl="true"
         tools:targetApi="34">
 
+        <!-- درگاه ورود لانچر: Activity ساده و بی‌وابستگی به بقیه لایه‌ها؛
+             اگر گزارش خطای ذخیره‌شده‌ای باشد اول آن را نشان می‌دهد تا
+             کاربر بفرستد، وگرنه بی‌درنگ MainActivity را باز می‌کند -->
         <activity
-            android:name=".MainActivity"
+            android:name=".EntryActivity"
             android:exported="true"
+            android:label="@string/app_name"
             android:theme="@style/Theme.GeofenceAlert">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- صفحه اصلی؛ ویجت‌ها و اعلان‌ها مستقیم همین‌جا را باز می‌کنند -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.GeofenceAlert" />
 
         <!-- دریافت رویدادهای ورود/خروج ژئوفنس -->
         <receiver

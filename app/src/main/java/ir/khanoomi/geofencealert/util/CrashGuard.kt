@@ -1,6 +1,7 @@
 package ir.khanoomi.geofencealert.util
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import java.io.File
 import java.io.StringWriter
@@ -39,9 +40,14 @@ object CrashGuard {
         }
     }
 
-    /** متن گزارش خطای ذخیره‌شده؛ اگر فایلی نباشد یا خالی باشد null. */
-    fun read(app: Application): String? = try {
-        val file = File(app.filesDir, FILE_NAME)
+    /**
+     * متن گزارش خطای ذخیره‌شده؛ اگر فایلی نباشد یا خالی باشد null.
+     * فقط به [Context] نیاز دارد (filesDir در همه کانتکست‌های برنامه
+     * یکسان است) تا درگاه ورودی ساده برنامه (EntryActivity) هم بدون
+     * وابستگی به کلاس Application بتواند از آن استفاده کند.
+     */
+    fun read(context: Context): String? = try {
+        val file = File(context.filesDir, FILE_NAME)
         if (file.exists()) {
             file.readText(Charsets.UTF_8).takeIf { it.isNotBlank() }
         } else {
@@ -52,9 +58,9 @@ object CrashGuard {
     }
 
     /** حذف گزارش ذخیره‌شده (بعد از این‌که کاربر آن را دید/فرستاد). */
-    fun clear(app: Application) {
+    fun clear(context: Context) {
         try {
-            File(app.filesDir, FILE_NAME).delete()
+            File(context.filesDir, FILE_NAME).delete()
         } catch (_: Exception) {
         }
     }
