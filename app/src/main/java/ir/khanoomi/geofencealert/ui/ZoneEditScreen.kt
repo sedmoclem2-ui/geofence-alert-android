@@ -238,11 +238,18 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
     }
 }
 
-private val SOUND_OPTIONS = listOf(
-    Zone.SOUND_ALARM to "آژیر",
-    Zone.SOUND_RINGTONE to "زنگ",
-    Zone.SOUND_NOTIFICATION to "اعلان"
+private val SOUND_KEYS = listOf(
+    Zone.SOUND_ALARM,
+    Zone.SOUND_RINGTONE,
+    Zone.SOUND_NOTIFICATION
 )
+
+/** برچسب بومی‌سازی‌شده صدای سیستمی. */
+private fun soundLabel(strings: UiStrings, key: String): String = when (key) {
+    Zone.SOUND_RINGTONE -> strings.soundRingtone
+    Zone.SOUND_NOTIFICATION -> strings.soundNotification
+    else -> strings.soundAlarm
+}
 
 /** کارت بخش‌بندی فرم با آیکون و عنوان. */
 @Composable
@@ -444,7 +451,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     vm.latText = loc.latitude.toString()
                     vm.lngText = loc.longitude.toString()
                 } else {
-                    locError = "موقعیت یافت نشد؛ از روشن بودن مکان دستگاه مطمئن شوید."
+                    locError = strings.locNotFound
                 }
             }
         }
@@ -456,7 +463,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
         if (grants.values.any { it }) {
             doFetchLocation()
         } else {
-            locError = "برای دریافت موقعیت فعلی، مجوز مکان لازم است."
+            locError = strings.locPermNeeded
         }
     }
 
@@ -516,9 +523,9 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 null
             )?.use { c ->
                 if (c.moveToFirst()) c.getString(0) else null
-            } ?: "صدای انتخاب‌شده"
+            } ?: strings.customSoundSelected
         } catch (_: Exception) {
-            "صدای انتخاب‌شده"
+            strings.customSoundSelected
         }
     }
 
@@ -526,18 +533,18 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
         pasteError = null
         val text = clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()?.trim()
         if (text.isNullOrEmpty()) {
-            pasteError = "حافظه موقت خالی است."
+            pasteError = strings.clipboardEmpty
             return
         }
         val parts = text.split(",").map { it.trim() }
         if (parts.size != 2) {
-            pasteError = "قالب باید «عرض،طول» باشد؛ مثلاً 35.7,51.4"
+            pasteError = strings.pasteFormatError
             return
         }
         val lat = ZoneValidator.parseDoubleFa(parts[0])
         val lng = ZoneValidator.parseDoubleFa(parts[1])
         if (lat == null || lng == null) {
-            pasteError = "مختصات الصاق‌شده معتبر نیست."
+            pasteError = strings.pasteInvalidCoords
             return
         }
         vm.latText = parts[0]
@@ -574,7 +581,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
         val approachDistanceM: Int = if (vm.approachEnabled) {
             val v = ZoneValidator.parseDoubleFa(vm.approachDistanceText)?.toInt()
             if (v == null || v !in 100..5000) {
-                allErrors += "فاصله هشدار نزدیک شدن باید عددی بین ۱۰۰ تا ۵۰۰۰ متر باشد."
+                allErrors += strings.approachDistanceError
             }
             v ?: 0
         } else {
@@ -583,7 +590,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
         val stayReminderMin: Int = if (vm.stayEnabled) {
             val v = ZoneValidator.parseDoubleFa(vm.stayMinutesText)?.toInt()
             if (v == null || v !in 5..1440) {
-                allErrors += "مدت یادآور ماندن باید عددی بین ۵ تا ۱۴۴۰ دقیقه باشد."
+                allErrors += strings.stayDurationError
             }
             v ?: 0
         } else {
@@ -599,10 +606,10 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
             try {
                 val needsCountCheck = vm.isActive && (vm.existing == null || !vm.wasActive)
                 if (needsCountCheck && app.zoneRepo.countActive() >= GeofenceHelper.MAX_GEOFENCES) {
-                    allErrors += "حداکثر ۱۰۰ محدوده فعال پشتیبانی می‌شود."
+                    allErrors += strings.maxActiveZonesError
                 }
             } catch (e: Exception) {
-                allErrors += "خطا در ذخیره‌سازی رخ داد."
+                allErrors += strings.saveError
             }
             withContext(Dispatchers.Main) {
                 errors = allErrors
@@ -666,7 +673,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         } catch (e: Exception) {
                             withContext(Dispatchers.Main) {
                                 saving = false
-                                errors = listOf("خطا در ذخیره‌سازی رخ داد.")
+                                errors = listOf(strings.saveError)
                             }
                             return@launch
                         }
@@ -688,7 +695,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 title = { Text(if (zoneId == -1L) strings.newZone else strings.editZone) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "بازگشت")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back)
                     }
                 }
             )
@@ -742,7 +749,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 OutlinedTextField(
                     value = vm.name,
                     onValueChange = { vm.name = it },
-                    label = { Text("نام محدوده (مثلاً خانه)") },
+                    label = { Text(strings.zoneNameHint) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp)
@@ -763,7 +770,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             vm.latText = input
                         }
                     },
-                    label = { Text("عرض جغرافیایی") },
+                    label = { Text(strings.latitudeFull) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
@@ -772,7 +779,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 OutlinedTextField(
                     value = vm.lngText,
                     onValueChange = { vm.lngText = it },
-                    label = { Text("طول جغرافیایی") },
+                    label = { Text(strings.longitudeFull) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
@@ -801,25 +808,25 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                                 strokeWidth = 2.dp
                             )
                         } else {
-                            Text("موقعیت فعلی")
+                            Text(strings.currentLocation)
                         }
                     }
                     FilledTonalButton(
                         onClick = {
                             clipboard.setPrimaryClip(
                                 ClipData.newPlainText(
-                                    "مختصات",
+                                    strings.coordinates,
                                     "${vm.latText.trim()},${vm.lngText.trim()}"
                                 )
                             )
-                            Toast.makeText(context, "مختصات کپی شد", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, strings.coordsCopied, Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier.weight(1f)
-                    ) { Text("کپی مختصات") }
+                    ) { Text(strings.copyCoords) }
                     FilledTonalButton(
                         onClick = { doPaste() },
                         modifier = Modifier.weight(1f)
-                    ) { Text("الصاق") }
+                    ) { Text(strings.paste) }
                 }
                 OutlinedButton(
                     onClick = {
@@ -847,7 +854,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     Text(it, color = errorColor, style = MaterialTheme.typography.bodySmall)
                 }
                 Text(
-                    "راهنما: در گوگل‌مپ نقطه را لمس طولانی کنید تا مختصات نمایش داده شود؛ آن را کپی کنید (مثل 34.633719,50.886485) و با دکمه «الصاق» یا مستقیم در کادر عرض جغرافیایی بچسبانید.",
+                    strings.coordsGuide,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -857,7 +864,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 OutlinedTextField(
                     value = vm.radiusText,
                     onValueChange = { vm.radiusText = it },
-                    label = { Text("شعاع") },
+                    label = { Text(strings.radius) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     shape = RoundedCornerShape(16.dp),
@@ -868,13 +875,13 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         selected = vm.unit == RadiusUnit.METER,
                         onClick = { vm.unit = RadiusUnit.METER },
                         shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                        label = { Text("متر") }
+                        label = { Text(strings.meterUnit) }
                     )
                     SegmentedButton(
                         selected = vm.unit == RadiusUnit.KILOMETER,
                         onClick = { vm.unit = RadiusUnit.KILOMETER },
                         shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                        label = { Text("کیلومتر") }
+                        label = { Text(strings.kmUnit) }
                     )
                 }
                 // هشدار برای شعاع‌های خیلی کوچک: دقت GPS گوشی محدود است
@@ -894,7 +901,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             modifier = Modifier.size(20.dp)
                         )
                         Text(
-                            "دقت مکان‌یابی گوشی حدود ۱۰ تا ۲۰ متر است؛ شعاع کمتر از ۵۰ متر ممکن است دقیق عمل نکند.",
+                            strings.gpsAccuracyWarning,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -906,16 +913,16 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
             val radiusMetersNow =
                 ZoneValidator.parseDoubleFa(vm.radiusText)?.let { toMeters(it, vm.unit) }
             if (radiusMetersNow != null && radiusMetersNow < 200.0) {
-                SectionCard(icon = Icons.Filled.Refresh, title = "فاصله بررسی دقیق") {
+                SectionCard(icon = Icons.Filled.Refresh, title = strings.checkIntervalTitle) {
                     Text(
-                        "چون شعاع کمتر از ۲۰۰ متر است، موقعیت شما با همین فاصله زمانی بررسی می‌شود.",
+                        strings.checkIntervalSub,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedTextField(
                         value = vm.checkIntervalText,
                         onValueChange = { vm.checkIntervalText = it },
-                        label = { Text("هر چند وقت یک بار بررسی شود") },
+                        label = { Text(strings.checkIntervalLabel) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .alpha(if (vm.checkIntervalContinuous) 0.4f else 1f),
@@ -925,7 +932,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
                     PrettySegmentedControl(
-                        options = listOf("ثانیه", "دقیقه", "مداوم"),
+                        options = listOf(strings.unitSecond, strings.unitMinute, strings.unitContinuous),
                         selectedIndex = when {
                             vm.checkIntervalContinuous -> 2
                             vm.checkIntervalIsMinutes -> 1
@@ -938,7 +945,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     )
                     if (vm.checkIntervalContinuous) {
                         Text(
-                            "در حالت مداوم، موقعیت تقریباً هر لحظه (هر ۲ ثانیه) بررسی می‌شود؛ مصرف باتری بیشتر است.",
+                            strings.continuousNote,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -948,7 +955,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         )
                         if (intervalError != null) {
                             Text(
-                                intervalError,
+                                localizeValidatorError(intervalError, strings),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error
                             )
@@ -964,9 +971,9 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("فعال‌سازی زمان‌بندی", fontWeight = FontWeight.Bold)
+                        Text(strings.scheduleEnable, fontWeight = FontWeight.Bold)
                         Text(
-                            "هشدار فقط در روزها و ساعات انتخاب‌شده فعال باشد.",
+                            strings.scheduleEnableSub,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -978,8 +985,8 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 }
                 if (vm.scheduleEnabled) {
                     val dayNames = listOf(
-                        "شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه",
-                        "چهارشنبه", "پنجشنبه", "جمعه"
+                        strings.daySat, strings.daySun, strings.dayMon, strings.dayTue,
+                        strings.dayWed, strings.dayThu, strings.dayFri
                     )
                     val selectedDays = vm.scheduleDaysSet()
                     Row(
@@ -1014,20 +1021,20 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         TimePickerField(
-                            label = "از ساعت",
+                            label = strings.fromHour,
                             minutes = vm.scheduleStartMin,
                             onPick = { vm.scheduleStartMin = it },
                             modifier = Modifier.weight(1f)
                         )
                         TimePickerField(
-                            label = "تا ساعت",
+                            label = strings.toHour,
                             minutes = vm.scheduleEndMin,
                             onPick = { vm.scheduleEndMin = it },
                             modifier = Modifier.weight(1f)
                         )
                     }
                     Text(
-                        "مثال: برای محل کار، شنبه تا چهارشنبه از ۸ تا ۱۸.",
+                        strings.scheduleExample,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1036,7 +1043,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
 
             SectionCard(icon = Icons.Filled.Notifications, title = strings.exitBehaviorTitle) {
                 Text(
-                    "داخل محدوده، هشدار فقط با توقف دستی قطع می‌شود.",
+                    strings.exitInsideNote,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp)
@@ -1046,9 +1053,9 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     listOf(
-                        Zone.EXIT_STOP to ("توقف فوری" to "با خروج از محدوده، هشدار قطع می‌شود."),
-                        Zone.EXIT_SEQUENCE to ("الگوی تکراری" to "پس از خروج، الگوی تکراری پخش می‌شود."),
-                        Zone.EXIT_CONTINUE to ("ادامه تا توقف دستی" to "هشدار تا توقف دستی ادامه دارد.")
+                        Zone.EXIT_STOP to (strings.exitImmediate to strings.exitStopSub),
+                        Zone.EXIT_SEQUENCE to (strings.exitPattern to strings.exitSequenceSub),
+                        Zone.EXIT_CONTINUE to (strings.exitContinueTitle to strings.exitContinueSub)
                     ).forEach { (behavior, texts) ->
                         PrettyOptionRow(
                             selected = vm.exitBehavior == behavior,
@@ -1073,38 +1080,38 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         OutlinedTextField(
                             value = vm.postExitCountText,
                             onValueChange = { vm.postExitCountText = it },
-                            label = { Text("تعداد دفعات") },
+                            label = { Text(strings.seqCountLabel) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             shape = RoundedCornerShape(16.dp),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             isError = countError != null,
-                            supportingText = countError?.let { { Text(it) } }
+                            supportingText = countError?.let { { Text(localizeValidatorError(it, strings)) } }
                         )
                         OutlinedTextField(
                             value = vm.postExitDurationText,
                             onValueChange = { vm.postExitDurationText = it },
-                            label = { Text("مدت هر آلارم (ثانیه)") },
+                            label = { Text(strings.seqDurationLabel) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             shape = RoundedCornerShape(16.dp),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             isError = durationError != null,
-                            supportingText = durationError?.let { { Text(it) } }
+                            supportingText = durationError?.let { { Text(localizeValidatorError(it, strings)) } }
                         )
                         OutlinedTextField(
                             value = vm.postExitGapText,
                             onValueChange = { vm.postExitGapText = it },
-                            label = { Text("مکث بین آلارم‌ها (ثانیه)") },
+                            label = { Text(strings.seqGapLabel) },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             shape = RoundedCornerShape(16.dp),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             isError = gapError != null,
-                            supportingText = gapError?.let { { Text(it) } }
+                            supportingText = gapError?.let { { Text(localizeValidatorError(it, strings)) } }
                         )
                         Text(
-                            "اگر هر کدام را دستی متوقف کنید، آلارم‌های بعدی این محدوده به صدا درنمی‌آید.",
+                            strings.seqManualStopNote,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1113,7 +1120,8 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
             }
 
             SectionCard(icon = Icons.Filled.PlayArrow, title = strings.alertSound) {
-                SOUND_OPTIONS.forEach { (key, label) ->
+                SOUND_KEYS.forEach { key ->
+                    val label = soundLabel(strings, key)
                     val selected = vm.soundKey == key
                     Row(
                         modifier = Modifier
@@ -1137,7 +1145,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         IconButton(onClick = { AlertPlayer.preview(context, key) }) {
                             Icon(
                                 Icons.Filled.PlayArrow,
-                                contentDescription = "پیشنمایش $label",
+                                contentDescription = "${strings.preview} $label",
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -1153,7 +1161,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         tint = MaterialTheme.colorScheme.primary
                     )
                     Spacer(Modifier.width(8.dp))
-                    Text("انتخاب صدای دلخواه از گوشی")
+                    Text(strings.pickCustomSound)
                 }
                 vm.customSoundUri?.let { uriString ->
                     Card(
@@ -1183,21 +1191,21 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             ) {
                                 Icon(
                                     Icons.Filled.PlayArrow,
-                                    contentDescription = "پیشنمایش صدای دلخواه",
+                                    contentDescription = strings.previewCustomSoundCd,
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             }
                             IconButton(onClick = { vm.customSoundUri = null }) {
                                 Icon(
                                     Icons.Filled.Delete,
-                                    contentDescription = "حذف صدای دلخواه",
+                                    contentDescription = strings.deleteCustomSoundCd,
                                     tint = MaterialTheme.colorScheme.error
                                 )
                             }
                         }
                     }
                     Text(
-                        "صدای دلخواه جایگزین صدای سیستمی بالا می‌شود.",
+                        strings.customSoundReplaces,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1211,26 +1219,26 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 ) {
                     PrettyOptionRow(
                         selected = vm.alertMode == Zone.ALERT_BOTH,
-                        title = "صدا و لرزش",
-                        subtitle = "صدای هشدار به‌همراه لرزش پخش می‌شود.",
+                        title = strings.alertBothTitle,
+                        subtitle = strings.alertBothSub,
                         onClick = { vm.alertMode = Zone.ALERT_BOTH }
                     )
                     PrettyOptionRow(
                         selected = vm.alertMode == Zone.ALERT_SOUND,
-                        title = "فقط صدا",
-                        subtitle = "فقط صدای هشدار، بدون لرزش.",
+                        title = strings.alertSoundOnlyTitle,
+                        subtitle = strings.alertSoundOnlySub,
                         onClick = { vm.alertMode = Zone.ALERT_SOUND }
                     )
                     PrettyOptionRow(
                         selected = vm.alertMode == Zone.ALERT_VIBRATE,
-                        title = "فقط لرزش",
-                        subtitle = "فقط لرزش، بدون صدا.",
+                        title = strings.alertVibrateOnlyTitle,
+                        subtitle = strings.alertVibrateOnlySub,
                         onClick = { vm.alertMode = Zone.ALERT_VIBRATE }
                     )
                     PrettyOptionRow(
                         selected = vm.alertMode == Zone.ALERT_NONE,
-                        title = "هیچ‌کدام",
-                        subtitle = "فقط اعلان نمایش داده می‌شود؛ بدون صدا و لرزش.",
+                        title = strings.alertNoneTitle,
+                        subtitle = strings.alertNoneSub,
                         onClick = { vm.alertMode = Zone.ALERT_NONE }
                     )
                 }
@@ -1243,9 +1251,9 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("خواندن نام محدوده", fontWeight = FontWeight.Bold)
+                        Text(strings.voiceAnnounceTitle, fontWeight = FontWeight.Bold)
                         Text(
-                            "هنگام ورود، نام محدوده با صدای خود گوشی خوانده می‌شود.",
+                            strings.voiceAnnounceSub,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1264,9 +1272,9 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("هشدار قبل از رسیدن", fontWeight = FontWeight.Bold)
+                        Text(strings.approachTitle, fontWeight = FontWeight.Bold)
                         Text(
-                            "وقتی به فاصله مشخصی از محدوده رسیدید، یک اعلان نزدیک شدن می‌آید.",
+                            strings.approachSub,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1280,13 +1288,13 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     val approachError = if (vm.approachDistanceText.isNotBlank()) {
                         val v = ZoneValidator.parseDoubleFa(vm.approachDistanceText)?.toInt()
                         if (v == null || v !in 100..5000) {
-                            "فاصله باید عددی بین ۱۰۰ تا ۵۰۰۰ متر باشد."
+                            strings.approachDistanceHint
                         } else null
                     } else null
                     OutlinedTextField(
                         value = vm.approachDistanceText,
                         onValueChange = { vm.approachDistanceText = it },
-                        label = { Text("فاصله هشدار (متر)") },
+                        label = { Text(strings.approachDistanceLabel) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(16.dp),
@@ -1304,9 +1312,9 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("یادآوری ماندن طولانی", fontWeight = FontWeight.Bold)
+                        Text(strings.stayTitle, fontWeight = FontWeight.Bold)
                         Text(
-                            "اگر بیشتر از مدت تعیین‌شده داخل محدوده ماندید، یک اعلان یادآوری می‌آید.",
+                            strings.staySub,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1320,13 +1328,13 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     val stayError = if (vm.stayMinutesText.isNotBlank()) {
                         val v = ZoneValidator.parseDoubleFa(vm.stayMinutesText)?.toInt()
                         if (v == null || v !in 5..1440) {
-                            "مدت باید عددی بین ۵ تا ۱۴۴۰ دقیقه باشد."
+                            strings.stayDurationHint
                         } else null
                     } else null
                     OutlinedTextField(
                         value = vm.stayMinutesText,
                         onValueChange = { vm.stayMinutesText = it },
-                        label = { Text("بعد از چند دقیقه یادآوری شود") },
+                        label = { Text(strings.stayMinutesLabel) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(16.dp),
@@ -1341,7 +1349,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 OutlinedTextField(
                     value = vm.smsNumbersText,
                     onValueChange = { vm.smsNumbersText = it },
-                    label = { Text("شماره‌های تلفن (هر خط یک شماره)") },
+                    label = { Text(strings.smsNumbersLabel) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
                     shape = RoundedCornerShape(16.dp),
@@ -1350,13 +1358,13 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 OutlinedTextField(
                     value = vm.smsMessageText,
                     onValueChange = { vm.smsMessageText = it },
-                    label = { Text("متن پیامک") },
+                    label = { Text(strings.smsMessageLabel) },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
                     shape = RoundedCornerShape(16.dp)
                 )
                 Text(
-                    "با ورود به محدوده، این پیام برای شماره‌ها پیامک می‌شود.",
+                    strings.smsNote,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1372,7 +1380,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("انتخاب از مخاطبین")
+                    Text(strings.pickFromContacts)
                 }
             }
 
@@ -1383,9 +1391,9 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("بازه بی‌صدا", fontWeight = FontWeight.Bold)
+                        Text(strings.silentWindowTitle, fontWeight = FontWeight.Bold)
                         Text(
-                            "در این بازه، ورود به محدوده فقط با اعلان (بدون صدا و لرزش) اطلاع داده می‌شود.",
+                            strings.silentWindowSub,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1401,13 +1409,13 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         TimePickerField(
-                            label = "از",
+                            label = strings.fromLabel,
                             minutes = vm.silentStartMin,
                             onPick = { vm.silentStartMin = it },
                             modifier = Modifier.weight(1f)
                         )
                         TimePickerField(
-                            label = "تا",
+                            label = strings.toLabel,
                             minutes = vm.silentEndMin,
                             onPick = { vm.silentEndMin = it },
                             modifier = Modifier.weight(1f)
@@ -1440,7 +1448,10 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         errors.forEach {
-                            Text(it, color = MaterialTheme.colorScheme.onErrorContainer)
+                            Text(
+                                localizeValidatorError(it, strings),
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
                         }
                     }
                 }
