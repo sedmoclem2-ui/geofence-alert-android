@@ -14,6 +14,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
@@ -75,8 +77,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -576,6 +576,7 @@ fun HomeScreen(navController: NavController) {
                     ZoneCard(
                         zone = zone,
                         modifier = cardModifier,
+                        manualSort = isManualSort,
                         onToggleActive = { vm.toggleActive(zone) },
                         onEdit = { navController.navigate("edit?zoneId=${zone.id}") },
                         onDelete = { zoneToDelete = zone },
@@ -666,12 +667,13 @@ fun HomeScreen(navController: NavController) {
     }
 }
 
-/** پالس رادار: سه دایره متحدالمرکز با انیمیشن بی‌پایان. */
+/** پالس رادار: سه دایره متحدالمرکز با انیمیشن بی‌پایان؛ در حالت خاموش ثابت و کم‌رنگ. */
 @Composable
 private fun RadarPulse(
     modifier: Modifier = Modifier,
     pulseColor: Color,
-    dotColor: Color
+    dotColor: Color,
+    active: Boolean = true
 ) {
     val infinite = rememberInfiniteTransition(label = "radar")
     val progress by infinite.animateFloat(
@@ -685,15 +687,71 @@ private fun RadarPulse(
     )
     Canvas(modifier = modifier) {
         val maxR = size.minDimension / 2f
+        // خاموش: همان دایره‌ها، اما با فاز ثابت و آلفای کمتر (بدون حرکت).
+        val p = if (active) progress else 0.3f
+        val alphaScale = if (active) 1f else 0.45f
         for (i in 0 until 3) {
-            val f = (progress + i / 3f) % 1f
+            val f = (p + i / 3f) % 1f
             drawCircle(
-                color = pulseColor.copy(alpha = 0.5f * (1f - f)),
+                color = pulseColor.copy(alpha = 0.5f * (1f - f) * alphaScale),
                 radius = maxR * (0.55f + 0.45f * f),
                 style = Stroke(width = 2.dp.toPx())
             )
         }
-        drawCircle(color = dotColor, radius = 7.dp.toPx())
+        drawCircle(
+            color = if (active) dotColor else dotColor.copy(alpha = 0.55f),
+            radius = 7.dp.toPx()
+        )
+    }
+}
+
+/**
+ * موج یک‌باره بازخورد لمس هنگام تغییر وضعیت (روشن/خاموش‌شدن): دو حلقه
+ * ساده در حال گسترش (روشن) یا جمع‌شدن (خاموش) با آلفای محوشونده — فقط
+ * drawCircle ساده، بدون هیچ افکت گرافیکی تازه. در اولین ترکیب صفحه
+ * اجرا نمی‌شود؛ فقط روی تغییر واقعی وضعیت.
+ */
+@Composable
+private fun OneShotRipple(
+    active: Boolean,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    val progress = remember { Animatable(0f) }
+    var running by remember { mutableStateOf(false) }
+    var expanding by remember { mutableStateOf(true) }
+    var firstComposition by remember { mutableStateOf(true) }
+    LaunchedEffect(active) {
+        if (firstComposition) {
+            firstComposition = false
+            return@LaunchedEffect
+        }
+        expanding = active
+        running = true
+        progress.snapTo(0f)
+        progress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 600, easing = FastOutSlowInEasing)
+        )
+        running = false
+    }
+    if (running) {
+        Canvas(modifier = modifier) {
+            val p = progress.value
+            val maxR = size.minDimension / 2f
+            val base = if (expanding) p else 1f - p
+            val alpha = (1f - p) * 0.55f
+            for (i in 0 until 2) {
+                val frac = (base - i * 0.18f).coerceIn(0f, 1f)
+                if (frac > 0f) {
+                    drawCircle(
+                        color = color.copy(alpha = alpha * (1f - i * 0.3f)),
+                        radius = maxR * frac,
+                        style = Stroke(width = 2.dp.toPx())
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -746,9 +804,18 @@ private fun RadarHeroCard(
         start = Offset(shimmerX * 900f, 0f),
         end = Offset(shimmerX * 900f + 320f, 420f)
     )
+    // لمس کل کارت = روشن/خاموش کردن پایش (جایگزین کلید قبلی)؛ با فشردن
+    // فنری ملایم و بازخورد لمسی، مثل دکمه‌های کارت محدوده.
+    val haptics = LocalHapticFeedback.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressScale = rememberPressScale(interaction, pressedScale = 0.985f)
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
             .border(2.dp, shimmerBorder, MaterialTheme.shapes.large),
         shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = Color.Transparent)
@@ -757,6 +824,13 @@ private fun RadarHeroCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(gradient)
+                .clickable(
+                    interactionSource = interaction,
+                    indication = null
+                ) {
+                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    onMonitoringChange(!monitoring)
+                }
         ) {
             Row(
                 modifier = Modifier
@@ -768,28 +842,13 @@ private fun RadarHeroCard(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = if (monitoring) LocalStrings.current.monitoringOn
-                            else LocalStrings.current.monitoringOff,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = scheme.onPrimary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Switch(
-                            checked = monitoring,
-                            onCheckedChange = onMonitoringChange,
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = scheme.onPrimary,
-                                checkedTrackColor = scheme.onPrimary.copy(alpha = 0.35f),
-                                checkedBorderColor = Color.Transparent,
-                                uncheckedThumbColor = scheme.onPrimary.copy(alpha = 0.75f),
-                                uncheckedTrackColor = scheme.onPrimary.copy(alpha = 0.18f),
-                                uncheckedBorderColor = Color.Transparent
-                            )
-                        )
-                    }
+                    Text(
+                        text = if (monitoring) LocalStrings.current.monitoringOn
+                        else LocalStrings.current.monitoringOff,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = scheme.onPrimary
+                    )
                     Text(
                         "$activeCount ${LocalStrings.current.activeZonesSuffix} • " +
                             "$alertingCount ${LocalStrings.current.activeAlertsSuffix}",
@@ -821,11 +880,19 @@ private fun RadarHeroCard(
                         }
                     }
                 }
-                RadarPulse(
-                    modifier = Modifier.size(96.dp),
-                    pulseColor = scheme.secondary,
-                    dotColor = Color.White
-                )
+                Box {
+                    RadarPulse(
+                        modifier = Modifier.size(96.dp),
+                        pulseColor = scheme.secondary,
+                        dotColor = Color.White,
+                        active = monitoring
+                    )
+                    OneShotRipple(
+                        active = monitoring,
+                        color = scheme.secondary,
+                        modifier = Modifier.size(96.dp)
+                    )
+                }
             }
         }
     }
@@ -976,15 +1043,40 @@ private fun StatusPill(zone: Zone) {
 private fun ZoneCard(
     zone: Zone,
     modifier: Modifier = Modifier,
+    manualSort: Boolean = false,
     onToggleActive: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onStopAlert: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    // لمس کارت = فعال/غیرفعال کردن محدوده (جایگزین کلید قبلی)؛ اما در
+    // حالت مرتب‌سازی دستی ژست درگ مالک کارت است و هنگام پخش هشدار هم
+    // لمس نباید وضعیت را عوض کند.
+    val haptics = LocalHapticFeedback.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressScale = rememberPressScale(interaction, pressedScale = 0.98f)
+    val tapEnabled = !manualSort && !zone.isAlerting
     Surface(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .then(
+                if (tapEnabled) {
+                    Modifier.clickable(
+                        interactionSource = interaction,
+                        indication = null
+                    ) {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onToggleActive()
+                    }
+                } else {
+                    Modifier
+                }
+            )
             .animateContentSize(),
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 2.dp,
@@ -997,7 +1089,14 @@ private fun ZoneCard(
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                RadarMini(radiusMeters = zone.radiusMeters, active = zone.isActive)
+                Box {
+                    RadarMini(radiusMeters = zone.radiusMeters, active = zone.isActive)
+                    OneShotRipple(
+                        active = zone.isActive,
+                        color = scheme.primary,
+                        modifier = Modifier.size(72.dp)
+                    )
+                }
                 Spacer(Modifier.width(12.dp))
                 Column(
                     modifier = Modifier.weight(1f),
@@ -1027,9 +1126,6 @@ private fun ZoneCard(
                             color = scheme.onSurfaceVariant
                         )
                     }
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Switch(checked = zone.isActive, onCheckedChange = { onToggleActive() })
                 }
             }
             // دکمه‌های ویرایش/حذف: دایره‌ای نرم ۴۲dp در پایین کارت، با
