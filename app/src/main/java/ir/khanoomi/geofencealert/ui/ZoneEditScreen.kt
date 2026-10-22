@@ -11,7 +11,15 @@ import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,6 +29,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -70,6 +79,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -293,6 +303,62 @@ private fun SectionCard(
 }
 
 /**
+ * قرص یکی از تب‌های موضوعی پنل ویرایش محدوده: انتخاب‌شده با پس‌زمینه
+ * primaryContainer و متن پررنگ، انتخاب‌نشده روی سطح نرم تم. اگر تب خطای
+ * اعتبارسنجی داشته باشد، یک نقطه قرمز کوچک گوشه بالای آن می‌نشیند.
+ */
+@Composable
+private fun RowScope.ZoneEditTabPill(
+    selected: Boolean,
+    icon: ImageVector,
+    label: String,
+    showErrorDot: Boolean,
+    onClick: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .height(44.dp)
+            .clip(RoundedCornerShape(50))
+            .background(
+                if (selected) scheme.primaryContainer
+                else scheme.surfaceVariant.copy(alpha = 0.5f)
+            )
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                label,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                color = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        if (showErrorDot) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(5.dp)
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(scheme.error)
+            )
+        }
+    }
+}
+
+/**
  * نمونه‌رنگ دایره‌ای برای انتخاب رنگ محدوده: پرشده با یک رنگ ثابت یا
  * گرادیان (نمونه «پیش‌فرض تم»). نمونه انتخاب‌شده حلقه پررنگ دور و تیک
  * سفید وسط می‌گیرد.
@@ -475,7 +541,7 @@ private fun PrettySegmentedControl(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
 fun ZoneEditScreen(navController: NavController, zoneId: Long) {
     val context = LocalContext.current
@@ -485,7 +551,9 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
     val scope = rememberCoroutineScope()
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
-    var errors by remember { mutableStateOf(listOf<String>()) }
+    // خطاهای اعتبارسنجی، هرکدام با شماره تب صاحبش (۰=کجاست؟، ۱=هشدار، ۲=زمان‌بندی)؛ -۱ یعنی خطای کلی بدون تب
+    var errors by remember { mutableStateOf(listOf<Pair<Int, String>>()) }
+    var selectedTab by remember { mutableIntStateOf(0) }
     var locLoading by remember { mutableStateOf(false) }
     var locError by remember { mutableStateOf<String?>(null) }
     var pasteError by remember { mutableStateOf<String?>(null) }
@@ -607,7 +675,9 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
         val lng = ZoneValidator.parseDoubleFa(vm.lngText)
         val radius = ZoneValidator.parseDoubleFa(vm.radiusText)
         val validation = ZoneValidator.validate(vm.name, lat, lng, radius, vm.unit)
-        val allErrors = validation.errors.toMutableList()
+        // هر خطا با شماره تب صاحبش برچسب می‌خورد تا پس از تلاش ناموفق برای
+        // ذخیره، کاربر خودکار به تب دارای خطا برود و روی قرص آن تب نقطه خطا بنشیند
+        val allErrors = validation.errors.map { 0 to it }.toMutableList()
         // فاصله بررسی دقیق فقط وقتی معنا دارد که شعاع کمتر از ۲۰۰ متر باشد
         val radiusMetersForCheck = radius?.let { toMeters(it, vm.unit) }
         val checkIntervalSec: Int =
@@ -616,7 +686,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     CheckInterval.CONTINUOUS
                 } else {
                     val sec = CheckInterval.toSeconds(vm.checkIntervalText, vm.checkIntervalIsMinutes)
-                    CheckInterval.errorFa(sec)?.let { allErrors += it }
+                    CheckInterval.errorFa(sec)?.let { allErrors += (0 to it) }
                     sec ?: 20
                 }
             } else {
@@ -624,15 +694,15 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
             }
         // اعتبارسنجی الگوی تکراری پس از خروج
         if (vm.exitBehavior == Zone.EXIT_SEQUENCE) {
-            ExitSequenceValidator.validateCount(vm.postExitCountText)?.let { allErrors += it }
-            ExitSequenceValidator.validateDuration(vm.postExitDurationText)?.let { allErrors += it }
-            ExitSequenceValidator.validateGap(vm.postExitGapText)?.let { allErrors += it }
+            ExitSequenceValidator.validateCount(vm.postExitCountText)?.let { allErrors += (1 to it) }
+            ExitSequenceValidator.validateDuration(vm.postExitDurationText)?.let { allErrors += (1 to it) }
+            ExitSequenceValidator.validateGap(vm.postExitGapText)?.let { allErrors += (1 to it) }
         }
         // اعتبارسنجی هشدار نزدیک شدن و یادآور ماندن
         val approachDistanceM: Int = if (vm.approachEnabled) {
             val v = ZoneValidator.parseDoubleFa(vm.approachDistanceText)?.toInt()
             if (v == null || v !in 100..5000) {
-                allErrors += strings.approachDistanceError
+                allErrors += (2 to strings.approachDistanceError)
             }
             v ?: 0
         } else {
@@ -641,7 +711,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
         val stayReminderMin: Int = if (vm.stayEnabled) {
             val v = ZoneValidator.parseDoubleFa(vm.stayMinutesText)?.toInt()
             if (v == null || v !in 5..1440) {
-                allErrors += strings.stayDurationError
+                allErrors += (2 to strings.stayDurationError)
             }
             v ?: 0
         } else {
@@ -657,13 +727,17 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
             try {
                 val needsCountCheck = vm.isActive && (vm.existing == null || !vm.wasActive)
                 if (needsCountCheck && app.zoneRepo.countActive() >= GeofenceHelper.MAX_GEOFENCES) {
-                    allErrors += strings.maxActiveZonesError
+                    allErrors += (0 to strings.maxActiveZonesError)
                 }
             } catch (e: Exception) {
-                allErrors += strings.saveError
+                allErrors += (-1 to strings.saveError)
             }
             withContext(Dispatchers.Main) {
                 errors = allErrors
+                if (allErrors.isNotEmpty()) {
+                    // پرش خودکار به اولین تبی که خطا دارد تا کاربر همان‌جا اصلاح کند
+                    allErrors.firstOrNull { it.first >= 0 }?.let { selectedTab = it.first }
+                }
                 if (allErrors.isEmpty()) {
                     scope.launch(Dispatchers.IO) {
                         val zone = Zone(
@@ -725,7 +799,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                         } catch (e: Exception) {
                             withContext(Dispatchers.Main) {
                                 saving = false
-                                errors = listOf(strings.saveError)
+                                errors = listOf(-1 to strings.saveError)
                             }
                             return@launch
                         }
@@ -761,7 +835,8 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     onClick = { doSave() },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .height(52.dp),
                     enabled = !saving
                 ) {
                     if (saving) {
@@ -793,741 +868,46 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            SectionCard(icon = Icons.Filled.Info, title = strings.specifications) {
-                OutlinedTextField(
-                    value = vm.name,
-                    onValueChange = { vm.name = it },
-                    label = { Text(strings.zoneNameHint) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp)
+            // تب‌های موضوعی فرم: «کجاست؟» (مشخصات، مختصات، شعاع، دقت پایش و وضعیت)،
+            // «هشدار» (رفتار خروج، صدا، نوع هشدار، اعلام صوتی و پیامک) و
+            // «زمان‌بندی» (زمان‌بندی، سکوت، نزدیک‌شدن و ماندن). همه وضعیت فرم در
+            // ویومدل نگه داشته می‌شود، پس جابه‌جایی بین تب‌ها چیزی را از دست نمی‌دهد.
+            val errorTabs = errors.map { it.first }.toSet()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                ZoneEditTabPill(
+                    selected = selectedTab == 0,
+                    icon = Icons.Filled.Place,
+                    label = strings.tabPlace,
+                    showErrorDot = 0 in errorTabs,
+                    onClick = { selectedTab = 0 }
                 )
-                // رنگ اختصاصی محدوده: نمونه اول «پیش‌فرض تم» است و هشت
-                // نمونه بعدی رنگ‌های آماده‌اند؛ رنگ روی موج‌های کارت
-                // محدوده در صفحه اصلی می‌نشیند.
-                Text(
-                    strings.editColor,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold
+                ZoneEditTabPill(
+                    selected = selectedTab == 1,
+                    icon = Icons.Filled.Notifications,
+                    label = strings.tabAlerts,
+                    showErrorDot = 1 in errorTabs,
+                    onClick = { selectedTab = 1 }
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ColorSwatch(
-                        selected = vm.colorIndex == 0,
-                        brush = Brush.horizontalGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primary,
-                                MaterialTheme.colorScheme.secondary
-                            )
-                        ),
-                        color = null,
-                        contentDescription = strings.colorDefault,
-                        onClick = { vm.colorIndex = 0 }
-                    )
-                    ZoneColors.presets.forEachIndexed { i, preset ->
-                        ColorSwatch(
-                            selected = vm.colorIndex == i + 1,
-                            brush = null,
-                            color = preset,
-                            contentDescription = null,
-                            onClick = { vm.colorIndex = i + 1 }
-                        )
-                    }
-                }
-                if (vm.colorIndex == 0) {
-                    Text(
-                        strings.colorDefault,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            SectionCard(icon = Icons.Filled.LocationOn, title = strings.coordinates) {
-                OutlinedTextField(
-                    value = vm.latText,
-                    onValueChange = { input ->
-                        // اگر کاربر یک جفت «عرض،طول» (مثل خروجی گوگل‌مپ) را الصاق کرد، خودکار جدا شود
-                        val parts = input.split(",").map { it.trim() }
-                        if (parts.size == 2 && parts.all { ZoneValidator.parseDoubleFa(it) != null }) {
-                            vm.latText = parts[0]
-                            vm.lngText = parts[1]
-                            pasteError = null
-                        } else {
-                            vm.latText = input
-                        }
-                    },
-                    label = { Text(strings.latitudeFull) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-                OutlinedTextField(
-                    value = vm.lngText,
-                    onValueChange = { vm.lngText = it },
-                    label = { Text(strings.longitudeFull) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilledTonalButton(
-                        onClick = {
-                            if (Permissions.hasAnyLocation(context)) doFetchLocation()
-                            else locationPermissionLauncher.launch(
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION
-                                )
-                            )
-                        },
-                        modifier = Modifier.weight(1f),
-                        enabled = !locLoading
-                    ) {
-                        if (locLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text(strings.currentLocation)
-                        }
-                    }
-                    FilledTonalButton(
-                        onClick = {
-                            clipboard.setPrimaryClip(
-                                ClipData.newPlainText(
-                                    strings.coordinates,
-                                    "${vm.latText.trim()},${vm.lngText.trim()}"
-                                )
-                            )
-                            Toast.makeText(context, strings.coordsCopied, Toast.LENGTH_SHORT).show()
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) { Text(strings.copyCoords) }
-                    FilledTonalButton(
-                        onClick = { doPaste() },
-                        modifier = Modifier.weight(1f)
-                    ) { Text(strings.paste) }
-                }
-                OutlinedButton(
-                    onClick = {
-                        val lat = ZoneValidator.parseDoubleFa(vm.latText) ?: 0.0
-                        val lng = ZoneValidator.parseDoubleFa(vm.lngText) ?: 0.0
-                        val radiusM = ZoneValidator.parseDoubleFa(vm.radiusText)
-                            ?.let { toMeters(it, vm.unit) } ?: 200.0
-                        navController.navigate("map_picker?lat=$lat&lng=$lng&radius=$radiusM")
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        Icons.Filled.Place,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(strings.selectOnMap)
-                }
-                val errorColor = MaterialTheme.colorScheme.error
-                locError?.let {
-                    Text(it, color = errorColor, style = MaterialTheme.typography.bodySmall)
-                }
-                pasteError?.let {
-                    Text(it, color = errorColor, style = MaterialTheme.typography.bodySmall)
-                }
-                Text(
-                    strings.coordsGuide,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                ZoneEditTabPill(
+                    selected = selectedTab == 2,
+                    icon = Icons.Filled.DateRange,
+                    label = strings.tabTiming,
+                    showErrorDot = 2 in errorTabs,
+                    onClick = { selectedTab = 2 }
                 )
             }
-
-            SectionCard(icon = Icons.Filled.Place, title = strings.radius) {
-                OutlinedTextField(
-                    value = vm.radiusText,
-                    onValueChange = { vm.radiusText = it },
-                    label = { Text(strings.radius) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                )
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    SegmentedButton(
-                        selected = vm.unit == RadiusUnit.METER,
-                        onClick = { vm.unit = RadiusUnit.METER },
-                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                        label = { Text(strings.meterUnit) }
-                    )
-                    SegmentedButton(
-                        selected = vm.unit == RadiusUnit.KILOMETER,
-                        onClick = { vm.unit = RadiusUnit.KILOMETER },
-                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                        label = { Text(strings.kmUnit) }
-                    )
-                }
-                // هشدار برای شعاع‌های خیلی کوچک: دقت GPS گوشی محدود است
-                val radiusMeters = vm.radiusText.toDoubleOrNull()?.let { toMeters(it, vm.unit) }
-                if (radiusMeters != null && radiusMeters > 0 && radiusMeters < 50) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Filled.Warning,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            strings.gpsAccuracyWarning,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-            }
-
-            // فاصله بررسی دقیق: فقط برای شعاع‌های کمتر از ۲۰۰ متر
-            val radiusMetersNow =
-                ZoneValidator.parseDoubleFa(vm.radiusText)?.let { toMeters(it, vm.unit) }
-            if (radiusMetersNow != null && radiusMetersNow < 200.0) {
-                SectionCard(icon = Icons.Filled.Refresh, title = strings.checkIntervalTitle) {
-                    Text(
-                        strings.checkIntervalSub,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    OutlinedTextField(
-                        value = vm.checkIntervalText,
-                        onValueChange = { vm.checkIntervalText = it },
-                        label = { Text(strings.checkIntervalLabel) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .alpha(if (vm.checkIntervalContinuous) 0.4f else 1f),
-                        enabled = !vm.checkIntervalContinuous,
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
-                    )
-                    PrettySegmentedControl(
-                        options = listOf(strings.unitSecond, strings.unitMinute, strings.unitContinuous),
-                        selectedIndex = when {
-                            vm.checkIntervalContinuous -> 2
-                            vm.checkIntervalIsMinutes -> 1
-                            else -> 0
-                        },
-                        onSelect = { index ->
-                            vm.checkIntervalContinuous = index == 2
-                            vm.checkIntervalIsMinutes = index == 1
-                        }
-                    )
-                    if (vm.checkIntervalContinuous) {
-                        Text(
-                            strings.continuousNote,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        val intervalError = CheckInterval.errorFa(
-                            CheckInterval.toSeconds(vm.checkIntervalText, vm.checkIntervalIsMinutes)
-                        )
-                        if (intervalError != null) {
-                            Text(
-                                localizeValidatorError(intervalError, strings),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                }
-            }
-
-            SectionCard(icon = Icons.Filled.DateRange, title = strings.schedule) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(strings.scheduleEnable, fontWeight = FontWeight.Bold)
-                        Text(
-                            strings.scheduleEnableSub,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = vm.scheduleEnabled,
-                        onCheckedChange = { vm.scheduleEnabled = it }
-                    )
-                }
-                if (vm.scheduleEnabled) {
-                    val dayNames = listOf(
-                        strings.daySat, strings.daySun, strings.dayMon, strings.dayTue,
-                        strings.dayWed, strings.dayThu, strings.dayFri
-                    )
-                    val selectedDays = vm.scheduleDaysSet()
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        (1..4).forEach { day ->
-                            FilterChip(
-                                selected = day in selectedDays,
-                                onClick = { vm.toggleScheduleDay(day) },
-                                label = { Text(dayNames[day - 1]) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        (5..7).forEach { day ->
-                            FilterChip(
-                                selected = day in selectedDays,
-                                onClick = { vm.toggleScheduleDay(day) },
-                                label = { Text(dayNames[day - 1]) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                        Spacer(Modifier.weight(1f))
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TimePickerField(
-                            label = strings.fromHour,
-                            minutes = vm.scheduleStartMin,
-                            onPick = { vm.scheduleStartMin = it },
-                            modifier = Modifier.weight(1f)
-                        )
-                        TimePickerField(
-                            label = strings.toHour,
-                            minutes = vm.scheduleEndMin,
-                            onPick = { vm.scheduleEndMin = it },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Text(
-                        strings.scheduleExample,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            SectionCard(icon = Icons.Filled.Notifications, title = strings.exitBehaviorTitle) {
-                Text(
-                    strings.exitInsideNote,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf(
-                        Zone.EXIT_STOP to (strings.exitImmediate to strings.exitStopSub),
-                        Zone.EXIT_SEQUENCE to (strings.exitPattern to strings.exitSequenceSub),
-                        Zone.EXIT_CONTINUE to (strings.exitContinueTitle to strings.exitContinueSub)
-                    ).forEach { (behavior, texts) ->
-                        PrettyOptionRow(
-                            selected = vm.exitBehavior == behavior,
-                            title = texts.first,
-                            subtitle = texts.second,
-                            onClick = { vm.exitBehavior = behavior }
-                        )
-                    }
-                }
-                // تنظیمات الگوی تکراری: تعداد دفعات، مدت هر آلارم، مکث بین آلارم‌ها
-                if (vm.exitBehavior == Zone.EXIT_SEQUENCE) {
-                    val countError = ExitSequenceValidator.validateCount(vm.postExitCountText)
-                    val durationError =
-                        ExitSequenceValidator.validateDuration(vm.postExitDurationText)
-                    val gapError = ExitSequenceValidator.validateGap(vm.postExitGapText)
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = vm.postExitCountText,
-                            onValueChange = { vm.postExitCountText = it },
-                            label = { Text(strings.seqCountLabel) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(16.dp),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            isError = countError != null,
-                            supportingText = countError?.let { { Text(localizeValidatorError(it, strings)) } }
-                        )
-                        OutlinedTextField(
-                            value = vm.postExitDurationText,
-                            onValueChange = { vm.postExitDurationText = it },
-                            label = { Text(strings.seqDurationLabel) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(16.dp),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            isError = durationError != null,
-                            supportingText = durationError?.let { { Text(localizeValidatorError(it, strings)) } }
-                        )
-                        OutlinedTextField(
-                            value = vm.postExitGapText,
-                            onValueChange = { vm.postExitGapText = it },
-                            label = { Text(strings.seqGapLabel) },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(16.dp),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            isError = gapError != null,
-                            supportingText = gapError?.let { { Text(localizeValidatorError(it, strings)) } }
-                        )
-                        Text(
-                            strings.seqManualStopNote,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            SectionCard(icon = Icons.Filled.PlayArrow, title = strings.alertSound) {
-                SOUND_KEYS.forEach { key ->
-                    val label = soundLabel(strings, key)
-                    val selected = vm.soundKey == key
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = selected,
-                                onClick = { vm.soundKey = key }
-                            )
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = selected,
-                            onClick = { vm.soundKey = key }
-                        )
-                        Text(
-                            label,
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodyLarge
-                        )
-                        IconButton(onClick = { AlertPlayer.preview(context, key) }) {
-                            Icon(
-                                Icons.Filled.PlayArrow,
-                                contentDescription = "${strings.preview} $label",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
-                OutlinedButton(
-                    onClick = { customSoundLauncher.launch("audio/*") },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(
-                        Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(strings.pickCustomSound)
-                }
-                vm.customSoundUri?.let { uriString ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                customSoundName(uriString),
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            IconButton(
-                                onClick = {
-                                    AlertPlayer.preview(context, vm.soundKey, uriString)
-                                }
-                            ) {
-                                Icon(
-                                    Icons.Filled.PlayArrow,
-                                    contentDescription = strings.previewCustomSoundCd,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            IconButton(onClick = { vm.customSoundUri = null }) {
-                                Icon(
-                                    Icons.Filled.Delete,
-                                    contentDescription = strings.deleteCustomSoundCd,
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                    }
-                    Text(
-                        strings.customSoundReplaces,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            SectionCard(icon = Icons.Filled.Notifications, title = strings.alertType) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    PrettyOptionRow(
-                        selected = vm.alertMode == Zone.ALERT_BOTH,
-                        title = strings.alertBothTitle,
-                        subtitle = strings.alertBothSub,
-                        onClick = { vm.alertMode = Zone.ALERT_BOTH }
-                    )
-                    PrettyOptionRow(
-                        selected = vm.alertMode == Zone.ALERT_SOUND,
-                        title = strings.alertSoundOnlyTitle,
-                        subtitle = strings.alertSoundOnlySub,
-                        onClick = { vm.alertMode = Zone.ALERT_SOUND }
-                    )
-                    PrettyOptionRow(
-                        selected = vm.alertMode == Zone.ALERT_VIBRATE,
-                        title = strings.alertVibrateOnlyTitle,
-                        subtitle = strings.alertVibrateOnlySub,
-                        onClick = { vm.alertMode = Zone.ALERT_VIBRATE }
-                    )
-                    PrettyOptionRow(
-                        selected = vm.alertMode == Zone.ALERT_NONE,
-                        title = strings.alertNoneTitle,
-                        subtitle = strings.alertNoneSub,
-                        onClick = { vm.alertMode = Zone.ALERT_NONE }
-                    )
-                }
-            }
-
-            SectionCard(icon = Icons.Filled.Notifications, title = strings.voiceAnnounce) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(strings.voiceAnnounceTitle, fontWeight = FontWeight.Bold)
-                        Text(
-                            strings.voiceAnnounceSub,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = vm.voiceAnnounce,
-                        onCheckedChange = { vm.voiceAnnounce = it }
-                    )
-                }
-            }
-
-            SectionCard(icon = Icons.Filled.LocationOn, title = strings.approachAlert) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(strings.approachTitle, fontWeight = FontWeight.Bold)
-                        Text(
-                            strings.approachSub,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = vm.approachEnabled,
-                        onCheckedChange = { vm.approachEnabled = it }
-                    )
-                }
-                if (vm.approachEnabled) {
-                    val approachError = if (vm.approachDistanceText.isNotBlank()) {
-                        val v = ZoneValidator.parseDoubleFa(vm.approachDistanceText)?.toInt()
-                        if (v == null || v !in 100..5000) {
-                            strings.approachDistanceHint
-                        } else null
-                    } else null
-                    OutlinedTextField(
-                        value = vm.approachDistanceText,
-                        onValueChange = { vm.approachDistanceText = it },
-                        label = { Text(strings.approachDistanceLabel) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        isError = approachError != null,
-                        supportingText = approachError?.let { { Text(it) } }
-                    )
-                }
-            }
-
-            SectionCard(icon = Icons.Filled.DateRange, title = strings.stayReminder) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(strings.stayTitle, fontWeight = FontWeight.Bold)
-                        Text(
-                            strings.staySub,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = vm.stayEnabled,
-                        onCheckedChange = { vm.stayEnabled = it }
-                    )
-                }
-                if (vm.stayEnabled) {
-                    val stayError = if (vm.stayMinutesText.isNotBlank()) {
-                        val v = ZoneValidator.parseDoubleFa(vm.stayMinutesText)?.toInt()
-                        if (v == null || v !in 5..1440) {
-                            strings.stayDurationHint
-                        } else null
-                    } else null
-                    OutlinedTextField(
-                        value = vm.stayMinutesText,
-                        onValueChange = { vm.stayMinutesText = it },
-                        label = { Text(strings.stayMinutesLabel) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(16.dp),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        isError = stayError != null,
-                        supportingText = stayError?.let { { Text(it) } }
-                    )
-                }
-            }
-
-            SectionCard(icon = Icons.Filled.Notifications, title = strings.sms) {
-                OutlinedTextField(
-                    value = vm.smsNumbersText,
-                    onValueChange = { vm.smsNumbersText = it },
-                    label = { Text(strings.smsNumbersLabel) },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                    shape = RoundedCornerShape(16.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
-                )
-                OutlinedTextField(
-                    value = vm.smsMessageText,
-                    onValueChange = { vm.smsMessageText = it },
-                    label = { Text(strings.smsMessageLabel) },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    shape = RoundedCornerShape(16.dp)
-                )
-                Text(
-                    strings.smsNote,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                OutlinedButton(
-                    onClick = {
-                        if (Permissions.hasContacts(context)) {
-                            showContactsPicker = true
-                        } else {
-                            contactsPermissionLauncher.launch(
-                                Manifest.permission.READ_CONTACTS
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(strings.pickFromContacts)
-                }
-            }
-
-            SectionCard(icon = Icons.Filled.DateRange, title = strings.silentWindow) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(strings.silentWindowTitle, fontWeight = FontWeight.Bold)
-                        Text(
-                            strings.silentWindowSub,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = vm.silentEnabled,
-                        onCheckedChange = { vm.silentEnabled = it }
-                    )
-                }
-                if (vm.silentEnabled) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        TimePickerField(
-                            label = strings.fromLabel,
-                            minutes = vm.silentStartMin,
-                            onPick = { vm.silentStartMin = it },
-                            modifier = Modifier.weight(1f)
-                        )
-                        TimePickerField(
-                            label = strings.toLabel,
-                            minutes = vm.silentEndMin,
-                            onPick = { vm.silentEndMin = it },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
-            SectionCard(icon = Icons.Filled.CheckCircle, title = strings.status) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(strings.zoneActive, fontWeight = FontWeight.Bold)
-                    Switch(checked = vm.isActive, onCheckedChange = { vm.isActive = it })
-                }
-            }
-
+            // خلاصه خطاها بالای پنل تب‌ها سنجاق شده تا در هر تبی که باشیم دیده شود
             if (errors.isNotEmpty()) {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
                     shape = MaterialTheme.shapes.medium,
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer
@@ -1539,15 +919,786 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                     ) {
                         errors.forEach {
                             Text(
-                                localizeValidatorError(it, strings),
+                                localizeValidatorError(it.second, strings),
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
                         }
                     }
                 }
             }
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    (slideInHorizontally(tween(220)) {
+                        if (targetState > initialState) 60 else -60
+                    } + fadeIn(tween(220))) togetherWith
+                        (slideOutHorizontally(tween(220)) {
+                            if (targetState > initialState) -60 else 60
+                        } + fadeOut(tween(220)))
+                },
+                label = "zoneEditTabs",
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) { tab ->
+                when (tab) {
+                    0 -> Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        SectionCard(icon = Icons.Filled.Info, title = strings.specifications) {
+                            OutlinedTextField(
+                                value = vm.name,
+                                onValueChange = { vm.name = it },
+                                label = { Text(strings.zoneNameHint) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                            // رنگ اختصاصی محدوده: نمونه اول «پیش‌فرض تم» است و هشت
+                            // نمونه بعدی رنگ‌های آماده‌اند؛ رنگ روی موج‌های کارت
+                            // محدوده در صفحه اصلی می‌نشیند.
+                            Text(
+                                strings.editColor,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                ColorSwatch(
+                                    selected = vm.colorIndex == 0,
+                                    brush = Brush.horizontalGradient(
+                                        listOf(
+                                            MaterialTheme.colorScheme.primary,
+                                            MaterialTheme.colorScheme.secondary
+                                        )
+                                    ),
+                                    color = null,
+                                    contentDescription = strings.colorDefault,
+                                    onClick = { vm.colorIndex = 0 }
+                                )
+                                ZoneColors.presets.forEachIndexed { i, preset ->
+                                    ColorSwatch(
+                                        selected = vm.colorIndex == i + 1,
+                                        brush = null,
+                                        color = preset,
+                                        contentDescription = null,
+                                        onClick = { vm.colorIndex = i + 1 }
+                                    )
+                                }
+                            }
+                            if (vm.colorIndex == 0) {
+                                Text(
+                                    strings.colorDefault,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
 
-            Spacer(Modifier.height(8.dp))
+                        SectionCard(icon = Icons.Filled.LocationOn, title = strings.coordinates) {
+                            OutlinedTextField(
+                                value = vm.latText,
+                                onValueChange = { input ->
+                                    // اگر کاربر یک جفت «عرض،طول» (مثل خروجی گوگل‌مپ) را الصاق کرد، خودکار جدا شود
+                                    val parts = input.split(",").map { it.trim() }
+                                    if (parts.size == 2 && parts.all { ZoneValidator.parseDoubleFa(it) != null }) {
+                                        vm.latText = parts[0]
+                                        vm.lngText = parts[1]
+                                        pasteError = null
+                                    } else {
+                                        vm.latText = input
+                                    }
+                                },
+                                label = { Text(strings.latitudeFull) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+                            OutlinedTextField(
+                                value = vm.lngText,
+                                onValueChange = { vm.lngText = it },
+                                label = { Text(strings.longitudeFull) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                FilledTonalButton(
+                                    onClick = {
+                                        if (Permissions.hasAnyLocation(context)) doFetchLocation()
+                                        else locationPermissionLauncher.launch(
+                                            arrayOf(
+                                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                                Manifest.permission.ACCESS_COARSE_LOCATION
+                                            )
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    enabled = !locLoading
+                                ) {
+                                    if (locLoading) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(20.dp),
+                                            strokeWidth = 2.dp
+                                        )
+                                    } else {
+                                        Text(strings.currentLocation)
+                                    }
+                                }
+                                FilledTonalButton(
+                                    onClick = {
+                                        clipboard.setPrimaryClip(
+                                            ClipData.newPlainText(
+                                                strings.coordinates,
+                                                "${vm.latText.trim()},${vm.lngText.trim()}"
+                                            )
+                                        )
+                                        Toast.makeText(context, strings.coordsCopied, Toast.LENGTH_SHORT).show()
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                ) { Text(strings.copyCoords) }
+                                FilledTonalButton(
+                                    onClick = { doPaste() },
+                                    modifier = Modifier.weight(1f)
+                                ) { Text(strings.paste) }
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    val lat = ZoneValidator.parseDoubleFa(vm.latText) ?: 0.0
+                                    val lng = ZoneValidator.parseDoubleFa(vm.lngText) ?: 0.0
+                                    val radiusM = ZoneValidator.parseDoubleFa(vm.radiusText)
+                                        ?.let { toMeters(it, vm.unit) } ?: 200.0
+                                    navController.navigate("map_picker?lat=$lat&lng=$lng&radius=$radiusM")
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    Icons.Filled.Place,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(strings.selectOnMap)
+                            }
+                            val errorColor = MaterialTheme.colorScheme.error
+                            locError?.let {
+                                Text(it, color = errorColor, style = MaterialTheme.typography.bodySmall)
+                            }
+                            pasteError?.let {
+                                Text(it, color = errorColor, style = MaterialTheme.typography.bodySmall)
+                            }
+                            Text(
+                                strings.coordsGuide,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        SectionCard(icon = Icons.Filled.Place, title = strings.radius) {
+                            OutlinedTextField(
+                                value = vm.radiusText,
+                                onValueChange = { vm.radiusText = it },
+                                label = { Text(strings.radius) },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                            )
+                            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                                SegmentedButton(
+                                    selected = vm.unit == RadiusUnit.METER,
+                                    onClick = { vm.unit = RadiusUnit.METER },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                    label = { Text(strings.meterUnit) }
+                                )
+                                SegmentedButton(
+                                    selected = vm.unit == RadiusUnit.KILOMETER,
+                                    onClick = { vm.unit = RadiusUnit.KILOMETER },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                    label = { Text(strings.kmUnit) }
+                                )
+                            }
+                            // هشدار برای شعاع‌های خیلی کوچک: دقت GPS گوشی محدود است
+                            val radiusMeters = vm.radiusText.toDoubleOrNull()?.let { toMeters(it, vm.unit) }
+                            if (radiusMeters != null && radiusMeters > 0 && radiusMeters < 50) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Warning,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        strings.gpsAccuracyWarning,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
+
+                        // فاصله بررسی دقیق: فقط برای شعاع‌های کمتر از ۲۰۰ متر
+                        val radiusMetersNow =
+                            ZoneValidator.parseDoubleFa(vm.radiusText)?.let { toMeters(it, vm.unit) }
+                        if (radiusMetersNow != null && radiusMetersNow < 200.0) {
+                            SectionCard(icon = Icons.Filled.Refresh, title = strings.checkIntervalTitle) {
+                                Text(
+                                    strings.checkIntervalSub,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                OutlinedTextField(
+                                    value = vm.checkIntervalText,
+                                    onValueChange = { vm.checkIntervalText = it },
+                                    label = { Text(strings.checkIntervalLabel) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .alpha(if (vm.checkIntervalContinuous) 0.4f else 1f),
+                                    enabled = !vm.checkIntervalContinuous,
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(16.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                                )
+                                PrettySegmentedControl(
+                                    options = listOf(strings.unitSecond, strings.unitMinute, strings.unitContinuous),
+                                    selectedIndex = when {
+                                        vm.checkIntervalContinuous -> 2
+                                        vm.checkIntervalIsMinutes -> 1
+                                        else -> 0
+                                    },
+                                    onSelect = { index ->
+                                        vm.checkIntervalContinuous = index == 2
+                                        vm.checkIntervalIsMinutes = index == 1
+                                    }
+                                )
+                                if (vm.checkIntervalContinuous) {
+                                    Text(
+                                        strings.continuousNote,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                } else {
+                                    val intervalError = CheckInterval.errorFa(
+                                        CheckInterval.toSeconds(vm.checkIntervalText, vm.checkIntervalIsMinutes)
+                                    )
+                                    if (intervalError != null) {
+                                        Text(
+                                            localizeValidatorError(intervalError, strings),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        SectionCard(icon = Icons.Filled.CheckCircle, title = strings.status) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(strings.zoneActive, fontWeight = FontWeight.Bold)
+                                Switch(checked = vm.isActive, onCheckedChange = { vm.isActive = it })
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    1 -> Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        SectionCard(icon = Icons.Filled.Notifications, title = strings.exitBehaviorTitle) {
+                            Text(
+                                strings.exitInsideNote,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf(
+                                    Zone.EXIT_STOP to (strings.exitImmediate to strings.exitStopSub),
+                                    Zone.EXIT_SEQUENCE to (strings.exitPattern to strings.exitSequenceSub),
+                                    Zone.EXIT_CONTINUE to (strings.exitContinueTitle to strings.exitContinueSub)
+                                ).forEach { (behavior, texts) ->
+                                    PrettyOptionRow(
+                                        selected = vm.exitBehavior == behavior,
+                                        title = texts.first,
+                                        subtitle = texts.second,
+                                        onClick = { vm.exitBehavior = behavior }
+                                    )
+                                }
+                            }
+                            // تنظیمات الگوی تکراری: تعداد دفعات، مدت هر آلارم، مکث بین آلارم‌ها
+                            if (vm.exitBehavior == Zone.EXIT_SEQUENCE) {
+                                val countError = ExitSequenceValidator.validateCount(vm.postExitCountText)
+                                val durationError =
+                                    ExitSequenceValidator.validateDuration(vm.postExitDurationText)
+                                val gapError = ExitSequenceValidator.validateGap(vm.postExitGapText)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = vm.postExitCountText,
+                                        onValueChange = { vm.postExitCountText = it },
+                                        label = { Text(strings.seqCountLabel) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(16.dp),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        isError = countError != null,
+                                        supportingText = countError?.let { { Text(localizeValidatorError(it, strings)) } }
+                                    )
+                                    OutlinedTextField(
+                                        value = vm.postExitDurationText,
+                                        onValueChange = { vm.postExitDurationText = it },
+                                        label = { Text(strings.seqDurationLabel) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(16.dp),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        isError = durationError != null,
+                                        supportingText = durationError?.let { { Text(localizeValidatorError(it, strings)) } }
+                                    )
+                                    OutlinedTextField(
+                                        value = vm.postExitGapText,
+                                        onValueChange = { vm.postExitGapText = it },
+                                        label = { Text(strings.seqGapLabel) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        singleLine = true,
+                                        shape = RoundedCornerShape(16.dp),
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        isError = gapError != null,
+                                        supportingText = gapError?.let { { Text(localizeValidatorError(it, strings)) } }
+                                    )
+                                    Text(
+                                        strings.seqManualStopNote,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        SectionCard(icon = Icons.Filled.PlayArrow, title = strings.alertSound) {
+                            SOUND_KEYS.forEach { key ->
+                                val label = soundLabel(strings, key)
+                                val selected = vm.soundKey == key
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .selectable(
+                                            selected = selected,
+                                            onClick = { vm.soundKey = key }
+                                        )
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = selected,
+                                        onClick = { vm.soundKey = key }
+                                    )
+                                    Text(
+                                        label,
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    IconButton(onClick = { AlertPlayer.preview(context, key) }) {
+                                        Icon(
+                                            Icons.Filled.PlayArrow,
+                                            contentDescription = "${strings.preview} $label",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                            OutlinedButton(
+                                onClick = { customSoundLauncher.launch("audio/*") },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    Icons.Filled.PlayArrow,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(strings.pickCustomSound)
+                            }
+                            vm.customSoundUri?.let { uriString ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(16.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 12.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            customSoundName(uriString),
+                                            modifier = Modifier.weight(1f),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                AlertPlayer.preview(context, vm.soundKey, uriString)
+                                            }
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.PlayArrow,
+                                                contentDescription = strings.previewCustomSoundCd,
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        IconButton(onClick = { vm.customSoundUri = null }) {
+                                            Icon(
+                                                Icons.Filled.Delete,
+                                                contentDescription = strings.deleteCustomSoundCd,
+                                                tint = MaterialTheme.colorScheme.error
+                                            )
+                                        }
+                                    }
+                                }
+                                Text(
+                                    strings.customSoundReplaces,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        SectionCard(icon = Icons.Filled.Notifications, title = strings.alertType) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                PrettyOptionRow(
+                                    selected = vm.alertMode == Zone.ALERT_BOTH,
+                                    title = strings.alertBothTitle,
+                                    subtitle = strings.alertBothSub,
+                                    onClick = { vm.alertMode = Zone.ALERT_BOTH }
+                                )
+                                PrettyOptionRow(
+                                    selected = vm.alertMode == Zone.ALERT_SOUND,
+                                    title = strings.alertSoundOnlyTitle,
+                                    subtitle = strings.alertSoundOnlySub,
+                                    onClick = { vm.alertMode = Zone.ALERT_SOUND }
+                                )
+                                PrettyOptionRow(
+                                    selected = vm.alertMode == Zone.ALERT_VIBRATE,
+                                    title = strings.alertVibrateOnlyTitle,
+                                    subtitle = strings.alertVibrateOnlySub,
+                                    onClick = { vm.alertMode = Zone.ALERT_VIBRATE }
+                                )
+                                PrettyOptionRow(
+                                    selected = vm.alertMode == Zone.ALERT_NONE,
+                                    title = strings.alertNoneTitle,
+                                    subtitle = strings.alertNoneSub,
+                                    onClick = { vm.alertMode = Zone.ALERT_NONE }
+                                )
+                            }
+                        }
+
+                        SectionCard(icon = Icons.Filled.Notifications, title = strings.voiceAnnounce) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(strings.voiceAnnounceTitle, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        strings.voiceAnnounceSub,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = vm.voiceAnnounce,
+                                    onCheckedChange = { vm.voiceAnnounce = it }
+                                )
+                            }
+                        }
+
+                        SectionCard(icon = Icons.Filled.Notifications, title = strings.sms) {
+                            OutlinedTextField(
+                                value = vm.smsNumbersText,
+                                onValueChange = { vm.smsNumbersText = it },
+                                label = { Text(strings.smsNumbersLabel) },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 3,
+                                shape = RoundedCornerShape(16.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+                            )
+                            OutlinedTextField(
+                                value = vm.smsMessageText,
+                                onValueChange = { vm.smsMessageText = it },
+                                label = { Text(strings.smsMessageLabel) },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 2,
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                            Text(
+                                strings.smsNote,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedButton(
+                                onClick = {
+                                    if (Permissions.hasContacts(context)) {
+                                        showContactsPicker = true
+                                    } else {
+                                        contactsPermissionLauncher.launch(
+                                            Manifest.permission.READ_CONTACTS
+                                        )
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(strings.pickFromContacts)
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    else -> Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        SectionCard(icon = Icons.Filled.DateRange, title = strings.schedule) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(strings.scheduleEnable, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        strings.scheduleEnableSub,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = vm.scheduleEnabled,
+                                    onCheckedChange = { vm.scheduleEnabled = it }
+                                )
+                            }
+                            if (vm.scheduleEnabled) {
+                                val dayNames = listOf(
+                                    strings.daySat, strings.daySun, strings.dayMon, strings.dayTue,
+                                    strings.dayWed, strings.dayThu, strings.dayFri
+                                )
+                                val selectedDays = vm.scheduleDaysSet()
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    (1..4).forEach { day ->
+                                        FilterChip(
+                                            selected = day in selectedDays,
+                                            onClick = { vm.toggleScheduleDay(day) },
+                                            label = { Text(dayNames[day - 1]) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    (5..7).forEach { day ->
+                                        FilterChip(
+                                            selected = day in selectedDays,
+                                            onClick = { vm.toggleScheduleDay(day) },
+                                            label = { Text(dayNames[day - 1]) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                    Spacer(Modifier.weight(1f))
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    TimePickerField(
+                                        label = strings.fromHour,
+                                        minutes = vm.scheduleStartMin,
+                                        onPick = { vm.scheduleStartMin = it },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TimePickerField(
+                                        label = strings.toHour,
+                                        minutes = vm.scheduleEndMin,
+                                        onPick = { vm.scheduleEndMin = it },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                                Text(
+                                    strings.scheduleExample,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        SectionCard(icon = Icons.Filled.LocationOn, title = strings.approachAlert) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(strings.approachTitle, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        strings.approachSub,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = vm.approachEnabled,
+                                    onCheckedChange = { vm.approachEnabled = it }
+                                )
+                            }
+                            if (vm.approachEnabled) {
+                                val approachError = if (vm.approachDistanceText.isNotBlank()) {
+                                    val v = ZoneValidator.parseDoubleFa(vm.approachDistanceText)?.toInt()
+                                    if (v == null || v !in 100..5000) {
+                                        strings.approachDistanceHint
+                                    } else null
+                                } else null
+                                OutlinedTextField(
+                                    value = vm.approachDistanceText,
+                                    onValueChange = { vm.approachDistanceText = it },
+                                    label = { Text(strings.approachDistanceLabel) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(16.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    isError = approachError != null,
+                                    supportingText = approachError?.let { { Text(it) } }
+                                )
+                            }
+                        }
+
+                        SectionCard(icon = Icons.Filled.DateRange, title = strings.stayReminder) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(strings.stayTitle, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        strings.staySub,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = vm.stayEnabled,
+                                    onCheckedChange = { vm.stayEnabled = it }
+                                )
+                            }
+                            if (vm.stayEnabled) {
+                                val stayError = if (vm.stayMinutesText.isNotBlank()) {
+                                    val v = ZoneValidator.parseDoubleFa(vm.stayMinutesText)?.toInt()
+                                    if (v == null || v !in 5..1440) {
+                                        strings.stayDurationHint
+                                    } else null
+                                } else null
+                                OutlinedTextField(
+                                    value = vm.stayMinutesText,
+                                    onValueChange = { vm.stayMinutesText = it },
+                                    label = { Text(strings.stayMinutesLabel) },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(16.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    isError = stayError != null,
+                                    supportingText = stayError?.let { { Text(it) } }
+                                )
+                            }
+                        }
+
+                        SectionCard(icon = Icons.Filled.DateRange, title = strings.silentWindow) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(strings.silentWindowTitle, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        strings.silentWindowSub,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = vm.silentEnabled,
+                                    onCheckedChange = { vm.silentEnabled = it }
+                                )
+                            }
+                            if (vm.silentEnabled) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    TimePickerField(
+                                        label = strings.fromLabel,
+                                        minutes = vm.silentStartMin,
+                                        onPick = { vm.silentStartMin = it },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    TimePickerField(
+                                        label = strings.toLabel,
+                                        minutes = vm.silentEndMin,
+                                        onPick = { vm.silentEndMin = it },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+            }
         }
     }
 

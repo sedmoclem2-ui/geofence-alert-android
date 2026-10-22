@@ -841,6 +841,9 @@ data class UiStrings(
     val colorDefault: String get() = ext.colorDefault
     val totalEvents: String get() = ext.totalEvents
     val chartLast7Days: String get() = ext.chartLast7Days
+    val tabPlace: String get() = ext.tabPlace
+    val tabAlerts: String get() = ext.tabAlerts
+    val tabTiming: String get() = ext.tabTiming
 }
 
 /**
@@ -1059,7 +1062,11 @@ data class UiStringsExt(
     val colorDefault: String,
     // آمار بازطراحی‌شده (نسخه ۳.۴.۰)
     val totalEvents: String,
-    val chartLast7Days: String
+    val chartLast7Days: String,
+    // تب‌های موضوعی پنل ویرایش محدوده (نسخه ۳.۶.۰)
+    val tabPlace: String,
+    val tabAlerts: String,
+    val tabTiming: String
 ) {
     companion object {
         val FA = UiStringsExt(
@@ -1270,7 +1277,10 @@ data class UiStringsExt(
             editColor = "رنگ محدوده",
             colorDefault = "پیش‌فرض",
             totalEvents = "مجموع رویدادها",
-            chartLast7Days = "ورودهای ۷ روز اخیر"
+            chartLast7Days = "ورودهای ۷ روز اخیر",
+            tabPlace = "کجاست؟",
+            tabAlerts = "هشدار",
+            tabTiming = "زمان‌بندی"
         )
 
         val EN = UiStringsExt(
@@ -1481,7 +1491,10 @@ data class UiStringsExt(
             editColor = "Zone color",
             colorDefault = "Default",
             totalEvents = "Total events",
-            chartLast7Days = "Entries in the last 7 days"
+            chartLast7Days = "Entries in the last 7 days",
+            tabPlace = "Place",
+            tabAlerts = "Alerts",
+            tabTiming = "Timing"
         )
 
         val AR = UiStringsExt(
@@ -1692,7 +1705,10 @@ data class UiStringsExt(
             editColor = "لون المنطقة",
             colorDefault = "الافتراضي",
             totalEvents = "مجموع الأحداث",
-            chartLast7Days = "عمليات الدخول في آخر ٧ أيام"
+            chartLast7Days = "عمليات الدخول في آخر ٧ أيام",
+            tabPlace = "المكان",
+            tabAlerts = "التنبيهات",
+            tabTiming = "التوقيت"
         )
     }
 }
