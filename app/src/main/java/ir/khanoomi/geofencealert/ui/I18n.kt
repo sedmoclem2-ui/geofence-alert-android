@@ -769,6 +769,7 @@ data class UiStrings(
     val unitSecond: String get() = ext.unitSecond
     val unitMinute: String get() = ext.unitMinute
     val unitContinuous: String get() = ext.unitContinuous
+    val unitTimes: String get() = ext.unitTimes
     val continuousNote: String get() = ext.continuousNote
     val scheduleEnable: String get() = ext.scheduleEnable
     val scheduleEnableSub: String get() = ext.scheduleEnableSub
@@ -989,6 +990,7 @@ data class UiStringsExt(
     val unitSecond: String,
     val unitMinute: String,
     val unitContinuous: String,
+    val unitTimes: String,
     val continuousNote: String,
     val scheduleEnable: String,
     val scheduleEnableSub: String,
@@ -1206,6 +1208,7 @@ data class UiStringsExt(
             unitSecond = "ثانیه",
             unitMinute = "دقیقه",
             unitContinuous = "مداوم",
+            unitTimes = "دفعه",
             continuousNote = "در حالت مداوم، موقعیت تقریباً هر لحظه (هر ۲ ثانیه) بررسی می‌شود؛ مصرف باتری بیشتر است.",
             scheduleEnable = "فعال‌سازی زمان‌بندی",
             scheduleEnableSub = "هشدار فقط در روزها و ساعات انتخاب‌شده فعال باشد.",
@@ -1420,6 +1423,7 @@ data class UiStringsExt(
             unitSecond = "Seconds",
             unitMinute = "Minutes",
             unitContinuous = "Continuous",
+            unitTimes = "times",
             continuousNote = "In continuous mode, location is checked almost constantly (every 2 seconds); battery use is higher.",
             scheduleEnable = "Enable schedule",
             scheduleEnableSub = "Alert only on the selected days and hours.",
@@ -1634,6 +1638,7 @@ data class UiStringsExt(
             unitSecond = "ثوانٍ",
             unitMinute = "دقائق",
             unitContinuous = "مستمر",
+            unitTimes = "مرات",
             continuousNote = "في الوضع المستمر يُفحص الموقع باستمرار تقريبًا (كل ثانيتين)؛ استهلاك البطارية أعلى.",
             scheduleEnable = "تفعيل الجدول",
             scheduleEnableSub = "التنبيه فقط في الأيام والساعات المحدّدة.",
