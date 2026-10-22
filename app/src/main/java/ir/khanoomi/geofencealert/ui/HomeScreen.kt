@@ -39,11 +39,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -55,7 +53,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -97,6 +94,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -108,6 +106,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.AndroidViewModel
@@ -122,7 +122,6 @@ import ir.khanoomi.geofencealert.alert.AlertController
 import ir.khanoomi.geofencealert.data.Zone
 import ir.khanoomi.geofencealert.domain.TimeFormat
 import ir.khanoomi.geofencealert.domain.ZoneSort
-import ir.khanoomi.geofencealert.domain.formatRadiusFa
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.ui.theme.RedDeep
 import ir.khanoomi.geofencealert.ui.theme.ZoneColors
@@ -1283,7 +1282,8 @@ private fun RadarMini(
     modifier: Modifier = Modifier,
     alerting: Boolean = false,
     phaseSeed: Int = 0,
-    tint: Color? = null
+    tint: Color? = null,
+    sizeDp: Dp = 72.dp
 ) {
     val scheme = MaterialTheme.colorScheme
     // فاز قطعی و پخش‌شده برای هر کارت از روی شناسه‌اش (بدون تصادفی‌بودن).
@@ -1294,20 +1294,22 @@ private fun RadarMini(
             color = scheme.error,
             cycleMillis = 900,
             phase = phase,
-            modifier = modifier
+            modifier = modifier,
+            sizeDp = sizeDp
         )
         active -> RadarMiniLive(
             radiusMeters = radiusMeters,
             color = tint ?: scheme.primary,
             cycleMillis = 2000,
             phase = phase,
-            modifier = modifier
+            modifier = modifier,
+            sizeDp = sizeDp
         )
         else -> {
             val ringBase = scheme.outline
             Canvas(
                 modifier = modifier
-                    .size(72.dp)
+                    .size(sizeDp)
                     .graphicsLayer { alpha = 0.6f }
             ) {
                 val t = (log10(radiusMeters.toFloat()).coerceIn(1f, 6f) - 1f) / 5f
@@ -1345,6 +1347,7 @@ private fun RadarMiniLive(
     color: Color,
     cycleMillis: Int,
     phase: Float,
+    sizeDp: Dp = 72.dp,
     modifier: Modifier = Modifier
 ) {
     val infinite = rememberInfiniteTransition(label = "radarMini")
@@ -1366,7 +1369,7 @@ private fun RadarMiniLive(
         ),
         label = "miniBreath"
     )
-    Canvas(modifier = modifier.size(72.dp)) {
+    Canvas(modifier = modifier.size(sizeDp)) {
         val t = (log10(radiusMeters.toFloat()).coerceIn(1f, 6f) - 1f) / 5f
         val maxR = size.minDimension / 2f
         val rim = maxR * (0.72f + 0.28f * t)
@@ -1389,22 +1392,6 @@ private fun RadarMiniLive(
         drawCircle(
             color = color.copy(alpha = 0.7f + 0.3f * breath),
             radius = (4.5f + 1.5f * breath).dp.toPx()
-        )
-    }
-}
-
-@Composable
-private fun TonalChip(text: String, dimmed: Boolean = false) {
-    val scheme = MaterialTheme.colorScheme
-    Surface(
-        color = if (dimmed) scheme.surfaceVariant else scheme.primaryContainer,
-        shape = CircleShape
-    ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelMedium,
-            color = if (dimmed) scheme.onSurfaceVariant else scheme.onPrimaryContainer,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
         )
     }
 }
@@ -1467,6 +1454,8 @@ private fun ZoneCard(
     onStopAlert: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val strings = LocalStrings.current
+    val lang = LocalAppLang.current
     // لمس کارت = فعال/غیرفعال کردن محدوده (جایگزین کلید قبلی)؛ اما در
     // حالت مرتب‌سازی دستی ژست درگ مالک کارت است و هنگام پخش هشدار هم
     // لمس نباید وضعیت را عوض کند.
@@ -1474,6 +1463,16 @@ private fun ZoneCard(
     val interaction = remember { MutableInteractionSource() }
     val pressScale = rememberPressScale(interaction, pressedScale = 0.98f)
     val tapEnabled = !manualSort && !zone.isAlerting
+    val zoneTint = ZoneColors.colorOrNull(zone.colorIndex)
+    // شست‌وشوی رنگی بدنه کارت (طرح نوار باریک نسخه ۳.۵.۰): هویت هر
+    // کارت از رنگ خودش می‌آید — فعال با رنگ اختصاصی محدوده (یا رنگ
+    // اصلی تم) ملایم رنگ می‌گیرد و غیرفعال خاکستری کم‌رنگ می‌شود.
+    // نوار لهجه لبه‌ای نسخه ۳.۴.۰ حذف شد؛ خود رنگ بدنه حامل هویت است.
+    val washColor = when {
+        zone.isActive && zoneTint != null -> zoneTint.copy(alpha = 0.13f)
+        zone.isActive -> scheme.primary.copy(alpha = 0.06f)
+        else -> scheme.surfaceVariant.copy(alpha = 0.35f)
+    }
     Surface(
         modifier = modifier
             .fillMaxWidth()
@@ -1497,44 +1496,26 @@ private fun ZoneCard(
             .animateContentSize(),
         shape = MaterialTheme.shapes.large,
         tonalElevation = 2.dp,
-        color = scheme.surface
+        color = washColor
     ) {
-        // نوار لهجه در لبه شروع کارت: رنگ اختصاصی محدوده اگر انتخاب
-        // شده باشد؛ وگرنه برای محدوده فعال رنگ اصلی تم و برای غیرفعال
-        // خاکستری لبه‌ها تا وضعیت از همان لبه خوانده شود.
-        val accentColor = ZoneColors.zoneColor(
-            zone.colorIndex,
-            if (zone.isActive) scheme.primary else scheme.outlineVariant
-        )
-        val zoneTint = ZoneColors.colorOrNull(zone.colorIndex)
-        Row(modifier = Modifier.height(IntrinsicSize.Max)) {
-            Box(
+        Column {
+            Row(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .padding(start = 12.dp, top = 16.dp, bottom = 16.dp)
-                    .width(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(accentColor)
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp, end = 16.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    // لمس خود موج‌های کارت هم محدوده را فعال/غیرفعال
-                    // می‌کند (در حالت مرتب‌سازی دستی هم کار می‌کند، چون
-                    // لمس کوتاه پیش از شکل گرفتن لمس طولانیِ درگ مصرف
-                    // می‌شود)؛ هنگام هشدار لمس موج غیرفعال است. رنگ
-                    // اختصاصی محدوده اگر انتخاب شده باشد روی موج‌ها و
-                    // موج یک‌باره می‌نشیند.
-                    val radarInteraction = remember { MutableInteractionSource() }
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // لمس خود موج‌های کارت هم محدوده را فعال/غیرفعال
+                // می‌کند (در حالت مرتب‌سازی دستی هم کار می‌کند، چون
+                // لمس کوتاه پیش از شکل گرفتن لمس طولانیِ درگ مصرف
+                // می‌شود)؛ هنگام هشدار لمس موج غیرفعال است. رنگ
+                // اختصاصی محدوده اگر انتخاب شده باشد روی موج‌ها و
+                // موج یک‌باره می‌نشیند.
+                val radarInteraction = remember { MutableInteractionSource() }
                 val radarScale = rememberPressScale(radarInteraction, pressedScale = 0.92f)
                 Box(
                     modifier = Modifier
-                        .size(72.dp)
+                        .size(56.dp)
                         .graphicsLayer {
                             scaleX = radarScale
                             scaleY = radarScale
@@ -1553,87 +1534,165 @@ private fun ZoneCard(
                         active = zone.isActive,
                         alerting = zone.isAlerting,
                         phaseSeed = zone.id.toInt(),
-                        tint = zoneTint
+                        tint = zoneTint,
+                        sizeDp = 56.dp
                     )
                     OneShotRipple(
                         active = zone.isActive,
                         color = zoneTint ?: scheme.primary,
-                        modifier = Modifier.size(72.dp)
+                        modifier = Modifier.size(56.dp)
                     )
                 }
-                    Spacer(Modifier.width(12.dp))
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            zone.name,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (zone.isActive) {
-                                scheme.onSurface
-                            } else {
-                                scheme.onSurfaceVariant
-                            }
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            TonalChip(
-                                formatRadiusFa(zone.radiusMeters),
-                                dimmed = !zone.isActive
-                            )
-                            TonalChip(
-                                when (zone.exitBehavior) {
-                                    Zone.EXIT_SEQUENCE -> LocalStrings.current.exitPattern
-                                    Zone.EXIT_CONTINUE -> LocalStrings.current.exitUntilManual
-                                    else -> LocalStrings.current.exitImmediate
-                                },
-                                dimmed = !zone.isActive
-                            )
-                        }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    // داک کپسولی ویرایش/حذف حالا بالای کارت و در انتهای
-                    // ردیف سربرگ نشسته است (کوچک‌تر از قبل) تا پایین
-                    // کارت دیگر ردیف جدا نگیرد و کارت کوتاه‌تر بماند؛
-                    // حذف مثل قبل از دیالوگ تأیید می‌گذرد.
-                    ZoneActionDock(onEdit = onEdit, onDelete = onDelete)
-                }
-                // وضعیت و آخرین ورود، هم‌تراز با ستون نام (زیر آن).
+                Spacer(Modifier.width(10.dp))
                 Column(
-                    modifier = Modifier.padding(
-                        start = 84.dp,
-                        end = 16.dp,
-                        top = 10.dp,
-                        bottom = if (zone.isAlerting) 12.dp else 16.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    StatusPill(zone = zone)
-                    if (zone.lastTriggeredAt > 0) {
+                    Text(
+                        zone.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (zone.isActive) {
+                            scheme.onSurface
+                        } else {
+                            scheme.onSurfaceVariant
+                        },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    // خط اطلاعات: شعاع و رفتار خروج در یک خط ظریف،
+                    // بدون چیپ‌های قرصی نسخه‌های قبل.
+                    Text(
+                        formatRadiusLocalized(zone.radiusMeters, strings, lang) +
+                            " \u2022 " +
+                            when (zone.exitBehavior) {
+                                Zone.EXIT_SEQUENCE -> strings.exitPattern
+                                Zone.EXIT_CONTINUE -> strings.exitUntilManual
+                                else -> strings.exitImmediate
+                            },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    // خط وضعیت: نقطه رنگی هم‌وضعیت + متن وضعیت و (اگر
+                    // بود) آخرین ورود، همه در یک خط.
+                    val statusDotColor = when {
+                        zone.isAlerting -> scheme.error
+                        !zone.isActive -> scheme.outline
+                        else -> zoneTint ?: scheme.primary
+                    }
+                    val statusTextColor = when {
+                        zone.isAlerting -> scheme.error
+                        !zone.isActive -> scheme.onSurfaceVariant
+                        else -> scheme.onSurface
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(statusDotColor, CircleShape)
+                        )
                         Text(
-                            "${LocalStrings.current.lastEntry}: " +
-                                TimeFormat.formatRelativeTimeFa(zone.lastTriggeredAt),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = scheme.onSurfaceVariant
+                            buildString {
+                                append(
+                                    when {
+                                        zone.isAlerting -> strings.alertActive
+                                        !zone.isActive -> strings.inactive
+                                        else -> strings.waitingEntry
+                                    }
+                                )
+                                if (zone.lastTriggeredAt > 0) {
+                                    append(" \u2022 ")
+                                    append(strings.lastEntry)
+                                    append(": ")
+                                    append(
+                                        TimeFormat.formatRelativeTimeFa(zone.lastTriggeredAt)
+                                    )
+                                }
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = statusTextColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
-                if (zone.isAlerting) {
-                    Button(
-                        onClick = onStopAlert,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = scheme.secondary,
-                            contentColor = scheme.onSecondary
-                        ),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 84.dp, end = 16.dp, bottom = 16.dp)
-                    ) {
-                        Text(LocalStrings.current.stopAlert, fontWeight = FontWeight.Bold)
-                    }
+                Spacer(Modifier.width(4.dp))
+                // کنش‌های شبحی ویرایش/حذف در انتهای همان ردیف: بدون
+                // پس‌زمینه، کپسول یا حاشیه — فقط آیکن؛ حذف مثل قبل
+                // از دیالوگ تأیید می‌گذرد.
+                ZoneGhostAction(
+                    icon = Icons.Default.Edit,
+                    contentDescription = strings.editCd,
+                    tint = if (zone.isActive) scheme.primary else scheme.onSurfaceVariant,
+                    onClick = onEdit
+                )
+                ZoneGhostAction(
+                    icon = Icons.Default.Delete,
+                    contentDescription = strings.delete,
+                    tint = scheme.error,
+                    onClick = onDelete
+                )
+            }
+            if (zone.isAlerting) {
+                Button(
+                    onClick = onStopAlert,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = scheme.secondary,
+                        contentColor = scheme.onSecondary
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
+                ) {
+                    Text(strings.stopAlert, fontWeight = FontWeight.Bold)
                 }
             }
         }
+    }
+}
+
+/**
+ * کنش شبحی کارت محدوده (ویرایش/حذف): آیکن ساده ۲۱dp بدون هیچ
+ * پس‌زمینه، کپسول یا حاشیه‌ای، در ناحیه لمس ۳۶dp با همان فشردن فنری
+ * (۰٫۸۸) و بازخورد لمسی داک قبلی — جایگزین مینیمال داک از نسخه ۳.۵.۰.
+ */
+@Composable
+private fun ZoneGhostAction(
+    icon: ImageVector,
+    contentDescription: String?,
+    tint: Color,
+    onClick: () -> Unit
+) {
+    val haptics = LocalHapticFeedback.current
+    val actionInteraction = remember { MutableInteractionSource() }
+    val actionScale = rememberPressScale(actionInteraction, pressedScale = 0.88f)
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .graphicsLayer {
+                scaleX = actionScale
+                scaleY = actionScale
+            }
+            .clickable(
+                interactionSource = actionInteraction,
+                indication = null
+            ) {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(21.dp)
+        )
     }
 }
 
@@ -1653,89 +1712,6 @@ private fun rememberPressScale(
         label = "pressScale"
     )
     return scale
-}
-
-/**
- * داک کپسولی ویرایش/حذف کارت محدوده: یک کپسول کوتاه (~۳۶dp) با
- * پس‌زمینه surfaceVariant و حاشیه ظریف؛ داخلش دکمه ویرایش (رنگ اصلی
- * تم)، یک جداکننده عمودی باریک و دکمه حذف (رنگ خطا) — هر دو با ناحیه
- * لمس ~۳۴dp، فشردن فنری و بازخورد لمسی. از نسخه ۳.۴.۰ بالای کارت و در
- * انتهای ردیف سربرگ می‌نشیند تا پایین کارت ردیف اضافه نگیرد و کارت
- * کوتاه بماند. حذف مثل قبل از دیالوگ تأیید می‌گذرد.
- */
-@Composable
-private fun ZoneActionDock(onEdit: () -> Unit, onDelete: () -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    val strings = LocalStrings.current
-    val haptics = LocalHapticFeedback.current
-    val editInteraction = remember { MutableInteractionSource() }
-    val editScale = rememberPressScale(editInteraction, pressedScale = 0.88f)
-    val deleteInteraction = remember { MutableInteractionSource() }
-    val deleteScale = rememberPressScale(deleteInteraction, pressedScale = 0.88f)
-    Row(
-        modifier = Modifier
-            .height(36.dp)
-            .clip(CircleShape)
-            .background(scheme.surfaceVariant)
-            .border(1.dp, scheme.outlineVariant, CircleShape)
-            .padding(horizontal = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .graphicsLayer {
-                    scaleX = editScale
-                    scaleY = editScale
-                }
-                .clip(CircleShape)
-                .clickable(
-                    interactionSource = editInteraction,
-                    indication = null
-                ) {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onEdit()
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Default.Edit,
-                contentDescription = strings.editCd,
-                tint = scheme.primary,
-                modifier = Modifier.size(18.dp)
-            )
-        }
-        Box(
-            modifier = Modifier
-                .width(1.dp)
-                .height(16.dp)
-                .background(scheme.outlineVariant)
-        )
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .graphicsLayer {
-                    scaleX = deleteScale
-                    scaleY = deleteScale
-                }
-                .clip(CircleShape)
-                .clickable(
-                    interactionSource = deleteInteraction,
-                    indication = null
-                ) {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onDelete()
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Default.Delete,
-                contentDescription = strings.delete,
-                tint = scheme.error,
-                modifier = Modifier.size(18.dp)
-            )
-        }
-    }
 }
 
 /** حالت خالی با رادار زنده بزرگ بالای عنوان و دکمه ساخت. */
