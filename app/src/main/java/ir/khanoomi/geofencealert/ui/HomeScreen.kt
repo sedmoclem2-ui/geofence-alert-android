@@ -39,9 +39,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -53,6 +55,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -1391,15 +1394,16 @@ private fun RadarMiniLive(
 }
 
 @Composable
-private fun TonalChip(text: String) {
+private fun TonalChip(text: String, dimmed: Boolean = false) {
+    val scheme = MaterialTheme.colorScheme
     Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
+        color = if (dimmed) scheme.surfaceVariant else scheme.primaryContainer,
         shape = CircleShape
     ) {
         Text(
             text,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            color = if (dimmed) scheme.onSurfaceVariant else scheme.onPrimaryContainer,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
         )
     }
@@ -1491,25 +1495,42 @@ private fun ZoneCard(
                 }
             )
             .animateContentSize(),
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.large,
         tonalElevation = 2.dp,
         color = scheme.surface
     ) {
-        Column {
-            Row(
+        // نوار لهجه در لبه شروع کارت: رنگ اختصاصی محدوده اگر انتخاب
+        // شده باشد؛ وگرنه برای محدوده فعال رنگ اصلی تم و برای غیرفعال
+        // خاکستری لبه‌ها تا وضعیت از همان لبه خوانده شود.
+        val accentColor = ZoneColors.zoneColor(
+            zone.colorIndex,
+            if (zone.isActive) scheme.primary else scheme.outlineVariant
+        )
+        val zoneTint = ZoneColors.colorOrNull(zone.colorIndex)
+        Row(modifier = Modifier.height(IntrinsicSize.Max)) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // لمس خود موج‌های کارت هم محدوده را فعال/غیرفعال
-                // می‌کند (در حالت مرتب‌سازی دستی هم کار می‌کند، چون
-                // لمس کوتاه پیش از شکل گرفتن لمس طولانیِ درگ مصرف
-                // می‌شود)؛ هنگام هشدار لمس موج غیرفعال است. رنگ
-                // اختصاصی محدوده اگر انتخاب شده باشد روی موج‌ها و
-                // موج یک‌باره می‌نشیند.
-                val zoneTint = ZoneColors.colorOrNull(zone.colorIndex)
-                val radarInteraction = remember { MutableInteractionSource() }
+                    .fillMaxHeight()
+                    .padding(start = 12.dp, top = 16.dp, bottom = 16.dp)
+                    .width(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(accentColor)
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp, end = 16.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    // لمس خود موج‌های کارت هم محدوده را فعال/غیرفعال
+                    // می‌کند (در حالت مرتب‌سازی دستی هم کار می‌کند، چون
+                    // لمس کوتاه پیش از شکل گرفتن لمس طولانیِ درگ مصرف
+                    // می‌شود)؛ هنگام هشدار لمس موج غیرفعال است. رنگ
+                    // اختصاصی محدوده اگر انتخاب شده باشد روی موج‌ها و
+                    // موج یک‌باره می‌نشیند.
+                    val radarInteraction = remember { MutableInteractionSource() }
                 val radarScale = rememberPressScale(radarInteraction, pressedScale = 0.92f)
                 Box(
                     modifier = Modifier
@@ -1540,26 +1561,53 @@ private fun ZoneCard(
                         modifier = Modifier.size(72.dp)
                     )
                 }
-                Spacer(Modifier.width(12.dp))
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        zone.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        TonalChip(formatRadiusFa(zone.radiusMeters))
-                        TonalChip(
-                            when (zone.exitBehavior) {
-                                Zone.EXIT_SEQUENCE -> LocalStrings.current.exitPattern
-                                Zone.EXIT_CONTINUE -> LocalStrings.current.exitUntilManual
-                                else -> LocalStrings.current.exitImmediate
+                    Spacer(Modifier.width(12.dp))
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            zone.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (zone.isActive) {
+                                scheme.onSurface
+                            } else {
+                                scheme.onSurfaceVariant
                             }
                         )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            TonalChip(
+                                formatRadiusFa(zone.radiusMeters),
+                                dimmed = !zone.isActive
+                            )
+                            TonalChip(
+                                when (zone.exitBehavior) {
+                                    Zone.EXIT_SEQUENCE -> LocalStrings.current.exitPattern
+                                    Zone.EXIT_CONTINUE -> LocalStrings.current.exitUntilManual
+                                    else -> LocalStrings.current.exitImmediate
+                                },
+                                dimmed = !zone.isActive
+                            )
+                        }
                     }
+                    Spacer(Modifier.width(8.dp))
+                    // داک کپسولی ویرایش/حذف حالا بالای کارت و در انتهای
+                    // ردیف سربرگ نشسته است (کوچک‌تر از قبل) تا پایین
+                    // کارت دیگر ردیف جدا نگیرد و کارت کوتاه‌تر بماند؛
+                    // حذف مثل قبل از دیالوگ تأیید می‌گذرد.
+                    ZoneActionDock(onEdit = onEdit, onDelete = onDelete)
+                }
+                // وضعیت و آخرین ورود، هم‌تراز با ستون نام (زیر آن).
+                Column(
+                    modifier = Modifier.padding(
+                        start = 84.dp,
+                        end = 16.dp,
+                        top = 10.dp,
+                        bottom = if (zone.isAlerting) 12.dp else 16.dp
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     StatusPill(zone = zone)
                     if (zone.lastTriggeredAt > 0) {
                         Text(
@@ -1570,29 +1618,19 @@ private fun ZoneCard(
                         )
                     }
                 }
-            }
-            // داک کپسولی ویرایش/حذف در پایین کارت: جمع‌وجور و سبک تا
-            // کارت باریک بماند؛ حذف مثل قبل از دیالوگ تأیید می‌گذرد.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                horizontalArrangement = Arrangement.End
-            ) {
-                ZoneActionDock(onEdit = onEdit, onDelete = onDelete)
-            }
-            if (zone.isAlerting) {
-                Button(
-                    onClick = onStopAlert,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = scheme.secondary,
-                        contentColor = scheme.onSecondary
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
-                ) {
-                    Text(LocalStrings.current.stopAlert, fontWeight = FontWeight.Bold)
+                if (zone.isAlerting) {
+                    Button(
+                        onClick = onStopAlert,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = scheme.secondary,
+                            contentColor = scheme.onSecondary
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 84.dp, end = 16.dp, bottom = 16.dp)
+                    ) {
+                        Text(LocalStrings.current.stopAlert, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
@@ -1618,11 +1656,12 @@ private fun rememberPressScale(
 }
 
 /**
- * داک کپسولی ویرایش/حذف کارت محدوده: یک کپسول کوتاه (~۴۲dp) با
+ * داک کپسولی ویرایش/حذف کارت محدوده: یک کپسول کوتاه (~۳۶dp) با
  * پس‌زمینه surfaceVariant و حاشیه ظریف؛ داخلش دکمه ویرایش (رنگ اصلی
  * تم)، یک جداکننده عمودی باریک و دکمه حذف (رنگ خطا) — هر دو با ناحیه
- * لمس ~۴۰dp، فشردن فنری و بازخورد لمسی. جمع‌وجور است تا کارت باریک
- * بماند. حذف مثل قبل از دیالوگ تأیید می‌گذرد.
+ * لمس ~۳۴dp، فشردن فنری و بازخورد لمسی. از نسخه ۳.۴.۰ بالای کارت و در
+ * انتهای ردیف سربرگ می‌نشیند تا پایین کارت ردیف اضافه نگیرد و کارت
+ * کوتاه بماند. حذف مثل قبل از دیالوگ تأیید می‌گذرد.
  */
 @Composable
 private fun ZoneActionDock(onEdit: () -> Unit, onDelete: () -> Unit) {
@@ -1635,16 +1674,16 @@ private fun ZoneActionDock(onEdit: () -> Unit, onDelete: () -> Unit) {
     val deleteScale = rememberPressScale(deleteInteraction, pressedScale = 0.88f)
     Row(
         modifier = Modifier
-            .height(42.dp)
+            .height(36.dp)
             .clip(CircleShape)
             .background(scheme.surfaceVariant)
             .border(1.dp, scheme.outlineVariant, CircleShape)
-            .padding(horizontal = 3.dp),
+            .padding(horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(34.dp)
                 .graphicsLayer {
                     scaleX = editScale
                     scaleY = editScale
@@ -1663,18 +1702,18 @@ private fun ZoneActionDock(onEdit: () -> Unit, onDelete: () -> Unit) {
                 Icons.Default.Edit,
                 contentDescription = strings.editCd,
                 tint = scheme.primary,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
         Box(
             modifier = Modifier
                 .width(1.dp)
-                .height(20.dp)
+                .height(16.dp)
                 .background(scheme.outlineVariant)
         )
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(34.dp)
                 .graphicsLayer {
                     scaleX = deleteScale
                     scaleY = deleteScale
@@ -1693,7 +1732,7 @@ private fun ZoneActionDock(onEdit: () -> Unit, onDelete: () -> Unit) {
                 Icons.Default.Delete,
                 contentDescription = strings.delete,
                 tint = scheme.error,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
     }

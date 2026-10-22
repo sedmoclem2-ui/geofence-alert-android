@@ -19,6 +19,7 @@ import ir.khanoomi.geofencealert.receiver.GpsStateReceiver
 import ir.khanoomi.geofencealert.ui.AppNav
 import ir.khanoomi.geofencealert.ui.LocalAppLang
 import ir.khanoomi.geofencealert.ui.LocalStrings
+import ir.khanoomi.geofencealert.ui.TouchRippleHost
 import ir.khanoomi.geofencealert.ui.appLangOf
 import ir.khanoomi.geofencealert.ui.stringsFor
 import ir.khanoomi.geofencealert.ui.stringsForContext
@@ -92,7 +93,12 @@ class MainActivity : ComponentActivity() {
                         }
                 ) {
                     Surface(modifier = Modifier.fillMaxSize()) {
-                        AppNav()
+                        // موج لمسی سراسری (قطره آب) روی همه صفحه‌ها؛
+                        // فقط ناظر است و هیچ رویداد لمسی را مصرف
+                        // نمی‌کند، پس هیچ ژستی در برنامه عوض نمی‌شود.
+                        TouchRippleHost {
+                            AppNav()
+                        }
                     }
                 }
             }

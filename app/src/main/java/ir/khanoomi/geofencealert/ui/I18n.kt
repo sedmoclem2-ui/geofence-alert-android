@@ -839,6 +839,8 @@ data class UiStrings(
     val langSampleAr: String get() = ext.langSampleAr
     val editColor: String get() = ext.editColor
     val colorDefault: String get() = ext.colorDefault
+    val totalEvents: String get() = ext.totalEvents
+    val chartLast7Days: String get() = ext.chartLast7Days
 }
 
 /**
@@ -1054,7 +1056,10 @@ data class UiStringsExt(
     val langSampleAr: String,
     // رنگ اختصاصی محدوده (نسخه ۳.۳.۰)
     val editColor: String,
-    val colorDefault: String
+    val colorDefault: String,
+    // آمار بازطراحی‌شده (نسخه ۳.۴.۰)
+    val totalEvents: String,
+    val chartLast7Days: String
 ) {
     companion object {
         val FA = UiStringsExt(
@@ -1263,7 +1268,9 @@ data class UiStringsExt(
             langSampleEn = "Hello! Welcome",
             langSampleAr = "مرحباً! أهلاً بك",
             editColor = "رنگ محدوده",
-            colorDefault = "پیش‌فرض"
+            colorDefault = "پیش‌فرض",
+            totalEvents = "مجموع رویدادها",
+            chartLast7Days = "ورودهای ۷ روز اخیر"
         )
 
         val EN = UiStringsExt(
@@ -1472,7 +1479,9 @@ data class UiStringsExt(
             langSampleEn = "Hello! Welcome",
             langSampleAr = "مرحباً! أهلاً بك",
             editColor = "Zone color",
-            colorDefault = "Default"
+            colorDefault = "Default",
+            totalEvents = "Total events",
+            chartLast7Days = "Entries in the last 7 days"
         )
 
         val AR = UiStringsExt(
@@ -1681,7 +1690,9 @@ data class UiStringsExt(
             langSampleEn = "Hello! Welcome",
             langSampleAr = "مرحباً! أهلاً بك",
             editColor = "لون المنطقة",
-            colorDefault = "الافتراضي"
+            colorDefault = "الافتراضي",
+            totalEvents = "مجموع الأحداث",
+            chartLast7Days = "عمليات الدخول في آخر ٧ أيام"
         )
     }
 }
