@@ -10,6 +10,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -64,6 +65,8 @@ class MainActivity : ComponentActivity() {
                 .collectAsStateWithLifecycle(initialValue = "deepblue")
             val customArgb by app.prefs.customPrimaryArgb
                 .collectAsStateWithLifecycle(initialValue = 0xFF0E6B5CL)
+            val customSecondaryArgb by app.prefs.customSecondaryArgb
+                .collectAsStateWithLifecycle(initialValue = 0L)
             val customDark by app.prefs.customDark
                 .collectAsStateWithLifecycle(initialValue = false)
             val languageKey by app.prefs.appLanguage
@@ -76,11 +79,21 @@ class MainActivity : ComponentActivity() {
                 writeLangMirror(this@MainActivity, languageKey)
             }
             val customColors = if (paletteKey == CUSTOM_THEME_KEY) {
-                buildCustomPalette(customArgb, customDark)
+                buildCustomPalette(customArgb, customDark, customSecondaryArgb)
             } else {
                 null
             }
-            AppTheme(paletteKey = paletteKey, customColors = customColors) {
+            // رنگ مکمل دستی کاربر (۰ = خودکار)؛ همان مسیر @ColorInt رنگ اصلی.
+            val customSecondary = if (paletteKey == CUSTOM_THEME_KEY && customSecondaryArgb != 0L) {
+                Color(customSecondaryArgb.toInt())
+            } else {
+                null
+            }
+            AppTheme(
+                paletteKey = paletteKey,
+                customColors = customColors,
+                customSecondary = customSecondary
+            ) {
                 // زبان برنامه: فارسی و عربی راست‌به‌چپ، انگلیسی چپ‌به‌راست.
                 CompositionLocalProvider(
                     LocalStrings provides stringsFor(lang),

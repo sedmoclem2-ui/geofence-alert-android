@@ -18,8 +18,8 @@ import ir.khanoomi.geofencealert.domain.ColorMath.complementArgb
 private fun complementAccent(primary: Color): Color =
     Color(complementArgb(primary.toArgb().toLong() and 0xFFFFFFFFL).toInt())
 
-private fun lightScheme(p: PaletteColors): ColorScheme {
-    val accent = complementAccent(p.primary)
+private fun lightScheme(p: PaletteColors, accentOverride: Color? = null): ColorScheme {
+    val accent = accentOverride ?: complementAccent(p.primary)
     return lightColorScheme(
         primary = p.primary,
         onPrimary = p.onPrimary,
@@ -113,8 +113,8 @@ private fun darkScheme(palette: AppPalette): ColorScheme {
 }
 
 /** طرح تیره برای پالت شخصی‌سازی‌شده (رنگ‌های رویی خنثی). */
-private fun darkSchemeCustom(p: PaletteColors): ColorScheme {
-    val accent = complementAccent(p.primary)
+private fun darkSchemeCustom(p: PaletteColors, accentOverride: Color? = null): ColorScheme {
+    val accent = accentOverride ?: complementAccent(p.primary)
     return darkColorScheme(
         primary = p.primary,
         onPrimary = p.onPrimary,
@@ -164,18 +164,21 @@ fun AppTheme(
 /**
  * تم برنامه بر اساس کلید رشته‌ای + پالت شخصی‌سازی‌شده اختیاری.
  * اگر [paletteKey] برابر [CUSTOM_THEME_KEY] باشد و [customColors] داده شده باشد،
- * از پالت ساخته‌شده توسط کاربر استفاده می‌شود.
+ * از پالت ساخته‌شده توسط کاربر استفاده می‌شود. [customSecondary] رنگ مکمل دستی
+ * کاربر است؛ null یعنی لهجه به‌صورت خودکار مکمل رنگ اصلی بماند.
  */
 @Composable
 fun AppTheme(
     paletteKey: String,
     customColors: PaletteColors? = null,
+    customSecondary: Color? = null,
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
     val scheme = when {
         paletteKey == CUSTOM_THEME_KEY && customColors != null ->
-            if (darkTheme) darkSchemeCustom(customColors) else lightScheme(customColors)
+            if (darkTheme) darkSchemeCustom(customColors, customSecondary)
+            else lightScheme(customColors, customSecondary)
         else -> {
             val palette = AppPalette.fromKey(paletteKey)
             if (darkTheme) darkScheme(palette) else lightScheme(palette.light)

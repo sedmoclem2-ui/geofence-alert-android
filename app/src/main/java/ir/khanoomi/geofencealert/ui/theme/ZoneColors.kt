@@ -6,8 +6,8 @@ import androidx.compose.ui.graphics.toArgb
 /**
  * رنگ‌های آماده برای محدوده‌ها. اندیس ذخیره‌شده در [ir.khanoomi.geofencealert.data.Zone.colorIndex]
  * از ۱ شروع می‌شود؛ ۰ یعنی «پیش‌فرض تم» و در این نما حل نمی‌شود.
- * هشت رنگ خوش‌خوان و متمایز: قرمز، نارنجی، کهربایی، سبز، فیروزه‌ای،
- * آبی، بنفش و صورتی.
+ * یازده رنگ خوش‌خوان و متمایز: قرمز، نارنجی، کهربایی، سبز، فیروزه‌ای،
+ * آبی، بنفش، صورتی، مرجانی، ارغوانی و سبزآبی تیره.
  */
 object ZoneColors {
     val presets: List<Color> = listOf(
@@ -18,7 +18,10 @@ object ZoneColors {
         Color(0xFF00ACC1),
         Color(0xFF1E88E5),
         Color(0xFF5E35B1),
-        Color(0xFFEC407A)
+        Color(0xFFEC407A),
+        Color(0xFFFF7043),
+        Color(0xFF8E24AA),
+        Color(0xFF00897B)
     )
 
     /** همان رنگ‌ها به‌صورت ARGB برای جاهایی که عدد خام لازم است. */

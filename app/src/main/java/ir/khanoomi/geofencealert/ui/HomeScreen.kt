@@ -457,11 +457,9 @@ fun HomeScreen(navController: NavController) {
                     IconButton(onClick = { navController.navigate("history") }) {
                         Icon(Icons.Filled.List, contentDescription = LocalStrings.current.history)
                     }
-                    // مرتب‌سازی: وقتی حالت انتخاب‌شده غیر از «دستی» است
-                    // یک نشان نقطه‌ای روی دکمه می‌نشیند. پنل آن به‌صورت
-                    // روکش روی محتوای صفحه باز می‌شود. آیکنش دو پیکان
-                    // روی هم (بالا/پایین) است تا با آیکن فهرست تاریخچه
-                    // اشتباه نشود.
+                    // مرتب‌سازی: پنل آن به‌صورت روکش روی محتوای صفحه
+                    // باز می‌شود. آیکنش دو پیکان روی هم (بالا/پایین) است
+                    // تا با آیکن فهرست تاریخچه اشتباه نشود.
                     Box {
                         IconButton(onClick = { sortPanelOpen = !sortPanelOpen }) {
                             Column(
@@ -479,18 +477,6 @@ fun HomeScreen(navController: NavController) {
                                     modifier = Modifier.size(15.dp)
                                 )
                             }
-                        }
-                        if (ZoneSort.normalize(sortMode) != ZoneSort.MANUAL) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(6.dp)
-                                    .size(9.dp)
-                                    .background(
-                                        MaterialTheme.colorScheme.error,
-                                        CircleShape
-                                    )
-                            )
                         }
                     }
                     // تنظیمات آخرین دکمه در کد است تا در نوار راست‌به‌چپ

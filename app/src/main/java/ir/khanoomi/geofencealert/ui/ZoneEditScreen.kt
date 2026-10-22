@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -57,6 +58,13 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -381,7 +389,7 @@ private fun RowScope.ZoneEditTabPill(
 }
 
 /**
- * نمونه‌رنگ دایره‌ای ۴۲dp برای انتخاب رنگ محدوده: پرشده با یک رنگ ثابت یا
+ * نمونه‌رنگ دایره‌ای ۴۰dp برای انتخاب رنگ محدوده: پرشده با یک رنگ ثابت یا
  * گرادیان (نمونه «پیش‌فرض تم»). نمونه انتخاب‌شده یک حلقه بیرونی ۲٫۵dp
  * هم‌رنگ خودش (برای پیش‌فرض تم: رنگ اصلی) با فاصله ۳dp از دایره داخلی
  * می‌گیرد و تیک سفید ۱۸dp وسط آن می‌نشیند.
@@ -398,20 +406,20 @@ private fun ColorSwatch(
     val ringColor = color ?: scheme.primary
     Box(
         modifier = Modifier
-            .size(42.dp)
+            .size(40.dp)
             .clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
         if (selected) {
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(40.dp)
                     .border(BorderStroke(2.5.dp, ringColor), CircleShape)
             )
         }
         Box(
             modifier = Modifier
-                .size(if (selected) 31.dp else 42.dp)
+                .size(if (selected) 29.dp else 40.dp)
                 .clip(CircleShape)
                 .then(
                     when {
@@ -959,7 +967,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp)
                             )
-                            // رنگ اختصاصی محدوده: نمونه اول «پیش‌فرض تم» است و هشت
+                            // رنگ اختصاصی محدوده: نمونه اول «پیش‌فرض تم» است و یازده
                             // نمونه بعدی رنگ‌های آماده‌اند؛ رنگ روی موج‌های کارت
                             // محدوده در صفحه اصلی می‌نشیند.
                             Text(
@@ -970,7 +978,8 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                maxItemsInEachRow = 6
                             ) {
                                 ColorSwatch(
                                     selected = vm.colorIndex == 0,
@@ -1003,7 +1012,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             }
                         }
 
-                        SectionCard(icon = Icons.Filled.LocationOn, title = strings.coordinates) {
+                        SectionCard(icon = Icons.Filled.Place, title = strings.coordinates) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1053,17 +1062,31 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                                     },
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(44.dp),
+                                        .height(58.dp),
                                     shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
                                     enabled = !locLoading
                                 ) {
-                                    if (locLoading) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(20.dp),
-                                            strokeWidth = 2.dp
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        if (locLoading) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(20.dp),
+                                                strokeWidth = 2.dp
+                                            )
+                                        } else {
+                                            Icon(
+                                                Icons.Filled.LocationOn,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        Text(
+                                            strings.currentLocation,
+                                            style = MaterialTheme.typography.labelSmall
                                         )
-                                    } else {
-                                        Text(strings.currentLocation)
                                     }
                                 }
                                 OutlinedButton(
@@ -1078,16 +1101,48 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                                     },
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(44.dp),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) { Text(strings.copyCoords) }
+                                        .height(58.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.List,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Text(
+                                            strings.copyCoords,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
                                 OutlinedButton(
                                     onClick = { doPaste() },
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(44.dp),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) { Text(strings.paste) }
+                                        .height(58.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+                                ) {
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Edit,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Text(
+                                            strings.paste,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
                             }
                             FilledTonalButton(
                                 onClick = {
@@ -1124,7 +1179,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             )
                         }
 
-                        SectionCard(icon = Icons.Filled.Place, title = strings.radius) {
+                        SectionCard(icon = Icons.Filled.LocationOn, title = strings.radius) {
                             // نمایش بزرگ شعاع فعلی + اسلایدر و چیپ‌های آماده؛ هر سه
                             // روی همان وضعیت radiusText/unit می‌نویسند و فیلد عددی
                             // دقیق هم پایین‌تر سر جایش می‌ماند. اسلایدر بر حسب متر
@@ -1152,7 +1207,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                listOf(50, 100, 200, 500, 1000).forEach { preset ->
+                                listOf(50, 100, 200, 500).forEach { preset ->
                                     FilterChip(
                                         selected = sliderMeters == preset.toDouble(),
                                         onClick = {
@@ -1324,7 +1379,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        SectionCard(icon = Icons.Filled.Notifications, title = strings.exitBehaviorTitle) {
+                        SectionCard(icon = Icons.Filled.ExitToApp, title = strings.exitBehaviorTitle) {
                             Text(
                                 strings.exitInsideNote,
                                 style = MaterialTheme.typography.bodySmall,
@@ -1546,7 +1601,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             }
                         }
 
-                        SectionCard(icon = Icons.Filled.Notifications, title = strings.voiceAnnounce) {
+                        SectionCard(icon = Icons.Filled.Face, title = strings.voiceAnnounce) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1572,7 +1627,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             }
                         }
 
-                        SectionCard(icon = Icons.Filled.Notifications, title = strings.sms) {
+                        SectionCard(icon = Icons.Filled.Email, title = strings.sms) {
                             OutlinedTextField(
                                 value = vm.smsNumbersText,
                                 onValueChange = { vm.smsNumbersText = it },
@@ -1722,7 +1777,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             }
                         }
 
-                        SectionCard(icon = Icons.Filled.LocationOn, title = strings.approachAlert) {
+                        SectionCard(icon = Icons.Filled.Warning, title = strings.approachAlert) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1775,7 +1830,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             }
                         }
 
-                        SectionCard(icon = Icons.Filled.DateRange, title = strings.stayReminder) {
+                        SectionCard(icon = Icons.Filled.Star, title = strings.stayReminder) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1828,7 +1883,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             }
                         }
 
-                        SectionCard(icon = Icons.Filled.DateRange, title = strings.silentWindow) {
+                        SectionCard(icon = Icons.Filled.Lock, title = strings.silentWindow) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()

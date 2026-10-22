@@ -39,6 +39,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -130,6 +131,7 @@ fun SettingsScreen(navController: NavController) {
     val quietEnd by app.prefs.quietEndMin.collectAsStateWithLifecycle(initialValue = 420)
     val themeKey by app.prefs.themePalette.collectAsStateWithLifecycle(initialValue = "deepblue")
     val customArgb by app.prefs.customPrimaryArgb.collectAsStateWithLifecycle(initialValue = 0xFF0E6B5CL)
+    val customSecondaryArgb by app.prefs.customSecondaryArgb.collectAsStateWithLifecycle(initialValue = 0L)
     val customDarkVal by app.prefs.customDark.collectAsStateWithLifecycle(initialValue = false)
     val languageKey by app.prefs.appLanguage.collectAsStateWithLifecycle(initialValue = "fa")
     val alertVolumeVal by app.prefs.alertVolume.collectAsStateWithLifecycle(initialValue = 80)
@@ -521,11 +523,13 @@ fun SettingsScreen(navController: NavController) {
         // مقادیر اولیه مستقیم پاس داده می‌شوند؛ وضعیت دیالوگ با remember(initial…) ساخته می‌شود.
         CustomThemeDialog(
             initialArgb = customArgb,
+            initialSecondaryArgb = customSecondaryArgb,
             initialDark = customDarkVal,
             onDismiss = { showCustomTheme = false },
-            onSave = { argb, dark ->
+            onSave = { argb, dark, secondaryArgb ->
                 scope.launch {
                     app.prefs.setCustomPrimaryArgb(argb)
+                    app.prefs.setCustomSecondaryArgb(secondaryArgb)
                     app.prefs.setCustomDark(dark)
                     app.prefs.setThemePalette(CUSTOM_THEME_KEY)
                 }
@@ -913,14 +917,20 @@ private val CUSTOM_SWATCHES = listOf(
 @Composable
 private fun CustomThemeDialog(
     initialArgb: Long,
+    initialSecondaryArgb: Long,
     initialDark: Boolean,
     onDismiss: () -> Unit,
-    onSave: (Long, Boolean) -> Unit
+    onSave: (Long, Boolean, Long) -> Unit
 ) {
     var picked by remember(initialArgb) { mutableStateOf(initialArgb) }
+    var pickedSecondary by remember(initialSecondaryArgb) { mutableStateOf(initialSecondaryArgb) }
     var dark by remember(initialDark) { mutableStateOf(initialDark) }
-    // رنگ مکمل به‌صورت خودکار از رنگ اصلی ساخته می‌شود (قانون رنگ مکمل).
-    val complement = complementArgb(picked)
+    // رنگ مکمل خودکار از رنگ اصلی ساخته می‌شود (قانون رنگ مکمل)؛ کاربر
+    // می‌تواند به‌جای آن یک رنگ مکمل دستی هم انتخاب کند (۰ = خودکار).
+    val autoComplement = complementArgb(picked)
+    val complement = if (pickedSecondary != 0L) pickedSecondary else autoComplement
+    val complementLabel = LocalStrings.current.complementColor +
+        if (pickedSecondary == 0L) " (${LocalStrings.current.autoLabel})" else ""
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(LocalStrings.current.customThemeTitle, fontWeight = FontWeight.Bold) },
@@ -985,7 +995,64 @@ private fun CustomThemeDialog(
                                 .background(Color(complement.toInt()))
                                 .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                         )
-                        Text(LocalStrings.current.complementColorAuto, style = MaterialTheme.typography.bodySmall)
+                        Text(complementLabel, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Text(complementLabel, fontWeight = FontWeight.Bold)
+                (listOf(0L) + CUSTOM_SWATCHES).chunked(4).forEach { rowSwatches ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        rowSwatches.forEach { argb ->
+                            if (argb == 0L) {
+                                // سلول «خودکار»: دایره‌ای با گرادیان رنگ اصلی ← مکمل خودکار
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                listOf(
+                                                    Color(picked.toInt()),
+                                                    Color(autoComplement.toInt())
+                                                )
+                                            )
+                                        )
+                                        .border(
+                                            if (pickedSecondary == 0L) 3.dp else 1.dp,
+                                            if (pickedSecondary == 0L) MaterialTheme.colorScheme.onSurface
+                                            else MaterialTheme.colorScheme.outline,
+                                            CircleShape
+                                        )
+                                        .clickable { pickedSecondary = 0L },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (pickedSecondary == 0L) {
+                                        Icon(
+                                            Icons.Filled.Check,
+                                            contentDescription = LocalStrings.current.autoLabel,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(44.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(argb.toInt()))
+                                        .border(
+                                            if (pickedSecondary == argb) 3.dp else 1.dp,
+                                            if (pickedSecondary == argb) MaterialTheme.colorScheme.onSurface
+                                            else MaterialTheme.colorScheme.outline,
+                                            CircleShape
+                                        )
+                                        .clickable { pickedSecondary = argb }
+                                )
+                            }
+                        }
                     }
                 }
                 Text(LocalStrings.current.baseTheme, fontWeight = FontWeight.Bold)
@@ -1006,7 +1073,7 @@ private fun CustomThemeDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(picked, dark) }) {
+            TextButton(onClick = { onSave(picked, dark, pickedSecondary) }) {
                 Text(LocalStrings.current.save, fontWeight = FontWeight.Bold)
             }
         },

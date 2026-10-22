@@ -357,13 +357,19 @@ internal fun mixColor(a: Color, b: Color, ratio: Float): Color {
 /**
  * ساخت پالت شخصی‌سازی‌شده از یک رنگ اصلی (مشتق‌سازی ساده‌ی تونال):
  * روشن → پس‌زمینه‌های نزدیک به سفید؛ تیره → سطوح نزدیک به مشکی.
+ * لهجه (secondary) رنگ مکمل است: اگر کاربر رنگ مکمل دستی داده باشد
+ * ([secondaryArgb] ناصفر) همان، وگرنه مکمل خودکارِ رنگ اصلی.
  */
-fun buildCustomPalette(primaryArgb: Long, dark: Boolean): PaletteColors {
+fun buildCustomPalette(primaryArgb: Long, dark: Boolean, secondaryArgb: Long = 0L): PaletteColors {
     // تبدیل درست ARGB به Color از مسیر @ColorInt است؛ ساختن Color از ULong خام
     // رنگ نامعتبر می‌سازد و هنگام رسم کرش می‌کند.
     val primary = Color(primaryArgb.toInt())
-    // قانون رنگ مکمل: لهجه (secondary) همیشه مکمل رنگ اصلی است، نه رنگی دیگر.
-    val complement = Color(complementArgb(primaryArgb).toInt())
+    // قانون رنگ مکمل: لهجه (secondary) مکمل رنگ اصلی است؛ انتخاب دستی کاربر بر خودکار مقدم است.
+    val complement = if (secondaryArgb != 0L) {
+        Color(secondaryArgb.toInt())
+    } else {
+        Color(complementArgb(primaryArgb).toInt())
+    }
     val white = Color.White
     val black = Color.Black
     return if (!dark) {

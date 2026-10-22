@@ -770,6 +770,8 @@ data class UiStrings(
     val unitMinute: String get() = ext.unitMinute
     val unitContinuous: String get() = ext.unitContinuous
     val unitTimes: String get() = ext.unitTimes
+    val complementColor: String get() = ext.complementColor
+    val autoLabel: String get() = ext.autoLabel
     val continuousNote: String get() = ext.continuousNote
     val scheduleEnable: String get() = ext.scheduleEnable
     val scheduleEnableSub: String get() = ext.scheduleEnableSub
@@ -991,6 +993,8 @@ data class UiStringsExt(
     val unitMinute: String,
     val unitContinuous: String,
     val unitTimes: String,
+    val complementColor: String,
+    val autoLabel: String,
     val continuousNote: String,
     val scheduleEnable: String,
     val scheduleEnableSub: String,
@@ -1209,6 +1213,8 @@ data class UiStringsExt(
             unitMinute = "دقیقه",
             unitContinuous = "مداوم",
             unitTimes = "دفعه",
+            complementColor = "رنگ مکمل",
+            autoLabel = "خودکار",
             continuousNote = "در حالت مداوم، موقعیت تقریباً هر لحظه (هر ۲ ثانیه) بررسی می‌شود؛ مصرف باتری بیشتر است.",
             scheduleEnable = "فعال‌سازی زمان‌بندی",
             scheduleEnableSub = "هشدار فقط در روزها و ساعات انتخاب‌شده فعال باشد.",
@@ -1424,6 +1430,8 @@ data class UiStringsExt(
             unitMinute = "Minutes",
             unitContinuous = "Continuous",
             unitTimes = "times",
+            complementColor = "Accent color",
+            autoLabel = "Auto",
             continuousNote = "In continuous mode, location is checked almost constantly (every 2 seconds); battery use is higher.",
             scheduleEnable = "Enable schedule",
             scheduleEnableSub = "Alert only on the selected days and hours.",
@@ -1639,6 +1647,8 @@ data class UiStringsExt(
             unitMinute = "دقائق",
             unitContinuous = "مستمر",
             unitTimes = "مرات",
+            complementColor = "اللون المكمّل",
+            autoLabel = "تلقائي",
             continuousNote = "في الوضع المستمر يُفحص الموقع باستمرار تقريبًا (كل ثانيتين)؛ استهلاك البطارية أعلى.",
             scheduleEnable = "تفعيل الجدول",
             scheduleEnableSub = "التنبيه فقط في الأيام والساعات المحدّدة.",

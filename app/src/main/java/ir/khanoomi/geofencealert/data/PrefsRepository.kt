@@ -96,6 +96,7 @@ class PrefsRepository(private val context: Context) {
     }
 
     private val KEY_CUSTOM_PRIMARY = longPreferencesKey("custom_primary_argb")
+    private val KEY_CUSTOM_SECONDARY = longPreferencesKey("custom_secondary_argb")
     private val KEY_CUSTOM_DARK = booleanPreferencesKey("custom_dark")
 
     /** رنگ اصلی تم شخصی‌سازی‌شده (ARGB به‌صورت Long؛ پیش‌فرض: سبزآبی). */
@@ -105,6 +106,15 @@ class PrefsRepository(private val context: Context) {
 
     suspend fun setCustomPrimaryArgb(argb: Long) {
         context.prefsDataStore.edit { prefs -> prefs[KEY_CUSTOM_PRIMARY] = argb }
+    }
+
+    /** رنگ مکمل دستی تم شخصی‌سازی‌شده (ARGB به‌صورت Long)؛ ۰ یعنی «خودکار» (مکملِ مشتق‌شده از رنگ اصلی). */
+    val customSecondaryArgb: Flow<Long> = context.prefsDataStore.data
+        .map { prefs -> prefs[KEY_CUSTOM_SECONDARY] ?: 0L }
+        .catch { emit(0L) }
+
+    suspend fun setCustomSecondaryArgb(argb: Long) {
+        context.prefsDataStore.edit { prefs -> prefs[KEY_CUSTOM_SECONDARY] = argb }
     }
 
     /** تم پایه شخصی‌سازی‌شده: روشن (false) یا تیره (true) — پیش‌فرض: روشن. */
