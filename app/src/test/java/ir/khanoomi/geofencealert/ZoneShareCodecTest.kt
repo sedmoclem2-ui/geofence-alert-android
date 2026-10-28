@@ -25,7 +25,16 @@ class ZoneShareCodecTest {
         scheduleEndMin = 1020,
         silentEnabled = true,
         silentStartMin = 1320,
-        silentEndMin = 360
+        silentEndMin = 360,
+        soundKey = Zone.SOUND_RINGTONE,
+        stopMode = Zone.STOP_MANUAL,
+        checkIntervalSec = 45,
+        postExitCount = 5,
+        postExitDurationSec = 20,
+        postExitGapSec = 15,
+        approachDistanceM = 300,
+        stayReminderMin = 30,
+        voiceAnnounce = true
     )
 
     @Test
@@ -49,6 +58,88 @@ class ZoneShareCodecTest {
         assertTrue(draft.silentEnabled)
         assertEquals(1320, draft.silentStartMin)
         assertEquals(360, draft.silentEndMin)
+        assertEquals(Zone.SOUND_RINGTONE, draft.soundKey)
+        assertEquals(Zone.STOP_MANUAL, draft.stopMode)
+        assertEquals(45, draft.checkIntervalSec)
+        assertEquals(5, draft.postExitCount)
+        assertEquals(20, draft.postExitDurationSec)
+        assertEquals(15, draft.postExitGapSec)
+        assertEquals(300, draft.approachDistanceM)
+        assertEquals(30, draft.stayReminderMin)
+        assertTrue(draft.voiceAnnounce)
+    }
+
+    @Test
+    fun `old 15 field payload decodes with zone defaults for new fields`() {
+        // پیوندهای ساخته‌شده با ۳٫۹٫۲ و قبل‌تر، ۹ کلید تازه را ندارند؛
+        // باید موفق رمزگشایی شوند و فیلدهای تازه مقدار پیش‌فرض Zone را بگیرند.
+        val decoded = ZoneShareCodec.decode(
+            payloadOf(
+                "{\"name\":\"x\",\"lat\":35.0,\"lng\":51.0,\"radiusMeters\":100.0," +
+                    "\"polygonJson\":\"\",\"colorIndex\":2,\"exitBehavior\":0," +
+                    "\"alertMode\":0,\"scheduleEnabled\":false," +
+                    "\"scheduleDays\":\"1,2,3,4,5,6,7\",\"scheduleStartMin\":0," +
+                    "\"scheduleEndMin\":1439,\"silentEnabled\":false," +
+                    "\"silentStartMin\":1320,\"silentEndMin\":360}"
+            )
+        )
+        assertTrue(decoded.isSuccess)
+        val draft = decoded.getOrThrow()
+        assertEquals(Zone.SOUND_ALARM, draft.soundKey)
+        assertEquals(Zone.STOP_AUTO, draft.stopMode)
+        assertEquals(20, draft.checkIntervalSec)
+        assertEquals(3, draft.postExitCount)
+        assertEquals(10, draft.postExitDurationSec)
+        assertEquals(30, draft.postExitGapSec)
+        assertEquals(0, draft.approachDistanceM)
+        assertEquals(0, draft.stayReminderMin)
+        assertFalse(draft.voiceAnnounce)
+    }
+
+    @Test
+    fun `invalid new field values are rejected`() {
+        val base =
+            "\"name\":\"x\",\"lat\":35.0,\"lng\":51.0,\"radiusMeters\":100.0"
+        // فاصله بررسی صفر یا منفی.
+        assertFalse(
+            ZoneShareCodec.decode(
+                payloadOf("{$base,\"checkIntervalSec\":0}")
+            ).isSuccess
+        )
+        assertFalse(
+            ZoneShareCodec.decode(
+                payloadOf("{$base,\"checkIntervalSec\":-5}")
+            ).isSuccess
+        )
+        // کلید صدای ناشناخته.
+        assertFalse(
+            ZoneShareCodec.decode(
+                payloadOf("{$base,\"soundKey\":\"megaphone\"}")
+            ).isSuccess
+        )
+        // شیوه توقف ناشناخته.
+        assertFalse(
+            ZoneShareCodec.decode(
+                payloadOf("{$base,\"stopMode\":\"WHATEVER\"}")
+            ).isSuccess
+        )
+        // فاصله نزدیک‌شدن منفی.
+        assertFalse(
+            ZoneShareCodec.decode(
+                payloadOf("{$base,\"approachDistanceM\":-10}")
+            ).isSuccess
+        )
+        // تعداد الگوی خروج منفی و نوع نادرست اعلام صوتی.
+        assertFalse(
+            ZoneShareCodec.decode(
+                payloadOf("{$base,\"postExitCount\":-1}")
+            ).isSuccess
+        )
+        assertFalse(
+            ZoneShareCodec.decode(
+                payloadOf("{$base,\"voiceAnnounce\":\"yes\"}")
+            ).isSuccess
+        )
     }
 
     @Test

@@ -58,8 +58,10 @@ import java.util.Locale
  * چندضلعی، مختصات، نقطه رنگ محدوده) و دو دکمه دارد: «افزودن به
  * محدوده‌ها» محدوده‌ای تازه با isActive=false درج می‌کند (تا کاربر بی‌خبر
  * هشدار نگیرد) و به خانه می‌رود؛ «انصراف» بدون درج برمی‌گردد.
- * همه فیلدهای payload — polygonJson، colorIndex، زمان‌بندی و سکوت —
- * در محدوده درج‌شده حفظ می‌شوند.
+ * همه فیلدهای payload — polygonJson، colorIndex، زمان‌بندی و سکوت، و
+ * از ۳٫۹٫۳ صدا، شیوه توقف، فاصله بررسی، پارامترهای الگوی خروج، فاصله
+ * نزدیک‌شدن، یادآور ماندن و اعلام صوتی — در محدوده درج‌شده حفظ می‌شوند
+ * (به‌جز شماره/متن پیامک که هرگز در پیوند نیست و isActive که false می‌ماند).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -234,6 +236,15 @@ fun ZoneImportScreen(navController: NavController, payload: String) {
                                 silentEnabled = draft.silentEnabled,
                                 silentStartMin = draft.silentStartMin,
                                 silentEndMin = draft.silentEndMin,
+                                soundKey = draft.soundKey,
+                                stopMode = draft.stopMode,
+                                checkIntervalSec = draft.checkIntervalSec,
+                                postExitCount = draft.postExitCount,
+                                postExitDurationSec = draft.postExitDurationSec,
+                                postExitGapSec = draft.postExitGapSec,
+                                approachDistanceM = draft.approachDistanceM,
+                                stayReminderMin = draft.stayReminderMin,
+                                voiceAnnounce = draft.voiceAnnounce,
                                 isActive = false
                             )
                             val savedId = app.zoneRepo.upsert(zone)

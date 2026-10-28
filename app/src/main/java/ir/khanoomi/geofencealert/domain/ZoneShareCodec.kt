@@ -26,14 +26,23 @@ data class ZoneDraft(
     val scheduleEndMin: Int = 1439,
     val silentEnabled: Boolean = false,
     val silentStartMin: Int = 1320,
-    val silentEndMin: Int = 360
+    val silentEndMin: Int = 360,
+    val soundKey: String = Zone.SOUND_ALARM,
+    val stopMode: String = Zone.STOP_AUTO,
+    val checkIntervalSec: Int = 20,
+    val postExitCount: Int = 3,
+    val postExitDurationSec: Int = 10,
+    val postExitGapSec: Int = 30,
+    val approachDistanceM: Int = 0,
+    val stayReminderMin: Int = 0,
+    val voiceAnnounce: Boolean = false
 )
 
 /**
  * کدک پیوند اشتراک‌گذاری محدوده (موج ۳).
  *
  * قالب پیوند (از ۳٫۹٫۲): `intent://zone?d=<payload>#Intent;scheme=geofencealert;package=ir.khanoomi.geofencealert;end`
- * که payload همان خروجی [encode] است: JSON فشرده از فقط ۱۵ فیلد قابل‌اشتراک، کدشده با
+ * که payload همان خروجی [encode] است: JSON فشرده از فقط ۲۴ فیلد قابل‌اشتراک، کدشده با
  * Base64 نسخه URL-safe بدون padding (java.util، نه android.util، تا
  * همین کد مستقیم در تست‌های JVM هم اجرا شود؛ minSdk برابر ۲۶ است، پس
  * روی دستگاه هم java.util.Base64 در دسترس است).
@@ -102,6 +111,15 @@ object ZoneShareCodec {
             append(",\"silentEnabled\":").append(zone.silentEnabled)
             append(",\"silentStartMin\":").append(zone.silentStartMin)
             append(",\"silentEndMin\":").append(zone.silentEndMin)
+            append(",\"soundKey\":").append(jsonString(zone.soundKey))
+            append(",\"stopMode\":").append(jsonString(zone.stopMode))
+            append(",\"checkIntervalSec\":").append(zone.checkIntervalSec)
+            append(",\"postExitCount\":").append(zone.postExitCount)
+            append(",\"postExitDurationSec\":").append(zone.postExitDurationSec)
+            append(",\"postExitGapSec\":").append(zone.postExitGapSec)
+            append(",\"approachDistanceM\":").append(zone.approachDistanceM)
+            append(",\"stayReminderMin\":").append(zone.stayReminderMin)
+            append(",\"voiceAnnounce\":").append(zone.voiceAnnounce)
             append('}')
         }
         return Base64.getUrlEncoder().withoutPadding()
@@ -155,6 +173,58 @@ object ZoneShareCodec {
         val scheduleDays = (fields["scheduleDays"] as? String)
             ?.takeIf { it.isValidScheduleDays() } ?: "1,2,3,4,5,6,7"
         val polygonJson = (fields["polygonJson"] as? String) ?: ""
+        // فیلدهای تازه (از ۳٫۹٫۳): نبودنشان در پیوندهای قدیمی مقدار
+        // پیش‌فرض Zone را می‌گیرد، ولی مقدارِ حاضرِ نامعتبر کل پیوند را
+        // رد می‌کند (برخلاف چفت‌شدنِ فیلدهای قدیمی، چون این‌ها مستقیم از
+        // ویرایش محدوده می‌آیند و سکوت در برابر مقدار خراب، تنظیم کاربر
+        // را بی‌صدا عوض می‌کند). نوعِ نادرست (مثلاً عدد به‌جای رشته)
+        // هم نامعتبر است؛ nullِ JSON مثل نبودن کلید رفتار می‌کند.
+        fun invalid(field: String): Result<ZoneDraft> =
+            Result.failure(IllegalArgumentException("Bad $field"))
+        val soundKey = if (!fields.containsKey("soundKey") || fields["soundKey"] == null) {
+            Zone.SOUND_ALARM
+        } else {
+            val v = fields["soundKey"]
+            if (v !is String || v !in setOf(
+                    Zone.SOUND_ALARM, Zone.SOUND_RINGTONE, Zone.SOUND_NOTIFICATION
+                )
+            ) return invalid("soundKey")
+            v
+        }
+        val stopMode = if (!fields.containsKey("stopMode") || fields["stopMode"] == null) {
+            Zone.STOP_AUTO
+        } else {
+            val v = fields["stopMode"]
+            if (v !is String || v !in setOf(Zone.STOP_AUTO, Zone.STOP_MANUAL)) {
+                return invalid("stopMode")
+            }
+            v
+        }
+        fun intField(key: String, default: Int, valid: (Int) -> Boolean): Int {
+            if (!fields.containsKey(key) || fields[key] == null) return default
+            val v = (fields[key] as? Double)?.toInt()
+            if (v == null || !valid(v)) throw IllegalArgumentException("Bad $key")
+            return v
+        }
+        val newInts = try {
+            mapOf(
+                "checkIntervalSec" to intField("checkIntervalSec", 20) { it > 0 },
+                "postExitCount" to intField("postExitCount", 3) { it >= 0 },
+                "postExitDurationSec" to intField("postExitDurationSec", 10) { it >= 0 },
+                "postExitGapSec" to intField("postExitGapSec", 30) { it >= 0 },
+                "approachDistanceM" to intField("approachDistanceM", 0) { it >= 0 },
+                "stayReminderMin" to intField("stayReminderMin", 0) { it >= 0 }
+            )
+        } catch (e: IllegalArgumentException) {
+            return Result.failure(e)
+        }
+        val voiceAnnounce = if (!fields.containsKey("voiceAnnounce") ||
+            fields["voiceAnnounce"] == null
+        ) {
+            false
+        } else {
+            fields["voiceAnnounce"] as? Boolean ?: return invalid("voiceAnnounce")
+        }
         return Result.success(
             ZoneDraft(
                 name = name,
@@ -178,7 +248,16 @@ object ZoneShareCodec {
                 silentStartMin = (fields["silentStartMin"] as? Double)?.toInt()
                     ?.coerceIn(0, 1439) ?: 1320,
                 silentEndMin = (fields["silentEndMin"] as? Double)?.toInt()
-                    ?.coerceIn(0, 1439) ?: 360
+                    ?.coerceIn(0, 1439) ?: 360,
+                soundKey = soundKey,
+                stopMode = stopMode,
+                checkIntervalSec = newInts.getValue("checkIntervalSec"),
+                postExitCount = newInts.getValue("postExitCount"),
+                postExitDurationSec = newInts.getValue("postExitDurationSec"),
+                postExitGapSec = newInts.getValue("postExitGapSec"),
+                approachDistanceM = newInts.getValue("approachDistanceM"),
+                stayReminderMin = newInts.getValue("stayReminderMin"),
+                voiceAnnounce = voiceAnnounce
             )
         )
     }
