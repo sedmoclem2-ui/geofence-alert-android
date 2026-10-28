@@ -2,4 +2,6 @@
 <resources>
     <string name="widget_desc">يعرض عدد المناطق النشطة وإيقافاً سريعاً للتنبيه</string>
     <string name="widget_single_desc">ودجت مخصص لمنطقة واحدة</string>
+    <string name="widget_radar_label">تنبيه النطاق — الرادار</string>
+    <string name="widget_radar_desc">رادار مباشر لمناطقك النشطة مع تبديل سريع للمراقبة</string>
 </resources>

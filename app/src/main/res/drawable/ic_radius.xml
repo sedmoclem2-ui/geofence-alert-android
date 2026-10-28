@@ -1,0 +1,20 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- شعاع محدوده: دایره با خط شعاع از مرکز تا لبه — نماد دایره‌ای متمایز، عمداً غیرپین تا با آیکن مختصات اشتباه نشود (سفید؛ رنگ را سیستم/Compose مدیریت می‌کند) -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M12,3a9,9 0 1,0 0.1,0" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M12,12 L18.4,5.6" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,10.6a1.4,1.4 0 1,0 0.1,0" />
+</vector>

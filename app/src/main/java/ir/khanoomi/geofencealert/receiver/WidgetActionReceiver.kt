@@ -10,6 +10,7 @@ import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.service.AlertService
 import ir.khanoomi.geofencealert.widget.SingleZoneWidgetProvider
 import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
+import ir.khanoomi.geofencealert.widget.RadarWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,6 +42,7 @@ class WidgetActionReceiver : BroadcastReceiver() {
             app.prefs.setMonitoringEnabled(!cur)
             GeofenceHelper.refreshRegistrations(context)
             ZoneWidgetProvider.updateAll(context)
+            RadarWidgetProvider.updateAll(context)
         } catch (e: Exception) {
             Log.e(TAG, "toggle monitoring failed", e)
         }
@@ -61,6 +63,7 @@ class WidgetActionReceiver : BroadcastReceiver() {
             GeofenceHelper.refreshRegistrations(context)
             SingleZoneWidgetProvider.updateAll(context)
             ZoneWidgetProvider.updateAll(context)
+            RadarWidgetProvider.updateAll(context)
         } catch (e: Exception) {
             Log.e(TAG, "toggle zone failed", e)
         }

@@ -122,6 +122,145 @@
     setTimeout(ensureSize, 1000);
     setTimeout(ensureSize, 2500);
   };
+
+  /**
+   * حالت ترسیم چندضلعی: هر ضربه روی نقشه یک رأس اضافه می‌کند، یک
+   * L.polygon زنده از رأس‌ها به‌روز می‌شود و هر تغییر (ضربه/بازگشت/
+   * پاک‌کردن) با onPolygonSelected به کامپوز گزارش می‌شود تا شمارنده
+   * رأس‌ها و دکمه تأیید همان‌جا همگام بمانند. برای نمایش آخرین نقطه در
+   * نوار پایین، onLocationSelected هم صدا زده می‌شود (در حالت چندضلعی
+   * تأیید فقط از روی رأس‌ها انجام می‌شود، نه از این نقطه).
+   * کاشی‌ها و نگهدارنده اندازه دقیقاً همان منطق initMap است؛ initMap
+   * دست نخورده تا رفتار حالت دایره دقیقاً مثل قبل بماند.
+   */
+  window.initPolygonMap = function (lat, lng, zoom, initial) {
+    if (window.__map) return;
+    if (!validLat(lat)) lat = FALLBACK_LAT;
+    if (!validLng(lng)) lng = FALLBACK_LNG;
+    zoom = zoom || 15;
+
+    var map = L.map('map', { zoomControl: false }).setView([lat, lng], zoom);
+    window.__map = map;
+
+    var tileIndex = 0;
+    var tileErrors = 0;
+    var tileLayer = null;
+
+    function addTiles() {
+      tileLayer = L.tileLayer(TILE_SOURCES[tileIndex], {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+      });
+      tileLayer.on('tileerror', function () {
+        tileErrors++;
+        if (tileErrors >= 6 && tileIndex < TILE_SOURCES.length - 1) {
+          tileIndex++;
+          tileErrors = 0;
+          map.removeLayer(tileLayer);
+          addTiles();
+        } else if (tileErrors >= 6) {
+          document.getElementById('tileError').style.display = 'block';
+        }
+      });
+      tileLayer.addTo(map);
+    }
+    addTiles();
+
+    var vertices = [];
+    var markers = [];
+    var polygonLayer = null;
+
+    function verticesJson() {
+      return JSON.stringify(vertices.map(function (p) {
+        return { lat: p.lat, lng: p.lng };
+      }));
+    }
+
+    function redraw() {
+      markers.forEach(function (m) { map.removeLayer(m); });
+      markers = [];
+      vertices.forEach(function (p) {
+        markers.push(L.circleMarker(p, {
+          radius: 6, color: '#0B2A52', weight: 2, fillColor: '#00B4F0', fillOpacity: 1
+        }).addTo(map));
+      });
+      if (polygonLayer) map.removeLayer(polygonLayer);
+      polygonLayer = null;
+      if (vertices.length >= 2) {
+        polygonLayer = L.polygon(vertices, {
+          color: '#0B2A52', weight: 2, fillColor: '#0B2A52', fillOpacity: 0.15
+        }).addTo(map);
+      }
+    }
+
+    function report() {
+      if (window.Android && window.Android.onPolygonSelected) {
+        window.Android.onPolygonSelected(verticesJson());
+      }
+      if (vertices.length > 0 && window.Android && window.Android.onLocationSelected) {
+        var last = vertices[vertices.length - 1];
+        window.Android.onLocationSelected(last.lat, last.lng);
+      }
+    }
+
+    /** حذف آخرین رأس (دکمه «بازگشت» در روکش کامپوز). */
+    window.undoPolygon = function () {
+      if (vertices.length === 0) return;
+      vertices.pop();
+      redraw();
+      report();
+    };
+
+    /** پاک‌کردن همه رأس‌ها (دکمه «پاک کردن» در روکش کامپوز). */
+    window.clearPolygon = function () {
+      vertices = [];
+      redraw();
+      report();
+    };
+
+    /** بزرگ‌نمایی/کوچک‌نمایی نقشه از دکمه‌های نوار پایین (کامپوز). */
+    window.zoomIn = function () { if (window.__map) window.__map.zoomIn(); };
+    window.zoomOut = function () { if (window.__map) window.__map.zoomOut(); };
+
+    /** جابه‌جایی نمایش نقشه به یک نقطه (مثلاً موقعیت فعلی کاربر). */
+    window.moveMap = function (mLat, mLng) {
+      if (window.__map && typeof mLat === 'number' && typeof mLng === 'number' &&
+          isFinite(mLat) && isFinite(mLng)) {
+        window.__map.setView([mLat, mLng], 16);
+      }
+    };
+
+    map.on('click', function (e) {
+      vertices.push({ lat: e.latlng.lat, lng: e.latlng.lng });
+      redraw();
+      report();
+    });
+
+    // پیش‌بارگذاری چندضلعیِ در حال ویرایش (در صورت وجود).
+    if (Array.isArray(initial)) {
+      initial.forEach(function (p) {
+        if (p && typeof p.lat === 'number' && typeof p.lng === 'number' &&
+            isFinite(p.lat) && isFinite(p.lng)) {
+          vertices.push({ lat: p.lat, lng: p.lng });
+        }
+      });
+    }
+    redraw();
+    if (vertices.length > 0) {
+      map.fitBounds(L.latLngBounds(vertices), { padding: [30, 30] });
+    }
+
+    function ensureSize() {
+      var el = document.getElementById('map');
+      if (el && el.clientHeight === 0) {
+        el.style.height = window.innerHeight + 'px';
+      }
+      map.invalidateSize();
+    }
+    setTimeout(ensureSize, 250);
+    setTimeout(ensureSize, 1000);
+    setTimeout(ensureSize, 2500);
+  };
 })();
 </script>
 </body>

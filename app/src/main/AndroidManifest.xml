@@ -61,7 +61,33 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.GeofenceAlert" />
+            android:theme="@style/Theme.GeofenceAlert">
+            <!-- ورود از پیوند اشتراک‌گذاری محدوده (موج ۳):
+                 geofencealert://zone?d=… — payload در پارامتر پرسمانی
+                 است، پس هیچ pathای لازم نیست. توجه: launchMode تعیین
+                 نشده (standard)؛ هر پیوند نمونه تازه‌ای می‌سازد و
+                 MainActivity آن را در onCreate تحویل می‌گیرد. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="geofencealert"
+                    android:host="zone" />
+            </intent-filter>
+        </activity>
+
+        <!-- اشتراک فایل گزارش ماهانه (موج ۳)؛ authority یکتای بسته برنامه.
+             پیش از این هیچ FileProviderای در برنامه نبود. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="ir.khanoomi.geofencealert.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- دریافت رویدادهای ورود/خروج ژئوفنس -->
         <receiver
@@ -145,6 +171,18 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/single_zone_widget_info" />
+        </receiver>
+
+        <!-- ویجت رادار: صفحه رادار محدوده‌های فعال -->
+        <receiver
+            android:name=".widget.RadarWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/radar_widget_info" />
         </receiver>
 
         <!-- صفحه انتخاب محدوده برای ویجت تک‌محدوده -->

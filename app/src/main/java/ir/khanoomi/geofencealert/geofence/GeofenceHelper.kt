@@ -128,9 +128,13 @@ object GeofenceHelper {
                 Log.e(TAG, "Cannot load active zones", e)
                 emptyList()
             }
+            // محدوده‌های چندضلعی (polygonJson غیرخالی) هرگز ژئوفنس سیستمی
+            // نمی‌شوند — نه ژئوفنس عادی، نه دروازه، نه حلقه نزدیک شدن؛
+            // آن‌ها فقط با پایش دقیق (ProximityMonitorService) ارزیابی می‌شوند.
+            val circleZones = zones.filter { it.polygonJson.isBlank() }
             val threshold = ProximityMonitorService.PRECISE_RADIUS_THRESHOLD_M
-            val normal = zones.filter { it.radiusMeters >= threshold }
-            val gated = zones.filter { it.radiusMeters < threshold }
+            val normal = circleZones.filter { it.radiusMeters >= threshold }
+            val gated = circleZones.filter { it.radiusMeters < threshold }
             if (normal.isNotEmpty()) {
                 addZones(context, normal)
             }
@@ -140,7 +144,7 @@ object GeofenceHelper {
             // ژئوفنس‌های «نزدیک شدن»: حلقه بیرونی برای محدوده‌هایی که هشدار
             // نزدیک شدن فعال کرده‌اند (فاصله بیشتر از شعاع خود محدوده).
             // این ژئوفنس‌ها هم در سقف ۱۰۰تایی اندروید حساب می‌شوند.
-            val approach = zones.filter {
+            val approach = circleZones.filter {
                 it.approachDistanceM > 0 &&
                     it.approachDistanceM.toDouble() > it.radiusMeters
             }
@@ -169,8 +173,10 @@ object GeofenceHelper {
     }
 
     fun addZones(context: Context, zones: List<Zone>) {
-        if (zones.isEmpty()) return
-        val geofences = zones.map { zone ->
+        // دفاع دوم: چندضلعی‌ها حتی اگر مستقیم صدا زده شوند، ثبت نمی‌شوند.
+        val circleZones = zones.filter { it.polygonJson.isBlank() }
+        if (circleZones.isEmpty()) return
+        val geofences = circleZones.map { zone ->
             Geofence.Builder()
                 .setRequestId(requestId(zone.id))
                 .setCircularRegion(
@@ -193,9 +199,11 @@ object GeofenceHelper {
      * پایش دقیق همان محدوده ترجمه می‌شود؛ خودِ دروازه هرگز هشدار نمی‌دهد.
      */
     fun addGateZones(context: Context, zones: List<Zone>) {
-        if (zones.isEmpty()) return
+        // دفاع دوم: چندضلعی‌ها دروازه هم نمی‌گیرند (پایش دقیق‌شان بدون دروازه است).
+        val circleZones = zones.filter { it.polygonJson.isBlank() }
+        if (circleZones.isEmpty()) return
         val gateRadius = ProximityMonitorService.PRECISE_RADIUS_THRESHOLD_M.toFloat()
-        val geofences = zones.map { zone ->
+        val geofences = circleZones.map { zone ->
             Geofence.Builder()
                 .setRequestId(gateRequestId(zone.id))
                 .setCircularRegion(zone.latitude, zone.longitude, gateRadius)
@@ -214,8 +222,10 @@ object GeofenceHelper {
      * محدوده ترجمه می‌شود؛ فقط رویداد ورود مهم است.
      */
     fun addApproachZones(context: Context, zones: List<Zone>) {
-        if (zones.isEmpty()) return
-        val geofences = zones.map { zone ->
+        // دفاع دوم: چندضلعی‌ها حلقه نزدیک شدن هم نمی‌گیرند.
+        val circleZones = zones.filter { it.polygonJson.isBlank() }
+        if (circleZones.isEmpty()) return
+        val geofences = circleZones.map { zone ->
             Geofence.Builder()
                 .setRequestId(approachRequestId(zone.id))
                 .setCircularRegion(

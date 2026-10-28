@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>نقشه محدوده‌ها</title>
+<link rel="stylesheet" href="leaflet/leaflet.css">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  #map { width: 100%; height: 100%; min-height: 100%; background: #e5e3df; }
+  .tile-error {
+    position: absolute; bottom: 14px; right: 10px; left: 10px; z-index: 1000;
+    background: rgba(178, 60, 60, 0.94); color: #fff;
+    font-family: sans-serif; font-size: 12px; text-align: center;
+    padding: 8px 12px; border-radius: 12px; pointer-events: none;
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="tile-error" id="tileError">بارگذاری تصویر نقشه ناموفق بود؛ اتصال اینترنت را بررسی کنید</div>
+<script src="leaflet/leaflet.js"></script>
+<script>
+(function () {
+  // نمایش فقط‌خواندنی محدوده‌ها. ساختار کاشی، نقطه پیش‌فرض و نگهدارنده
+  // اندازه، آینه همان منطق map_picker.html است؛ هیچ ورودی‌ای از کاربر
+  // گرفته نمی‌شود و ضربه روی یک شکل فقط شناسه‌اش را به کامپوز می‌دهد تا
+  // کارت اطلاعات همان‌جا (در کامپوز، نه دیالوگ جاوااسکریپت) باز شود.
+  var FALLBACK_LAT = 35.6892;
+  var FALLBACK_LNG = 51.3890;
+
+  var TILE_SOURCES = [
+    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+    'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'
+  ];
+
+  var drawnBounds = [];
+  var myLocationMarker = null;
+
+  /**
+   * ساخت نقشه — فقط یک بار، از طریق evaluateJavascript. اگر setZones یا
+   * setMyLocation زودتر از init رسیده باشند، داده‌شان در صف می‌ماند و
+   * همین‌جا اعمال می‌شود (evaluateJavascript ناهمگام است).
+   */
+  window.initLiveMap = function () {
+    if (window.__map) return;
+    var map = L.map('map', { zoomControl: false }).setView([FALLBACK_LAT, FALLBACK_LNG], 12);
+    window.__map = map;
+
+    var tileIndex = 0;
+    var tileErrors = 0;
+    var tileLayer = null;
+
+    function addTiles() {
+      tileLayer = L.tileLayer(TILE_SOURCES[tileIndex], {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+      });
+      tileLayer.on('tileerror', function () {
+        tileErrors++;
+        if (tileErrors >= 6 && tileIndex < TILE_SOURCES.length - 1) {
+          tileIndex++;
+          tileErrors = 0;
+          map.removeLayer(tileLayer);
+          addTiles();
+        } else if (tileErrors >= 6) {
+          document.getElementById('tileError').style.display = 'block';
+        }
+      });
+      tileLayer.addTo(map);
+    }
+    addTiles();
+
+    window.__zoneGroup = L.layerGroup().addTo(map);
+
+    if (window.__pendingZones) {
+      var pendingZones = window.__pendingZones;
+      window.__pendingZones = null;
+      window.setZones(pendingZones);
+    }
+    if (window.__pendingLocation) {
+      var pendingLoc = window.__pendingLocation;
+      window.__pendingLocation = null;
+      window.setMyLocation(pendingLoc.lat, pendingLoc.lng);
+    }
+
+    function ensureSize() {
+      var el = document.getElementById('map');
+      if (el && el.clientHeight === 0) {
+        el.style.height = window.innerHeight + 'px';
+      }
+      map.invalidateSize();
+    }
+    setTimeout(ensureSize, 250);
+    setTimeout(ensureSize, 1000);
+    setTimeout(ensureSize, 2500);
+  };
+
+  /**
+   * ترسیم همه محدوده‌ها: دایره با L.circle (رنگ و شعاع محدوده) و
+   * چندضلعی با L.polygon (رنگ محدوده، پرشده). ضربه روی هر شکل، شناسه
+   * محدوده را به کامپوز می‌دهد.
+   */
+  window.setZones = function (zones) {
+    if (!window.__map || !window.__zoneGroup) {
+      window.__pendingZones = zones;
+      return;
+    }
+    window.__zoneGroup.clearLayers();
+    drawnBounds = [];
+    if (!Array.isArray(zones)) return;
+    zones.forEach(function (z) {
+      var color = z.color || '#0B2A52';
+      var layer = null;
+      if (Array.isArray(z.vertices) && z.vertices.length >= 3) {
+        layer = L.polygon(z.vertices, {
+          color: color, weight: 2, fillColor: color, fillOpacity: 0.18
+        });
+        z.vertices.forEach(function (p) { drawnBounds.push(p); });
+      } else if (typeof z.lat === 'number' && typeof z.lng === 'number') {
+        layer = L.circle([z.lat, z.lng], {
+          radius: z.radius > 0 ? z.radius : 200,
+          color: color, weight: 2, fillColor: color, fillOpacity: 0.15
+        });
+        drawnBounds.push([z.lat, z.lng]);
+      }
+      if (layer) {
+        (function (id) {
+          layer.on('click', function () {
+            if (window.Android && window.Android.onZoneSelected) {
+              window.Android.onZoneSelected(id);
+            }
+          });
+        })(z.id);
+        window.__zoneGroup.addLayer(layer);
+      }
+    });
+  };
+
+  /** جاگذاری همه محدوده‌ها در کادر؛ بدون محدوده، نمای پیش‌فرض می‌ماند. */
+  window.fitZones = function () {
+    if (!window.__map) return;
+    if (drawnBounds.length > 0) {
+      window.__map.fitBounds(L.latLngBounds(drawnBounds), { padding: [30, 30] });
+    }
+  };
+
+  /** نشان موقعیت فعلی گوشی: نقطه آبی پررنگ با حلقه سفید، متمایز از شکل‌ها. */
+  window.setMyLocation = function (lat, lng) {
+    if (!window.__map) {
+      window.__pendingLocation = { lat: lat, lng: lng };
+      return;
+    }
+    if (myLocationMarker) window.__map.removeLayer(myLocationMarker);
+    myLocationMarker = L.circleMarker([lat, lng], {
+      radius: 9, color: '#FFFFFF', weight: 3, fillColor: '#2563EB', fillOpacity: 1
+    }).addTo(window.__map);
+  };
+})();
+</script>
+</body>
+</html>

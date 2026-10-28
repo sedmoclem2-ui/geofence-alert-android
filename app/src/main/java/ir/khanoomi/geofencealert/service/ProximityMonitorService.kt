@@ -49,6 +49,10 @@ import kotlin.math.max
  * گوشی تا مرکز محدوده را با فرمول هاورساین حساب می‌کند و ورود/خروج را با همان
  * منطق ژئوفنس سیستمی ([ZoneTransitionHandler]) اعلام می‌کند.
  *
+ * چندضلعی‌ها (polygonJson غیرخالی) دروازه ندارند و صرف‌نظر از شعاع،
+ * مستقیم و همیشه armed می‌مانند؛ ارزیابی‌شان pointInPolygon است، با
+ * همان فاصله زمانی و همان خط لوله ورود/خروج.
+ *
  * از نسخه ۲.۲.۰ این سرویس تا وقتی «پایش» در تنظیمات روشن است همیشه زنده
  * می‌ماند (حتی وقتی هیچ محدوده‌ای armed نیست) تا بسته ماندن طولانی برنامه
  * باعث از دست رفتن هشدارها نشود؛ در حالت بیکار، اعلانش «پایش فعال است»
@@ -160,6 +164,13 @@ class ProximityMonitorService : Service() {
      * یک دور درشت اولیه هنگام شروع سرویس: موقعیت فعلی گرفته می‌شود و هر
      * محدوده کوچکی که هم‌اکنون در ۲۰۰ متری است، armed می‌شود؛ وضعیت
      * داخل/خارج اولیه بی‌صدا ثبت می‌شود (بدون هشدار).
+     *
+     * چندضلعی‌ها دروازه ندارند، پس معیار «در ۲۰۰ متری مرکز» برایشان
+     * بی‌معناست (مرکز چندضلعی بزرگ ممکن است کیلومترها دور باشد): هر
+     * محدوده چندضلعی فعال، بی‌قید و شرط armed می‌شود و وضعیت اولیه‌اش
+     * بی‌صدا از pointInPolygon محاسبه می‌شود. این همان تصمیم گیتینگ
+     * چندضلعی‌هاست: ارزیابی فقط با پایش دقیق، بدون دروازه و بدون
+     * توجه به شعاع، با همان فاصله زمانی [Zone.checkIntervalSec].
      */
     private suspend fun coarseArmPass() {
         val loc = getCurrentLocation() ?: return
@@ -169,9 +180,9 @@ class ProximityMonitorService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Cannot load zones in coarse pass", e)
             return
-        }.filter { it.radiusMeters < PRECISE_RADIUS_THRESHOLD_M }
+        }
         val now = System.currentTimeMillis()
-        for (zone in zones) {
+        for (zone in zones.filter { it.radiusMeters < PRECISE_RADIUS_THRESHOLD_M }) {
             val d = GeoMath.distanceMeters(
                 loc.latitude, loc.longitude, zone.latitude, zone.longitude
             )
@@ -180,6 +191,15 @@ class ProximityMonitorService : Service() {
                 preciseInside[zone.id] = d <= zone.radiusMeters
                 Log.i(TAG, "Coarse-armed zone ${zone.id} (d=${d.toInt()}m)")
             }
+        }
+        // چندضلعی‌ها: بدون دروازه و بدون قید شعاع/فاصله، همیشه armed.
+        for (zone in zones.filter { it.polygonJson.isNotBlank() }) {
+            val polygon = GeoMath.parsePolygonJson(zone.polygonJson)
+            armed[zone.id] = now
+            preciseInside[zone.id] = GeoMath.pointInPolygon(
+                loc.latitude, loc.longitude, polygon
+            )
+            Log.i(TAG, "Coarse-armed polygon zone ${zone.id} (vertices=${polygon.size})")
         }
     }
 
@@ -315,8 +335,16 @@ class ProximityMonitorService : Service() {
         val due = armed.filter { it.value <= now }.keys.toList()
         for (id in due) {
             val zone = zonesById[id]
+            // تصمیم گیتینگ چندضلعی: محدوده چندضلعی صرف‌نظر از شعاع،
+            // واجد پایش دقیق است — قاعده «شعاع ≥ ۲۰۰ متر یعنی ژئوفنس
+            // سیستمی، نه پایش دقیق» فقط برای دایره‌ها اعمال می‌شود.
+            // چندضلعی‌ها هرگز ژئوفنس سیستمی ندارند، پس اگر این استثنا
+            // نباشد هیچ‌چیز آن‌ها را ارزیابی نمی‌کند. همان سازوکار
+            // فاصله زمانی (checkIntervalSec، و حالت مداوم ۲ ثانیه) و
+            // همان خط لوله ورود/خروج دایره‌ها استفاده می‌شود؛ هیچ
+            // زمان‌بندی یا کلاس مصرف باتری تازه‌ای ساخته نشده است.
             if (zone == null || !zone.isActive ||
-                zone.radiusMeters >= PRECISE_RADIUS_THRESHOLD_M
+                (zone.polygonJson.isBlank() && zone.radiusMeters >= PRECISE_RADIUS_THRESHOLD_M)
             ) {
                 armed.remove(id)
                 preciseInside.remove(id)
@@ -331,25 +359,37 @@ class ProximityMonitorService : Service() {
     }
 
     /**
-     * یک دور بررسی دقیق یک محدوده: فاصله واقعی تا مرکز و تشخیص
-     * تغییر وضعیت داخل/خارج. اولین مشاهده فقط وضعیت را ثبت می‌کند.
+     * یک دور بررسی دقیق یک محدوده: برای دایره، فاصله واقعی تا مرکز و
+     * برای چندضلعی، pointInPolygon؛ تشخیص تغییر وضعیت داخل/خارج و
+     * اعلام آن با همان خط لوله ژئوفنس سیستمی ([ZoneTransitionHandler]).
+     * اولین مشاهده فقط وضعیت را ثبت می‌کند.
      */
     private suspend fun tickZone(zone: Zone) {
         val loc = getCurrentLocation() ?: return
-        val d = GeoMath.distanceMeters(
-            loc.latitude, loc.longitude, zone.latitude, zone.longitude
-        )
-        val isInside = d <= zone.radiusMeters
+        val isPolygon = zone.polygonJson.isNotBlank()
+        val isInside: Boolean
+        val detail: String
+        if (isPolygon) {
+            val polygon = GeoMath.parsePolygonJson(zone.polygonJson)
+            isInside = GeoMath.pointInPolygon(loc.latitude, loc.longitude, polygon)
+            detail = "polygon vertices=${polygon.size}"
+        } else {
+            val d = GeoMath.distanceMeters(
+                loc.latitude, loc.longitude, zone.latitude, zone.longitude
+            )
+            isInside = d <= zone.radiusMeters
+            detail = "d=${d.toInt()}m"
+        }
         when (val prev = preciseInside[zone.id]) {
             null -> preciseInside[zone.id] = isInside // مقداردهی اولیه بدون هشدار
             else -> {
                 if (!prev && isInside) {
                     preciseInside[zone.id] = true
-                    Log.i(TAG, "Precise ENTER for zone ${zone.id} (d=${d.toInt()}m)")
+                    Log.i(TAG, "Precise ENTER for zone ${zone.id} ($detail)")
                     ZoneTransitionHandler.onEnter(this, zone)
                 } else if (prev && !isInside) {
                     preciseInside[zone.id] = false
-                    Log.i(TAG, "Precise EXIT for zone ${zone.id} (d=${d.toInt()}m)")
+                    Log.i(TAG, "Precise EXIT for zone ${zone.id} ($detail)")
                     ZoneTransitionHandler.onExit(this, zone)
                 }
             }

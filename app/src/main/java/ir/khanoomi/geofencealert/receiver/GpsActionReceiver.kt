@@ -12,6 +12,7 @@ import ir.khanoomi.geofencealert.notify.Notifications
 import ir.khanoomi.geofencealert.tile.MonitorTileService
 import ir.khanoomi.geofencealert.widget.SingleZoneWidgetProvider
 import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
+import ir.khanoomi.geofencealert.widget.RadarWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +41,7 @@ class GpsActionReceiver : BroadcastReceiver() {
                 Notifications.cancelGpsOff(context)
                 ZoneWidgetProvider.updateAll(context)
                 SingleZoneWidgetProvider.updateAll(context)
+                RadarWidgetProvider.updateAll(context)
                 try {
                     TileService.requestListeningState(
                         context,

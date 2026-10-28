@@ -85,7 +85,14 @@ data class Zone(
     val sortOrder: Int = 0,
     val updatedAt: Long = System.currentTimeMillis(),
     /** رنگ اختصاصی محدوده: ۰ = پیش‌فرض تم، ۱ تا ۸ = رنگ‌های آماده ZoneColors. */
-    val colorIndex: Int = 0
+    val colorIndex: Int = 0,
+    /**
+     * چندضلعی محدوده به‌صورت JSON: آرایه‌ای از اشیای {lat,lng}.
+     * خالی یعنی محدوده دایره‌ای (رفتار قدیمی با [latitude]، [longitude] و
+     * [radiusMeters]). محدوده چندضلعی هرگز به‌عنوان ژئوفنس سیستمی ثبت
+     * نمی‌شود و فقط با پایش دقیق ([ProximityMonitorService]) ارزیابی می‌شود.
+     */
+    val polygonJson: String = ""
 ) {
     companion object {
         const val STOP_AUTO = "AUTO"

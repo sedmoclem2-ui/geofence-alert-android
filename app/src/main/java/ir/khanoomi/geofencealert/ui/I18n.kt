@@ -844,9 +844,37 @@ data class UiStrings(
     val colorDefault: String get() = ext.colorDefault
     val totalEvents: String get() = ext.totalEvents
     val chartLast7Days: String get() = ext.chartLast7Days
+    val entryHeatmap: String get() = ext.entryHeatmap
+    val stayDurationLine: String get() = ext.stayDurationLine
+    val patternUsuallyAround: String get() = ext.patternUsuallyAround
+    val heatmapLow: String get() = ext.heatmapLow
+    val heatmapHigh: String get() = ext.heatmapHigh
+    val unitHour: String get() = ext.unitHour
     val tabPlace: String get() = ext.tabPlace
     val tabAlerts: String get() = ext.tabAlerts
     val tabTiming: String get() = ext.tabTiming
+    val templateHome: String get() = ext.templateHome
+    val templateWork: String get() = ext.templateWork
+    val templateGym: String get() = ext.templateGym
+    val templateSchool: String get() = ext.templateSchool
+    val duplicateSuffix: String get() = ext.duplicateSuffix
+    val shapeCircle: String get() = ext.shapeCircle
+    val shapePolygon: String get() = ext.shapePolygon
+    val drawPolygonOnMap: String get() = ext.drawPolygonOnMap
+    val polygonCheckNote: String get() = ext.polygonCheckNote
+    val polygonSummary: String get() = ext.polygonSummary
+    val polygonMinPoints: String get() = ext.polygonMinPoints
+    val polygonClear: String get() = ext.polygonClear
+    val liveMapTitle: String get() = ext.liveMapTitle
+    val liveMapEmpty: String get() = ext.liveMapEmpty
+    val shareZone: String get() = ext.shareZone
+    val shareFailed: String get() = ext.shareFailed
+    val importAdd: String get() = ext.importAdd
+    val importInvalid: String get() = ext.importInvalid
+    val importFailed: String get() = ext.importFailed
+    val monthlyReport: String get() = ext.monthlyReport
+    val reportDone: String get() = ext.reportDone
+    val reportFailed: String get() = ext.reportFailed
 }
 
 /**
@@ -1069,10 +1097,42 @@ data class UiStringsExt(
     // آمار بازطراحی‌شده (نسخه ۳.۴.۰)
     val totalEvents: String,
     val chartLast7Days: String,
+    // آمار هوشمند (نسخه ۳.۹.۰): نقشه حرارتی، ماندگاری، خط الگو
+    val entryHeatmap: String,
+    val stayDurationLine: String,
+    val patternUsuallyAround: String,
+    val heatmapLow: String,
+    val heatmapHigh: String,
+    val unitHour: String,
     // تب‌های موضوعی پنل ویرایش محدوده (نسخه ۳.۶.۰)
     val tabPlace: String,
     val tabAlerts: String,
-    val tabTiming: String
+    val tabTiming: String,
+    // قالب‌های آماده محدوده و پسوند تکثیر (نسخه ۳.۹.۰)
+    val templateHome: String,
+    val templateWork: String,
+    val templateGym: String,
+    val templateSchool: String,
+    val duplicateSuffix: String,
+    // شکل محدوده، ترسیم چندضلعی و نقشه زنده محدوده‌ها (نسخه ۳.۹.۰)
+    val shapeCircle: String,
+    val shapePolygon: String,
+    val drawPolygonOnMap: String,
+    val polygonCheckNote: String,
+    val polygonSummary: String,
+    val polygonMinPoints: String,
+    val polygonClear: String,
+    val liveMapTitle: String,
+    val liveMapEmpty: String,
+    // اشتراک‌گذاری محدوده، ورود از پیوند و گزارش ماهانه (موج ۳، نسخه ۳.۹.۰)
+    val shareZone: String,
+    val shareFailed: String,
+    val importAdd: String,
+    val importInvalid: String,
+    val importFailed: String,
+    val monthlyReport: String,
+    val reportDone: String,
+    val reportFailed: String
 ) {
     companion object {
         val FA = UiStringsExt(
@@ -1287,9 +1347,37 @@ data class UiStringsExt(
             colorDefault = "پیش‌فرض",
             totalEvents = "مجموع رویدادها",
             chartLast7Days = "ورودهای ۷ روز اخیر",
+            entryHeatmap = "نقشه‌ی حرارتی ورودها",
+            stayDurationLine = "میانگین ماندگاری %1\$s • مجموع %2\$s",
+            patternUsuallyAround = "معمولاً حوالی ساعت %1\$s",
+            heatmapLow = "کم",
+            heatmapHigh = "زیاد",
+            unitHour = "ساعت",
             tabPlace = "کجاست؟",
             tabAlerts = "هشدار",
-            tabTiming = "زمان‌بندی"
+            tabTiming = "زمان‌بندی",
+            templateHome = "خانه",
+            templateWork = "محل کار",
+            templateGym = "باشگاه",
+            templateSchool = "مدرسه",
+            duplicateSuffix = " (کپی)",
+            shapeCircle = "دایره",
+            shapePolygon = "چندضلعی",
+            drawPolygonOnMap = "ترسیم روی نقشه",
+            polygonCheckNote = "محدوده‌های چندضلعی فقط با پایش دقیق بررسی می‌شوند؛ در بازه‌ای که در بخش «فاصله بررسی دقیق» تنظیم می‌کنید موقعیت بررسی می‌شود، پس بازه کوتاه‌تر مصرف باتری بیشتری دارد.",
+            polygonSummary = "%1\$s رأس • مرکز: %2\$s، %3\$s",
+            polygonMinPoints = "چندضلعی دست‌کم ۳ رأس لازم دارد؛ سه نقطه روی نقشه بزنید.",
+            polygonClear = "پاک کردن",
+            liveMapTitle = "نقشه محدوده‌ها",
+            liveMapEmpty = "هنوز محدوده‌ای ساخته نشده است.",
+            shareZone = "اشتراک‌گذاری",
+            shareFailed = "اشتراک‌گذاری انجام نشد.",
+            importAdd = "افزودن به محدوده‌ها",
+            importInvalid = "پیوند محدوده معتبر نیست.",
+            importFailed = "افزودن محدوده انجام نشد.",
+            monthlyReport = "گزارش ماهانه",
+            reportDone = "گزارش ماهانه ساخته شد.",
+            reportFailed = "ساخت گزارش ماهانه انجام نشد."
         )
 
         val EN = UiStringsExt(
@@ -1504,9 +1592,37 @@ data class UiStringsExt(
             colorDefault = "Default",
             totalEvents = "Total events",
             chartLast7Days = "Entries in the last 7 days",
+            entryHeatmap = "Entry heatmap",
+            stayDurationLine = "Average stay %1\$s • Total %2\$s",
+            patternUsuallyAround = "Usually around %1\$s",
+            heatmapLow = "Low",
+            heatmapHigh = "High",
+            unitHour = "Hours",
             tabPlace = "Place",
             tabAlerts = "Alerts",
-            tabTiming = "Timing"
+            tabTiming = "Timing",
+            templateHome = "Home",
+            templateWork = "Work",
+            templateGym = "Gym",
+            templateSchool = "School",
+            duplicateSuffix = " (Copy)",
+            shapeCircle = "Circle",
+            shapePolygon = "Polygon",
+            drawPolygonOnMap = "Draw on map",
+            polygonCheckNote = "Polygon zones are checked only by precise monitoring, at the interval you set in the precise-check section — so a shorter interval uses more battery.",
+            polygonSummary = "%1\$s vertices • Center: %2\$s, %3\$s",
+            polygonMinPoints = "A polygon needs at least 3 vertices; tap three points on the map.",
+            polygonClear = "Clear",
+            liveMapTitle = "Zones map",
+            liveMapEmpty = "No zones yet.",
+            shareZone = "Share",
+            shareFailed = "Sharing failed.",
+            importAdd = "Add to zones",
+            importInvalid = "This zone link is invalid.",
+            importFailed = "Adding the zone failed.",
+            monthlyReport = "Monthly report",
+            reportDone = "Monthly report created.",
+            reportFailed = "Creating the monthly report failed."
         )
 
         val AR = UiStringsExt(
@@ -1721,9 +1837,37 @@ data class UiStringsExt(
             colorDefault = "الافتراضي",
             totalEvents = "مجموع الأحداث",
             chartLast7Days = "عمليات الدخول في آخر ٧ أيام",
+            entryHeatmap = "خريطة حرارية للدخول",
+            stayDurationLine = "متوسط مدة البقاء %1\$s • المجموع %2\$s",
+            patternUsuallyAround = "عادةً حوالي الساعة %1\$s",
+            heatmapLow = "منخفض",
+            heatmapHigh = "مرتفع",
+            unitHour = "ساعة",
             tabPlace = "المكان",
             tabAlerts = "التنبيهات",
-            tabTiming = "التوقيت"
+            tabTiming = "التوقيت",
+            templateHome = "المنزل",
+            templateWork = "العمل",
+            templateGym = "النادي",
+            templateSchool = "المدرسة",
+            duplicateSuffix = " (نسخة)",
+            shapeCircle = "دائرة",
+            shapePolygon = "مضلّع",
+            drawPolygonOnMap = "ارسم على الخريطة",
+            polygonCheckNote = "تُفحَص المناطق المضلّعة بالمراقبة الدقيقة فقط، على الفاصل الذي تضبطه في قسم فاصل الفحص الدقيق — لذا فاصل أقصر يستهلك بطارية أكثر.",
+            polygonSummary = "%1\$s رؤوس • المركز: %2\$s، %3\$s",
+            polygonMinPoints = "يحتاج المضلّع إلى ٣ رؤوس على الأقل؛ اضغط على ثلاث نقاط على الخريطة.",
+            polygonClear = "مسح",
+            liveMapTitle = "خريطة المناطق",
+            liveMapEmpty = "لا توجد مناطق بعد.",
+            shareZone = "مشاركة",
+            shareFailed = "فشلت المشاركة.",
+            importAdd = "إضافة إلى المناطق",
+            importInvalid = "رابط المنطقة غير صالح.",
+            importFailed = "فشلت إضافة المنطقة.",
+            monthlyReport = "التقرير الشهري",
+            reportDone = "تم إنشاء التقرير الشهري.",
+            reportFailed = "فشل إنشاء التقرير الشهري."
         )
     }
 }

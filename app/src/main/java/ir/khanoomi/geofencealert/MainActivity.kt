@@ -1,5 +1,6 @@
 package ir.khanoomi.geofencealert
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -9,6 +10,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -34,6 +37,17 @@ import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
 
+    companion object {
+        /**
+         * پیوند ورودیِ در انتظار (موج ۳، اشتراک‌گذاری محدوده).
+         * حالت Compose است تا AppNav هم در شروع سرد و هم در تحویل گرم
+         * (onNewIntent، اگر launchMode روزی singleTop شود) واکنش نشان
+         * دهد؛ AppNav پس از ناوبری آن را null می‌کند تا همان پیوند
+         * دوباره باز نشود.
+         */
+        var pendingImportPayload by mutableStateOf<String?>(null)
+    }
+
     /**
      * شنونده تغییر وضعیت مکان‌یابی — پشتیبانِ شنونده سرویس پایش دقیق؛ تا
      * وقتی برنامه در پیش‌زمینه است، خاموش شدن GPS بی‌درنگ دیده شود، حتی
@@ -41,8 +55,31 @@ class MainActivity : ComponentActivity() {
      */
     private val gpsStateReceiver = GpsStateReceiver()
 
+    /**
+     * استخراج payload از پیوند geofencealert://zone?d=… .
+     * نکته launchMode: در مانیفست برای MainActivity هیچ launchModeای
+     * تعیین نشده، یعنی حالت پیش‌فرض standard است؛ پس هر ضربه روی پیوند،
+     * نمونه تازه‌ای از MainActivity می‌سازد و intent در onCreate می‌رسد
+     * (نه onNewIntent). onNewIntent زیر فقط دفاعی است برای روزی که
+     * launchMode به singleTop تغییر کند.
+     */
+    private fun handleZoneLink(intent: Intent?) {
+        val data = intent?.data ?: return
+        if (intent.action != Intent.ACTION_VIEW) return
+        if (data.scheme != "geofencealert" || data.host != "zone") return
+        val payload = data.getQueryParameter("d")?.takeIf { it.isNotBlank() } ?: return
+        pendingImportPayload = payload
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleZoneLink(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleZoneLink(intent)
         val app = application as GeofenceAlertApp
 
         // بازیابی خودکار از پشتیبان Documents (فقط اگر هیچ محدوده‌ای نداریم؛

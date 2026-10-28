@@ -10,6 +10,7 @@ import ir.khanoomi.geofencealert.data.MIGRATION_4_5
 import ir.khanoomi.geofencealert.data.MIGRATION_5_6
 import ir.khanoomi.geofencealert.data.MIGRATION_6_7
 import ir.khanoomi.geofencealert.data.MIGRATION_7_8
+import ir.khanoomi.geofencealert.data.MIGRATION_8_9
 import ir.khanoomi.geofencealert.data.PrefsRepository
 import ir.khanoomi.geofencealert.data.ZoneRepository
 import ir.khanoomi.geofencealert.audio.VoiceAnnouncer
@@ -29,7 +30,7 @@ class GeofenceAlertApp : Application() {
 
     val db: AppDatabase by lazy {
         Room.databaseBuilder(this, AppDatabase::class.java, "geofence_alert.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
             .build()
     }
 

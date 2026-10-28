@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- مسیرهای FileProvider برای اشتراک گزارش ماهانه (موج ۳):
+     پوشه Documents/محدوده هشدار (خانواده پوشه backup.json) و
+     cache برنامه به‌عنوان جایگزین وقتی Documents در دسترس نیست. -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path
+        name="documents"
+        path="Documents/محدوده هشدار/" />
+    <cache-path
+        name="cache"
+        path="." />
+</paths>

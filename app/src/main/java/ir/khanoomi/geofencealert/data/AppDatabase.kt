@@ -76,7 +76,14 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
     }
 }
 
-@Database(entities = [Zone::class, EventLog::class], version = 8, exportSchema = false)
+/** مهاجرت ۸ به ۹: چندضلعی محدوده؛ خالی یعنی دایره‌ای (سازگار با نسخه ۳٫۸٫۰). */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `zones` ADD COLUMN `polygonJson` TEXT NOT NULL DEFAULT ''")
+    }
+}
+
+@Database(entities = [Zone::class, EventLog::class], version = 9, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun zoneDao(): ZoneDao
     abstract fun eventDao(): EventDao

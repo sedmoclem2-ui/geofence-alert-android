@@ -13,6 +13,7 @@ import ir.khanoomi.geofencealert.notify.Notifications
 import ir.khanoomi.geofencealert.service.AlertService
 import ir.khanoomi.geofencealert.widget.SingleZoneWidgetProvider
 import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
+import ir.khanoomi.geofencealert.widget.RadarWidgetProvider
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -348,11 +349,13 @@ object AlertController {
     private fun refreshWidget(context: Context) {
         try {
             ZoneWidgetProvider.updateAll(context)
+            RadarWidgetProvider.updateAll(context)
         } catch (e: Exception) {
             Log.w(TAG, "Widget refresh failed", e)
         }
         try {
             SingleZoneWidgetProvider.updateAll(context)
+            RadarWidgetProvider.updateAll(context)
         } catch (e: Exception) {
             Log.w(TAG, "Single-zone widget refresh failed", e)
         }

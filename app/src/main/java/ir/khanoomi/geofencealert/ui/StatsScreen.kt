@@ -1,6 +1,9 @@
 package ir.khanoomi.geofencealert.ui
 
 import android.app.Application
+import android.content.Intent
+import android.os.Environment
+import android.widget.Toast
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -19,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -31,6 +35,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -38,6 +43,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,29 +51,40 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import ir.khanoomi.geofencealert.GeofenceAlertApp
+import ir.khanoomi.geofencealert.data.BackupManager
 import ir.khanoomi.geofencealert.data.EventLog
+import ir.khanoomi.geofencealert.domain.StatsMath
+import ir.khanoomi.geofencealert.domain.ZoneEvent
 import ir.khanoomi.geofencealert.ui.theme.ZoneColors
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
+import java.time.temporal.TemporalAdjusters
+import java.time.temporal.WeekFields
 import java.util.Locale
 
 /** نام ماه میلادی در زبان فعال برنامه. */
@@ -84,6 +101,77 @@ private fun monthName(strings: UiStrings, month: Int): String = when (month) {
     10 -> strings.monthOct
     11 -> strings.monthNov
     else -> strings.monthDec
+}
+
+/** یک ردیف جدول گزارش ماهانه HTML (موج ۳). */
+private data class MonthlyReportRow(
+    val name: String,
+    val colorHex: String,
+    val enters: Int,
+    val exits: Int,
+    val stayLine: String?
+)
+
+/** escape حداقلی متن برای جایگذاری امن در HTML. */
+private fun escapeHtml(value: String): String = value
+    .replace("&", "&amp;")
+    .replace("<", "&lt;")
+    .replace(">", "&gt;")
+    .replace("\"", "&quot;")
+
+/**
+ * سند HTML گزارش ماهانه: فقط CSS درون‌خطی، بدون هیچ دارایی خارجی،
+ * جهت متن بر اساس زبان فعال. سطرها از پیش با همان منطق صفحه آمار
+ * ساخته شده‌اند (ماندگاری از StatsMath.stayStatsByZone، نه جفت‌سازی
+ * دوباره)؛ این تابع فقط قالب‌بندی می‌کند.
+ */
+private fun buildMonthlyReportHtml(
+    title: String,
+    monthLabel: String,
+    totalEntriesLabel: String,
+    totalExitsLabel: String,
+    perZoneLabel: String,
+    noEventsText: String,
+    enters: Int,
+    exits: Int,
+    rows: List<MonthlyReportRow>,
+    dir: String,
+    langCode: String
+): String {
+    val sb = StringBuilder()
+    sb.append("<!DOCTYPE html><html lang=\"").append(langCode)
+        .append("\" dir=\"").append(dir).append("\"><head><meta charset=\"utf-8\">")
+        .append("<title>").append(escapeHtml(title)).append(" — ")
+        .append(escapeHtml(monthLabel)).append("</title></head>")
+        .append("<body style=\"font-family:sans-serif;margin:24px;color:#222;\">")
+        .append("<h1 style=\"font-size:22px;\">").append(escapeHtml(title)).append("</h1>")
+        .append("<p style=\"color:#555;\">").append(escapeHtml(monthLabel)).append("</p>")
+        .append("<p>").append(escapeHtml(totalEntriesLabel)).append(": ")
+        .append(enters).append(" &nbsp;|&nbsp; ")
+        .append(escapeHtml(totalExitsLabel)).append(": ").append(exits).append("</p>")
+    if (rows.isEmpty()) {
+        sb.append("<p style=\"color:#555;\">").append(escapeHtml(noEventsText)).append("</p>")
+    } else {
+        sb.append("<h2 style=\"font-size:17px;\">").append(escapeHtml(perZoneLabel))
+            .append("</h2>")
+        sb.append("<table style=\"border-collapse:collapse;width:100%;\">")
+        for (row in rows) {
+            sb.append("<tr style=\"border-top:1px solid #ddd;\"><td style=\"padding:8px 4px;\">")
+                .append("<span style=\"display:inline-block;width:10px;height:10px;")
+                .append("border-radius:50%;background:").append(row.colorHex)
+                .append(";\"></span> ").append(escapeHtml(row.name))
+                .append("</td><td style=\"padding:8px 4px;text-align:end;\">")
+                .append(row.enters).append(" / ").append(row.exits)
+            if (row.stayLine != null) {
+                sb.append("<br><span style=\"color:#555;font-size:13px;\">")
+                    .append(escapeHtml(row.stayLine)).append("</span>")
+            }
+            sb.append("</td></tr>")
+        }
+        sb.append("</table>")
+    }
+    sb.append("</body></html>")
+    return sb.toString()
 }
 
 /** قالب تاریخ میلادی: «14 Oct 2026» — ارقام لاتین و نام انگلیسی ماه. */
@@ -118,6 +206,26 @@ private fun weekdayNarrow(day: LocalDate, lang: AppLang): String {
 private fun formatPercent(pct: Int, lang: AppLang): String {
     val digits = localizedDigits(pct.toString(), lang)
     return if (lang == AppLang.EN) "$digits%" else "٪$digits"
+}
+
+/**
+ * قالب‌بندی مدت ماندگاری از روی ارقام بومی ([localizedDigits]) و واحدهای
+ * موجود ([UiStrings.unitMinute] و [UiStrings.unitHour]): «۲ ساعت ۱۵ دقیقه»،
+ * «۴۵ دقیقه» یا «۳ ساعت». زیر یک دقیقه، «۰ دقیقه» می‌شود. مفرد انگلیسی
+ * (Hour/Minute) فقط برای مقدار ۱ به‌کار می‌رود چون رشته‌های واحد جمع‌اند.
+ */
+private fun formatStayDuration(millis: Long, strings: UiStrings, lang: AppLang): String {
+    val totalMinutes = (millis / 60_000L).coerceAtLeast(0L)
+    val hours = totalMinutes / 60
+    val minutes = totalMinutes % 60
+    val hourWord = if (lang == AppLang.EN && hours == 1L) "Hour" else strings.unitHour
+    val minuteWord = if (lang == AppLang.EN && minutes == 1L) "Minute" else strings.unitMinute
+    return when {
+        hours == 0L -> "${localizedDigits(minutes.toString(), lang)} $minuteWord"
+        minutes == 0L -> "${localizedDigits(hours.toString(), lang)} $hourWord"
+        else -> "${localizedDigits(hours.toString(), lang)} $hourWord " +
+            "${localizedDigits(minutes.toString(), lang)} $minuteWord"
+    }
 }
 
 class StatsViewModel(app: Application) : AndroidViewModel(app) {
@@ -223,6 +331,139 @@ fun StatsScreen(navController: NavController) {
     val maxMonthTotal = (months.maxOfOrNull { it.enters + it.exits } ?: 0).coerceAtLeast(1)
     val monthsEmpty = months.all { it.enters == 0 && it.exits == 0 }
 
+    // آمار هوشمند (موج ۲) از همان رویدادهای خامی که نمودار هفتگی و
+    // ماهانه از آن ساخته می‌شوند (بازه ۶ ماه تقویمی اخیر): ماندگاری هر
+    // محدوده از جفت‌های کامل ENTER→EXIT، سبدهای نقشه حرارتی، و پرتکرارترین
+    // ساعت ورود هر محدوده. محاسبات خالص در StatsMath زندگی می‌کنند.
+    val zoneEvents = remember(monthlyEvents) {
+        monthlyEvents.map { ZoneEvent(it.zoneId, it.type, it.timestamp) }
+    }
+    val stayByZone = remember(zoneEvents) { StatsMath.stayStatsByZone(zoneEvents) }
+    val heatmapBuckets = remember(zoneEvents) { StatsMath.entryHeatmap(zoneEvents) }
+    val patternHourByZone = remember(zoneEvents, perZone) {
+        perZone.mapNotNull { row ->
+            val hour = StatsMath.mostFrequentEntryHour(
+                StatsMath.entryHoursForZone(zoneEvents, row.zoneId)
+            )
+            if (hour != null) row.zoneId to hour else null
+        }.toMap()
+    }
+
+    // گزارش ماهانه (موج ۳): همان monthlyEvents صفحه، فیلترشده به ماه
+    // جاری تقویمی؛ ماندگاری از StatsMath.stayStatsByZone می‌آید، نه از
+    // جفت‌سازی دوباره. فایل با نام ASCII-امن در Documents/محدوده هشدار
+    // (خانواده پوشه backup.json) نوشته می‌شود و اگر Documents در
+    // دسترس نباشد (مثلاً scoped storage اندروید ۱۰ به بالا که نوشتن
+    // مستقیم با File را نمی‌دهد) به cacheDir می‌افتد؛ اشتراک در هر دو
+    // حالت از FileProvider تازه‌اضافه‌شده با grant موقت خواندن است.
+    // مسیر خروجی دستی قبلی (SAF/CreateDocument) برای این گزارش استفاده
+    // نشده، چون گزارش باید بی‌درنگ ساخته و به اشتراک گذاشته شود، نه
+    // اینکه کاربر اول مسیر انتخاب کند.
+    val scope = rememberCoroutineScope()
+    @Suppress("DEPRECATION")
+    fun shareMonthlyReport() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val zoneId = ZoneId.systemDefault()
+                val currentMonth = YearMonth.now()
+                val currentEvents = monthlyEvents.filter {
+                    YearMonth.from(Instant.ofEpochMilli(it.timestamp).atZone(zoneId)) ==
+                        currentMonth
+                }
+                val enters = currentEvents.count { it.type == EventLog.TYPE_ENTER }
+                val exits = currentEvents.count { it.type == EventLog.TYPE_EXIT }
+                val currentZoneEvents =
+                    currentEvents.map { ZoneEvent(it.zoneId, it.type, it.timestamp) }
+                val stayCurrent = StatsMath.stayStatsByZone(currentZoneEvents)
+                val rows = currentEvents.groupBy { it.zoneId }
+                    .map { (zoneIdKey, evs) ->
+                        val zone = zones.firstOrNull { it.id == zoneIdKey }
+                        val zoneEnters = evs.count { it.type == EventLog.TYPE_ENTER }
+                        val zoneExits = evs.count { it.type == EventLog.TYPE_EXIT }
+                        val stay = stayCurrent[zoneIdKey]
+                        val color = zone?.let {
+                            ZoneColors.zoneColor(it.colorIndex, scheme.primary)
+                        } ?: scheme.primary
+                        MonthlyReportRow(
+                            name = zone?.name
+                                ?: evs.maxByOrNull { it.id }?.zoneName
+                                ?: evs.first().zoneName,
+                            colorHex = String.format(
+                                Locale.US, "#%06X", color.toArgb() and 0xFFFFFF
+                            ),
+                            enters = zoneEnters,
+                            exits = zoneExits,
+                            stayLine = stay?.let {
+                                String.format(
+                                    strings.stayDurationLine,
+                                    formatStayDuration(it.averageMillis, strings, lang),
+                                    formatStayDuration(it.totalMillis, strings, lang)
+                                )
+                            }
+                        )
+                    }
+                    .sortedByDescending { it.enters + it.exits }
+                val monthLabel = "${monthName(strings, currentMonth.monthValue)} " +
+                    localizedDigits(currentMonth.year.toString(), lang)
+                val html = buildMonthlyReportHtml(
+                    title = strings.monthlyReport,
+                    monthLabel = monthLabel,
+                    totalEntriesLabel = strings.totalEntries,
+                    totalExitsLabel = strings.totalExits,
+                    perZoneLabel = strings.entriesPerZone,
+                    noEventsText = strings.statsNoEvents,
+                    enters = enters,
+                    exits = exits,
+                    rows = rows,
+                    dir = if (lang == AppLang.EN) "ltr" else "rtl",
+                    langCode = when (lang) {
+                        AppLang.FA -> "fa"
+                        AppLang.EN -> "en"
+                        AppLang.AR -> "ar"
+                    }
+                )
+                val fileName = "monthly-report-$currentMonth.html"
+                val docsDir = try {
+                    File(
+                        Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOCUMENTS
+                        ),
+                        BackupManager.FOLDER_NAME
+                    ).apply { mkdirs() }
+                } catch (_: Exception) {
+                    null
+                }
+                val dir = if (docsDir != null && docsDir.exists()) docsDir else context.cacheDir
+                val file = File(dir, fileName)
+                file.writeText(html, Charsets.UTF_8)
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+                withContext(Dispatchers.Main) {
+                    try {
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/html"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(
+                            Intent.createChooser(send, strings.monthlyReport)
+                        )
+                        Toast.makeText(context, strings.reportDone, Toast.LENGTH_SHORT).show()
+                    } catch (_: Exception) {
+                        Toast.makeText(context, strings.reportFailed, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, strings.reportFailed, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -255,6 +496,13 @@ fun StatsScreen(navController: NavController) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                Spacer(Modifier.height(16.dp))
+                OutlinedButton(
+                    onClick = { shareMonthlyReport() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(LocalStrings.current.monthlyReport)
+                }
             }
         } else {
             LazyColumn(
@@ -322,6 +570,19 @@ fun StatsScreen(navController: NavController) {
                         WeekChart(days = weekDays, lang = lang)
                     }
 
+                    // ─── نقشه حرارتی ورودها: ۲۴ ستون ساعت × ۷ ردیف روز هفته ───
+                    item {
+                        Text(
+                            LocalStrings.current.entryHeatmap,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                    item {
+                        EntryHeatmap(buckets = heatmapBuckets, lang = lang)
+                    }
+
                     // ─── تفکیک بر اساس محدوده ───
                     item {
                         Text(
@@ -332,6 +593,8 @@ fun StatsScreen(navController: NavController) {
                         )
                     }
                     items(perZone, key = { it.zoneId }) { row ->
+                        val stay = stayByZone[row.zoneId]
+                        val patternHour = patternHourByZone[row.zoneId]
                         ZoneStatRow(
                             name = row.zoneName,
                             count = row.count,
@@ -341,7 +604,20 @@ fun StatsScreen(navController: NavController) {
                                 0
                             },
                             fraction = row.count.toFloat() / maxCount,
-                            color = zoneRowColor(row)
+                            color = zoneRowColor(row),
+                            durationLine = stay?.let {
+                                String.format(
+                                    LocalStrings.current.stayDurationLine,
+                                    formatStayDuration(it.averageMillis, LocalStrings.current, lang),
+                                    formatStayDuration(it.totalMillis, LocalStrings.current, lang)
+                                )
+                            },
+                            patternLine = patternHour?.let {
+                                String.format(
+                                    LocalStrings.current.patternUsuallyAround,
+                                    localizedDigits(it.toString(), lang)
+                                )
+                            }
                         )
                     }
                 } else {
@@ -362,6 +638,16 @@ fun StatsScreen(navController: NavController) {
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(top = 8.dp)
                     )
+                }
+                // گزارش ماهانه (موج ۳): دکمه خروجی کنار بخش ماهانه، با
+                // همان سبک دکمه خروجی صفحه تاریخچه (OutlinedButton تمام‌عرض).
+                item {
+                    OutlinedButton(
+                        onClick = { shareMonthlyReport() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(LocalStrings.current.monthlyReport)
+                    }
                 }
                 items(months, key = { it.yearMonth.toString() }) { bucket ->
                     MonthCard(
@@ -524,14 +810,169 @@ private fun WeekChart(days: List<Pair<LocalDate, Int>>, lang: AppLang) {
     }
 }
 
-/** یک ردیف تفکیک محدوده: نقطه رنگ اختصاصی + نام + شمارش و درصد + نوار پیشرفت متحرک. */
+/**
+ * نقشه حرارتی ورودها — جهت‌یابی وارونه (۲۴ ستون ساعت × ۷ ردیف روز هفته).
+ * چرا وارونه؟ نمودار ۷ روزه همین صفحه ۷ ستون با برچسب زیر ستون دارد،
+ * ولی ۲۴ ردیف ساعت صفحه را بسیار بلند می‌کرد؛ با ۷ ردیف، کل بخش در
+ * حدود ۲۰۰dp جا می‌شود و سلول‌ها به‌قدر کافی پهن‌اند. ردیف‌ها از روز
+ * اول هفته در زبان فعال شروع می‌شوند (فارسی/عربی: شنبه، انگلیسی:
+ * یکشنبه) و برچسب هر ردیف همان سازوکار [weekdayNarrow] است. ستون‌ها
+ * مثل WeekChart در چیدمان راست‌به‌چپ آینه می‌شوند (ساعت ۰ سمت راست) تا
+ * با ردیف برچسب‌های ساعت ۰/۶/۱۲/۱۸ زیر شبکه هم‌تراز بمانند. رنگ سلول:
+ * شمارش صفر → surfaceVariant، وگرنه primary با آلفای ۰٫۲۵ تا ۱ بر حسب
+ * نسبت به بیشترین شمارش بخش؛ فقط رنگ‌های یکدست با آلفا، بدون گرادیان
+ * یا تاری.
+ */
+@Composable
+private fun EntryHeatmap(buckets: Array<IntArray>, lang: AppLang) {
+    val scheme = MaterialTheme.colorScheme
+    val strings = LocalStrings.current
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    val locale = when (lang) {
+        AppLang.FA -> Locale("fa")
+        AppLang.EN -> Locale.ENGLISH
+        AppLang.AR -> Locale("ar")
+    }
+    val weekDates = remember(lang) {
+        val firstDay = WeekFields.of(locale).firstDayOfWeek
+        val start = LocalDate.now().with(TemporalAdjusters.previousOrSame(firstDay))
+        (0..6).map { start.plusDays(it.toLong()) }
+    }
+    val maxCount = buckets.flatMap { it.toList() }.maxOrNull()?.coerceAtLeast(1) ?: 1
+    val primary = scheme.primary
+    val emptyColor = scheme.surfaceVariant
+    val cellH = 26.dp
+    val gap = 3.dp
+    val labelW = 28.dp
+    // ارتفاع شبکه: ۷ ردیف ۲۶dp + ۶ فاصله ۳dp = ۲۰۰dp
+    val gridH = 200.dp
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row {
+            // برچسب روزهای هفته در کنار شبکه
+            Column(
+                modifier = Modifier.width(labelW),
+                verticalArrangement = Arrangement.spacedBy(gap)
+            ) {
+                weekDates.forEach { day ->
+                    Box(
+                        modifier = Modifier.height(cellH),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            weekdayNarrow(day, lang),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = scheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            Canvas(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(gridH)
+            ) {
+                val slotW = size.width / 24f
+                val cellPx = cellH.toPx()
+                val gapPx = gap.toPx()
+                weekDates.forEachIndexed { row, day ->
+                    val counts = buckets[day.dayOfWeek.value - 1]
+                    val y = row * (cellPx + gapPx)
+                    (0..23).forEach { hour ->
+                        val count = counts[hour]
+                        val colStart = if (isRtl) {
+                            size.width - (hour + 1) * slotW
+                        } else {
+                            hour * slotW
+                        }
+                        drawRoundRect(
+                            color = if (count == 0) {
+                                emptyColor
+                            } else {
+                                primary.copy(
+                                    alpha = 0.25f + 0.75f * (count.toFloat() / maxCount)
+                                )
+                            },
+                            topLeft = Offset(colStart + gapPx / 2f, y),
+                            size = Size(slotW - gapPx, cellPx),
+                            cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx())
+                        )
+                    }
+                }
+            }
+        }
+        // برچسب‌های ساعت زیر شبکه؛ فقط ۰/۶/۱۲/۱۸ تا شلوغ نشود.
+        // این Row در RTL خودبه‌خود وارونه می‌شود، پس با آینه‌شدن بوم هماهنگ است.
+        Row {
+            Spacer(Modifier.width(labelW))
+            Row(modifier = Modifier.weight(1f)) {
+                (0..23).forEach { hour ->
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (hour == 0 || hour == 6 || hour == 12 || hour == 18) {
+                            Text(
+                                localizedDigits(hour.toString(), lang),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = scheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        // راهنما: نقطه کم‌رنگ = ورود کم، نقطه پررنگ = ورود زیاد
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(emptyColor, CircleShape)
+                )
+                Text(
+                    strings.heatmapLow,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant
+                )
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(primary, CircleShape)
+                )
+                Text(
+                    strings.heatmapHigh,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/** یک ردیف تفکیک محدوده: نقطه رنگ اختصاصی + نام + شمارش و درصد + نوار پیشرفت متحرک.
+ * خط ماندگاری فقط وقتی هست که محدوده حداقل یک جفت کامل ENTER→EXIT داشته باشد،
+ * و خط الگو فقط وقتی که حداقل ۳ ورود داشته باشد؛ در غیر این صورت هیچ خطی
+ * اضافه نمی‌شود و باقی ردیف دست‌نخورده می‌ماند. */
 @Composable
 private fun ZoneStatRow(
     name: String,
     count: Int,
     percent: Int,
     fraction: Float,
-    color: Color
+    color: Color,
+    durationLine: String? = null,
+    patternLine: String? = null
 ) {
     val scheme = MaterialTheme.colorScheme
     val lang = LocalAppLang.current
@@ -584,6 +1025,20 @@ private fun ZoneStatRow(
                     .fillMaxWidth(animatedFraction)
                     .clip(RoundedCornerShape(5.dp))
                     .background(color)
+            )
+        }
+        if (durationLine != null) {
+            Text(
+                durationLine,
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant
+            )
+        }
+        if (patternLine != null) {
+            Text(
+                patternLine,
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant
             )
         }
     }

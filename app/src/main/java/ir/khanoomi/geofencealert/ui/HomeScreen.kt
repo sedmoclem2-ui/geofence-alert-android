@@ -64,6 +64,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -129,6 +130,7 @@ import ir.khanoomi.geofencealert.ui.theme.mixColor
 import ir.khanoomi.geofencealert.util.Permissions
 import ir.khanoomi.geofencealert.util.promptEnableGpsIfNeeded
 import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
+import ir.khanoomi.geofencealert.widget.RadarWidgetProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -252,6 +254,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (_: Exception) {
                 }
                 ZoneWidgetProvider.updateAll(getApplication())
+                RadarWidgetProvider.updateAll(getApplication())
                 // تازه‌سازی پشتیبان خودکار بعد از هر تغییر مجموعه محدوده‌ها
                 ir.khanoomi.geofencealert.data.BackupManager
                     .writeAutoBackup(getApplication())
@@ -293,12 +296,42 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * تکثیر محدوده: درج رونوشت از راه همان مسیر ساخت محدوده ([repo.upsert]،
+     * شناسه خودکار Room با id = 0) با نام + پسوند بومی‌سازی‌شده و وضعیت
+     * غیرفعال؛ چون رونوشت با [Zone.copy] از روی خود شیء ساخته می‌شود، همه
+     * فیلدهای دیگر — از جمله colorIndex و هر فیلدی که بعداً اضافه شود
+     * (مثل polygonJson) — بی‌کم‌وکاست منتقل می‌شوند. موفقیت بی‌صداست:
+     * صفحه اصلی برای کنش‌های کارت هیچ توست/اسنک‌باری ندارد و فهرست با
+     * انتشار Flow دیتابیس خودبه‌خود به‌روز می‌شود.
+     */
+    fun duplicateZone(zone: Zone, suffix: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repo.upsert(
+                    zone.copy(
+                        id = 0,
+                        name = zone.name + suffix,
+                        isActive = false,
+                        isAlerting = false,
+                        lastTriggeredAt = 0,
+                        insideSince = 0
+                    )
+                )
+                GeofenceHelper.refreshRegistrations(getApplication())
+            } catch (e: Exception) {
+                Log.e("HomeViewModel", "duplicateZone failed for zone ${zone.id}", e)
+            }
+        }
+    }
+
     fun setMonitoring(enabled: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 prefs.setMonitoringEnabled(enabled)
                 GeofenceHelper.refreshRegistrations(getApplication())
                 ZoneWidgetProvider.updateAll(getApplication())
+                RadarWidgetProvider.updateAll(getApplication())
             } catch (e: Exception) {
                 Log.e("HomeViewModel", "setMonitoring($enabled) failed", e)
             }
@@ -484,6 +517,11 @@ fun HomeScreen(navController: NavController) {
                     IconButton(onClick = { navController.navigate("settings") }) {
                         Icon(Icons.Default.Settings, contentDescription = LocalStrings.current.settingsCd)
                     }
+                    // نقشه زنده محدوده‌ها: تنها افزوده این موج، انتهای
+                    // فهرست کنش‌ها تا ترتیب و معنای بقیه دست نخورده بماند.
+                    IconButton(onClick = { navController.navigate("map") }) {
+                        Icon(Icons.Filled.Place, contentDescription = LocalStrings.current.liveMapTitle)
+                    }
                 }
             )
         },
@@ -648,6 +686,7 @@ fun HomeScreen(navController: NavController) {
                     } else {
                         Modifier.animateItem()
                     }
+                    val duplicateSuffix = LocalStrings.current.duplicateSuffix
                     ZoneCardEntrance(index = index) {
                         ZoneCard(
                             zone = zone,
@@ -655,6 +694,12 @@ fun HomeScreen(navController: NavController) {
                             manualSort = isManualSort,
                             onToggleActive = { vm.toggleActive(zone) },
                             onEdit = { navController.navigate("edit?zoneId=${zone.id}") },
+                            onDuplicate = {
+                                vm.duplicateZone(
+                                    zone,
+                                    duplicateSuffix
+                                )
+                            },
                             onDelete = { zoneToDelete = zone },
                             onStopAlert = { vm.stopAlert(zone.id) }
                         )
@@ -1436,6 +1481,7 @@ private fun ZoneCard(
     manualSort: Boolean = false,
     onToggleActive: () -> Unit,
     onEdit: () -> Unit,
+    onDuplicate: () -> Unit,
     onDelete: () -> Unit,
     onStopAlert: () -> Unit
 ) {
@@ -1608,7 +1654,7 @@ private fun ZoneCard(
                     }
                 }
                 Spacer(Modifier.width(4.dp))
-                // کنش‌های شبحی ویرایش/حذف در انتهای همان ردیف: بدون
+                // کنش‌های شبحی ویرایش/تکثیر/حذف در انتهای همان ردیف: بدون
                 // پس‌زمینه، کپسول یا حاشیه — فقط آیکن؛ حذف مثل قبل
                 // از دیالوگ تأیید می‌گذرد.
                 ZoneGhostAction(
@@ -1616,6 +1662,16 @@ private fun ZoneCard(
                     contentDescription = strings.editCd,
                     tint = if (zone.isActive) scheme.primary else scheme.onSurfaceVariant,
                     onClick = onEdit
+                )
+                // کنش شبحی سوم: تکثیر (آیکن کپی سفارشی) میان ویرایش و حذف.
+                // برای برچسب دسترس‌پذیری، رشته جداگانه‌ای اضافه نشده است
+                // (سهمیه رشته این موج همان یک کلید duplicateSuffix است) و
+                // همان پسوند، بدون فاصله ابتدایی، به‌کار می‌رود.
+                ZoneGhostAction(
+                    icon = AppIcons.Copy,
+                    contentDescription = strings.duplicateSuffix.trim(),
+                    tint = scheme.onSurfaceVariant,
+                    onClick = onDuplicate
                 )
                 ZoneGhostAction(
                     icon = Icons.Default.Delete,
@@ -1643,7 +1699,7 @@ private fun ZoneCard(
 }
 
 /**
- * کنش شبحی کارت محدوده (ویرایش/حذف): آیکن ساده ۲۱dp بدون هیچ
+ * کنش شبحی کارت محدوده (ویرایش/تکثیر/حذف): آیکن ساده ۲۱dp بدون هیچ
  * پس‌زمینه، کپسول یا حاشیه‌ای، در ناحیه لمس ۳۶dp با همان فشردن فنری
  * (۰٫۸۸) و بازخورد لمسی داک قبلی — جایگزین مینیمال داک از نسخه ۳.۵.۰.
  */

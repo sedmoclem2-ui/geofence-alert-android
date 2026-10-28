@@ -7,6 +7,7 @@ import android.util.Log
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.service.ProximityMonitorService
 import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
+import ir.khanoomi.geofencealert.widget.RadarWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,6 +29,7 @@ class BootReceiver : BroadcastReceiver() {
             try {
                 GeofenceHelper.refreshRegistrations(context)
                 ZoneWidgetProvider.updateAll(context)
+                RadarWidgetProvider.updateAll(context)
                 ProximityMonitorService.sync(context)
             } catch (e: Exception) {
                 Log.e(TAG, "refreshRegistrations failed on ${intent.action}", e)

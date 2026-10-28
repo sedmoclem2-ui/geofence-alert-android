@@ -5,4 +5,6 @@
     <string name="channel_status">وضعیت پایش</string>
     <string name="widget_desc">نمایش تعداد محدوده‌های فعال و توقف سریع هشدار</string>
     <string name="widget_single_desc">ویجت اختصاصی یک محدوده</string>
+    <string name="widget_radar_label">محدوده هشدار — رادار</string>
+    <string name="widget_radar_desc">رادار محدوده‌های فعال و وضعیت پایش</string>
 </resources>

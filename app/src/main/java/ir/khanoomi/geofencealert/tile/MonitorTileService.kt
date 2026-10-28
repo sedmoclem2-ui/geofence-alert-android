@@ -6,6 +6,7 @@ import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.ui.stringsForContext
 import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
+import ir.khanoomi.geofencealert.widget.RadarWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,6 +52,7 @@ class MonitorTileService : TileService() {
                 app.prefs.setMonitoringEnabled(!cur)
                 GeofenceHelper.refreshRegistrations(applicationContext)
                 ZoneWidgetProvider.updateAll(applicationContext)
+                RadarWidgetProvider.updateAll(applicationContext)
                 withContext(Dispatchers.Main) {
                     qsTile?.let {
                         it.state = if (!cur) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ویجت رادار: همان ساختار عمودی ویجت‌های موجود، با پس‌زمینه تیره
+     ثابت تا صفحه رادار روی هر صفحه اصلی خوانا باشد (مستقل از تم برنامه). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/radar_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:padding="12dp"
+    android:background="#0B1E33">
+
+    <ImageView
+        android:id="@+id/iv_radar"
+        android:layout_width="160dp"
+        android:layout_height="160dp"
+        android:scaleType="fitCenter"
+        android:contentDescription="@string/widget_radar_desc" />
+
+    <TextView
+        android:id="@+id/tv_radar_count"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="۰ محدوده فعال"
+        android:textSize="14sp"
+        android:textColor="#E8F4FA" />
+
+    <TextView
+        android:id="@+id/tv_radar_monitor"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:text="پایش: فعال"
+        android:textSize="14sp"
+        android:textColor="#22D3EE" />
+
+    <Button
+        android:id="@+id/btn_radar_toggle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="توقف پایش" />
+
+</LinearLayout>

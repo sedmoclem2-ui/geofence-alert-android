@@ -46,8 +46,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Phone
@@ -58,11 +60,9 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Face
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
@@ -115,6 +115,8 @@ import ir.khanoomi.geofencealert.data.Zone
 import ir.khanoomi.geofencealert.domain.RadiusUnit
 import ir.khanoomi.geofencealert.domain.CheckInterval
 import ir.khanoomi.geofencealert.domain.ExitSequenceValidator
+import ir.khanoomi.geofencealert.domain.GeoMath
+import ir.khanoomi.geofencealert.domain.ZoneShareCodec
 import ir.khanoomi.geofencealert.domain.ZoneValidator
 import ir.khanoomi.geofencealert.domain.toMeters
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
@@ -137,6 +139,10 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
     var latText by mutableStateOf("")
     var lngText by mutableStateOf("")
     var radiusText by mutableStateOf("200")
+    /** چندضلعی محدوده به‌صورت JSON (آرایه {lat,lng})؛ خالی یعنی دایره‌ای. */
+    var polygonJson by mutableStateOf("")
+    /** شکل انتخاب‌شده در فرم: true یعنی چندضلعی، false یعنی دایره. */
+    var isPolygon by mutableStateOf(false)
     var unit by mutableStateOf(RadiusUnit.METER)
     /** رفتار پس از خروج از محدوده: [Zone.EXIT_STOP]، [Zone.EXIT_SEQUENCE] یا [Zone.EXIT_CONTINUE] */
     var exitBehavior by mutableStateOf(Zone.EXIT_STOP)
@@ -226,6 +232,8 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
                         silentStartMin = z.silentStartMin
                         silentEndMin = z.silentEndMin
                         colorIndex = z.colorIndex
+                        polygonJson = z.polygonJson
+                        isPolygon = z.polygonJson.isNotBlank()
                         // نمایش فاصله بررسی ذخیره‌شده: «مداوم» برای ۰؛ دقیقه اگر مضرب ۶۰ و دست‌کم ۶۰ ثانیه
                         if (z.checkIntervalSec == CheckInterval.CONTINUOUS) {
                             checkIntervalContinuous = true
@@ -254,6 +262,22 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
     fun applyPickedLocation(lat: Double, lng: Double) {
         latText = coordText(lat)
         lngText = coordText(lng)
+    }
+
+    /**
+     * اعمال چندضلعی برگشتی از نقشه: ذخیره JSON رأس‌ها و نوشتن مرکز ثقل
+     * آن در فیلدهای مختصات (در ذخیره هم دوباره از روی مرکز ثقل بازنویسی
+     * می‌شود، پس فیلدها فقط نمایشی/قابل‌ویرایش‌اند).
+     */
+    fun applyPickedPolygon(json: String) {
+        val points = GeoMath.parsePolygonJson(json)
+        if (points.size < 3) return
+        polygonJson = json
+        isPolygon = true
+        GeoMath.centroid(points)?.let { (cLat, cLng) ->
+            latText = coordText(cLat)
+            lngText = coordText(cLng)
+        }
     }
 
     /** مجموعه روزهای فعال زمان‌بندی (۱=شنبه … ۷=جمعه). */
@@ -640,6 +664,18 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
         }
     }
 
+    // دریافت چندضلعی برگشتی از نقشه ترسیم (حالت چندضلعیِ انتخاب‌گر نقشه).
+    // جمع‌آوری جداگانه است چون collect اول هرگز برنمی‌گردد.
+    LaunchedEffect(mapResultHandle) {
+        mapResultHandle?.getStateFlow("picked_polygon", "")?.collect { json ->
+            if (json.isNotBlank()) {
+                vm.applyPickedPolygon(json)
+                pasteError = null
+                mapResultHandle.remove<String>("picked_polygon")
+            }
+        }
+    }
+
     /** نام نمایشی فایل صوتی انتخاب‌شده. */
     fun customSoundName(uriString: String): String {
         return try {
@@ -679,18 +715,81 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
         vm.lngText = parts[1]
     }
 
+    /**
+     * ساخت محدوده از فیلدهای فعلی فرم برای اشتراک‌گذاری — همان نگاشت
+     * فیلد→Zone که مسیر ذخیره (doSave) استفاده می‌کند، بدون اعتبارسنجی
+     * و بدون اثر جانبی: در حالت چندضلعی مرکز ثقل رأس‌ها مرکز می‌شود و
+     * شعاعِ خالیِ چندضلعی ۲۰۰ متر خنثی می‌گیرد؛ اگر نام خالی باشد یا
+     * مختصات/شعاع قابل‌پارس نباشند null برمی‌گردد تا دکمه اشتراک‌گذاری
+     * غیرفعال بماند (به‌جای ساخت پیوند خراب).
+     */
+    fun buildShareZone(): Zone? {
+        if (vm.name.isBlank()) return null
+        val lat = ZoneValidator.parseDoubleFa(vm.latText)
+        val lng = ZoneValidator.parseDoubleFa(vm.lngText)
+        val radius = ZoneValidator.parseDoubleFa(vm.radiusText)
+        val centroid = if (vm.isPolygon) {
+            GeoMath.centroid(GeoMath.parsePolygonJson(vm.polygonJson))
+        } else {
+            null
+        }
+        val finalLat = centroid?.first ?: lat ?: return null
+        val finalLng = centroid?.second ?: lng ?: return null
+        val radiusMeters = if (vm.isPolygon) {
+            radius?.let { toMeters(it, vm.unit) } ?: 200.0
+        } else {
+            radius?.let { toMeters(it, vm.unit) } ?: return null
+        }
+        return Zone(
+            id = vm.existing?.id ?: 0,
+            name = vm.name.trim(),
+            latitude = finalLat,
+            longitude = finalLng,
+            radiusMeters = radiusMeters,
+            polygonJson = if (vm.isPolygon) vm.polygonJson else "",
+            isActive = vm.isActive,
+            scheduleEnabled = vm.scheduleEnabled,
+            scheduleDays = vm.scheduleDays.ifBlank { "1,2,3,4,5,6,7" },
+            scheduleStartMin = vm.scheduleStartMin,
+            scheduleEndMin = vm.scheduleEndMin,
+            exitBehavior = vm.exitBehavior,
+            alertMode = vm.alertMode,
+            silentEnabled = vm.silentEnabled,
+            silentStartMin = vm.silentStartMin,
+            silentEndMin = vm.silentEndMin,
+            colorIndex = vm.colorIndex
+        )
+    }
+
     fun doSave() {
         val lat = ZoneValidator.parseDoubleFa(vm.latText)
         val lng = ZoneValidator.parseDoubleFa(vm.lngText)
         val radius = ZoneValidator.parseDoubleFa(vm.radiusText)
-        val validation = ZoneValidator.validate(vm.name, lat, lng, radius, vm.unit)
+        // در حالت چندضلعی، مختصات ذخیره از روی مرکز ثقل چندضلعی بازنویسی
+        // می‌شود، پس اعتبارسنجی هم روی مرکز ثقل انجام می‌شود نه فیلدها؛
+        // شعاع هم پنهان است، پس با یک مقدار معتبر خنثی اعتبارسنجی می‌شود.
+        val polygonPoints = if (vm.isPolygon) GeoMath.parsePolygonJson(vm.polygonJson) else emptyList()
+        val polygonCentroid = if (vm.isPolygon) GeoMath.centroid(polygonPoints) else null
+        val validation = ZoneValidator.validate(
+            vm.name,
+            polygonCentroid?.first ?: lat,
+            polygonCentroid?.second ?: lng,
+            if (vm.isPolygon) 200.0 else radius,
+            vm.unit
+        )
         // هر خطا با شماره تب صاحبش برچسب می‌خورد تا پس از تلاش ناموفق برای
         // ذخیره، کاربر خودکار به تب دارای خطا برود و روی قرص آن تب نقطه خطا بنشیند
         val allErrors = validation.errors.map { 0 to it }.toMutableList()
-        // فاصله بررسی دقیق فقط وقتی معنا دارد که شعاع کمتر از ۲۰۰ متر باشد
+        // چندضلعی بدون دست‌کم ۳ رأس قابل ذخیره نیست.
+        if (vm.isPolygon && polygonPoints.size < 3) {
+            allErrors += (0 to strings.polygonMinPoints)
+        }
+        // فاصله بررسی دقیق فقط وقتی معنا دارد که شعاع کمتر از ۲۰۰ متر باشد؛
+        // چندضلعی‌ها همیشه با پایش دقیق ارزیابی می‌شوند، پس بازه‌شان همیشه
+        // از فیلد خوانده می‌شود (کنترل بازه در حالت چندضلعی پنهان نمی‌شود).
         val radiusMetersForCheck = radius?.let { toMeters(it, vm.unit) }
         val checkIntervalSec: Int =
-            if (radiusMetersForCheck != null && radiusMetersForCheck < 200.0) {
+            if (vm.isPolygon || (radiusMetersForCheck != null && radiusMetersForCheck < 200.0)) {
                 if (vm.checkIntervalContinuous) {
                     CheckInterval.CONTINUOUS
                 } else {
@@ -749,12 +848,24 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 }
                 if (allErrors.isEmpty()) {
                     scope.launch(Dispatchers.IO) {
+                        // در حالت چندضلعی، مرکز ذخیره‌شده همیشه مرکز ثقل
+                        // رأس‌های فعلی است، حتی اگر فیلدها دستی عوض شده باشند.
+                        val saveCentroid = if (vm.isPolygon) {
+                            GeoMath.centroid(GeoMath.parsePolygonJson(vm.polygonJson))
+                        } else {
+                            null
+                        }
                         val zone = Zone(
                             id = vm.existing?.id ?: 0,
                             name = vm.name.trim(),
-                            latitude = lat!!,
-                            longitude = lng!!,
-                            radiusMeters = toMeters(radius!!, vm.unit),
+                            latitude = saveCentroid?.first ?: lat!!,
+                            longitude = saveCentroid?.second ?: lng!!,
+                            radiusMeters = if (vm.isPolygon) {
+                                radius?.let { toMeters(it, vm.unit) } ?: 200.0
+                            } else {
+                                toMeters(radius!!, vm.unit)
+                            },
+                            polygonJson = if (vm.isPolygon) vm.polygonJson else "", 
                             isActive = vm.isActive,
                             soundKey = vm.soundKey,
                             customSoundUri = vm.customSoundUri,
@@ -958,6 +1069,10 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             .padding(16.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        // قالب‌های آماده فقط در صفحه محدوده تازه، بالای تب «کجاست؟»
+                        if (zoneId == -1L) {
+                            ZoneTemplateRow(vm, strings)
+                        }
                         SectionCard(icon = Icons.Filled.Info, title = strings.specifications) {
                             OutlinedTextField(
                                 value = vm.name,
@@ -1010,9 +1125,67 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            // اشتراک‌گذاری محدوده (موج ۳): پیوند
+                            // geofencealert://zone?d=… با متن ساده فرستاده
+                            // می‌شود؛ نوار ذخیره چسبان دست‌نخورده می‌ماند.
+                            // دکمه تا وقتی فرم قابل‌اشتراک نیست غیرفعال است.
+                            val shareZoneValue = buildShareZone()
+                            FilledTonalButton(
+                                onClick = {
+                                    val zone = shareZoneValue ?: return@FilledTonalButton
+                                    try {
+                                        val send = Intent(Intent.ACTION_SEND).apply {
+                                            type = "text/plain"
+                                            putExtra(
+                                                Intent.EXTRA_TEXT,
+                                                ZoneShareCodec.linkFor(zone)
+                                            )
+                                        }
+                                        context.startActivity(
+                                            Intent.createChooser(send, strings.shareZone)
+                                        )
+                                    } catch (_: Exception) {
+                                        Toast.makeText(
+                                            context,
+                                            strings.shareFailed,
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                enabled = shareZoneValue != null
+                            ) {
+                                Icon(
+                                    Icons.Filled.Share,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(strings.shareZone)
+                            }
                         }
 
                         SectionCard(icon = Icons.Filled.Place, title = strings.coordinates) {
+                            // کلید شکل محدوده: دایره = رابط امروز، چندضلعی =
+                            // ترسیم روی نقشه. داخل کارت مختصات است تا با پنهان
+                            // شدن کارت شعاع، کلید همچنان در دسترس بماند.
+                            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                                SegmentedButton(
+                                    selected = !vm.isPolygon,
+                                    onClick = { vm.isPolygon = false },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                    label = { Text(strings.shapeCircle) }
+                                )
+                                SegmentedButton(
+                                    selected = vm.isPolygon,
+                                    onClick = { vm.isPolygon = true },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                    label = { Text(strings.shapePolygon) }
+                                )
+                            }
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1110,7 +1283,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                                         verticalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
                                         Icon(
-                                            Icons.Filled.List,
+                                            AppIcons.Copy,
                                             contentDescription = null,
                                             modifier = Modifier.size(20.dp)
                                         )
@@ -1133,7 +1306,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                                         verticalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
                                         Icon(
-                                            Icons.Filled.Edit,
+                                            AppIcons.Paste,
                                             contentDescription = null,
                                             modifier = Modifier.size(20.dp)
                                         )
@@ -1144,26 +1317,89 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                                     }
                                 }
                             }
-                            FilledTonalButton(
-                                onClick = {
-                                    val lat = ZoneValidator.parseDoubleFa(vm.latText) ?: 0.0
-                                    val lng = ZoneValidator.parseDoubleFa(vm.lngText) ?: 0.0
-                                    val radiusM = ZoneValidator.parseDoubleFa(vm.radiusText)
-                                        ?.let { toMeters(it, vm.unit) } ?: 200.0
-                                    navController.navigate("map_picker?lat=$lat&lng=$lng&radius=$radiusM")
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(
-                                    Icons.Filled.Place,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
+                            if (vm.isPolygon) {
+                                FilledTonalButton(
+                                    onClick = {
+                                        val lat = ZoneValidator.parseDoubleFa(vm.latText) ?: 0.0
+                                        val lng = ZoneValidator.parseDoubleFa(vm.lngText) ?: 0.0
+                                        val radiusM = ZoneValidator.parseDoubleFa(vm.radiusText)
+                                            ?.let { toMeters(it, vm.unit) } ?: 200.0
+                                        // چندضلعیِ در حال ویرایش از همان
+                                        // savedStateHandle خوانده می‌شود که
+                                        // نتیجه هم به آن برمی‌گردد؛ در نشانی
+                                        // ناوبری JSON نمی‌گذاریم تا پارس نشانی
+                                        // خراب نشود.
+                                        navController.currentBackStackEntry
+                                            ?.savedStateHandle
+                                            ?.set("polygon_initial", vm.polygonJson)
+                                        navController.navigate(
+                                            "map_picker?lat=$lat&lng=$lng&radius=$radiusM&mode=polygon"
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Place,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(strings.drawPolygonOnMap)
+                                }
+                                Text(
+                                    strings.polygonCheckNote,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                Spacer(Modifier.width(8.dp))
-                                Text(strings.selectOnMap)
+                                // خلاصه چندضلعیِ ذخیره‌شده: تعداد رأس + مرکز ثقل.
+                                val savedPolygon = GeoMath.parsePolygonJson(vm.polygonJson)
+                                val savedCentroid = GeoMath.centroid(savedPolygon)
+                                if (savedPolygon.isNotEmpty() && savedCentroid != null) {
+                                    Text(
+                                        String.format(
+                                            strings.polygonSummary,
+                                            localizedDigits(savedPolygon.size.toString(), lang),
+                                            localizedDigits(
+                                                String.format(
+                                                    Locale.US, "%.5f", savedCentroid.first
+                                                ), lang
+                                            ),
+                                            localizedDigits(
+                                                String.format(
+                                                    Locale.US, "%.5f", savedCentroid.second
+                                                ), lang
+                                            )
+                                        ),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            } else {
+                                FilledTonalButton(
+                                    onClick = {
+                                        val lat = ZoneValidator.parseDoubleFa(vm.latText) ?: 0.0
+                                        val lng = ZoneValidator.parseDoubleFa(vm.lngText) ?: 0.0
+                                        val radiusM = ZoneValidator.parseDoubleFa(vm.radiusText)
+                                            ?.let { toMeters(it, vm.unit) } ?: 200.0
+                                        navController.navigate("map_picker?lat=$lat&lng=$lng&radius=$radiusM")
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Place,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(strings.selectOnMap)
+                                }
                             }
                             val errorColor = MaterialTheme.colorScheme.error
                             locError?.let {
@@ -1179,7 +1415,10 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             )
                         }
 
-                        SectionCard(icon = Icons.Filled.LocationOn, title = strings.radius) {
+                        // در حالت چندضلعی، همه کنترل‌های شعاع (عنوان،
+                            // اسلایدر، چیپ‌های آماده، فیلد و کلید واحد) پنهان‌اند.
+                            if (!vm.isPolygon) {
+                            SectionCard(icon = Icons.Filled.AddCircle, title = strings.radius) {
                             // نمایش بزرگ شعاع فعلی + اسلایدر و چیپ‌های آماده؛ هر سه
                             // روی همان وضعیت radiusText/unit می‌نویسند و فیلد عددی
                             // دقیق هم پایین‌تر سر جایش می‌ماند. اسلایدر بر حسب متر
@@ -1274,10 +1513,14 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                             }
                         }
 
-                        // فاصله بررسی دقیق: فقط برای شعاع‌های کمتر از ۲۰۰ متر
+                        } // پایان if (!vm.isPolygon) — کارت شعاع
+
+                        // فاصله بررسی دقیق: فقط برای شعاع‌های کمتر از ۲۰۰ متر؛
+                        // در حالت چندضلعی همیشه دیده می‌شود (چندضلعی‌ها با
+                        // همین بازه ارزیابی می‌شوند).
                         val radiusMetersNow =
                             ZoneValidator.parseDoubleFa(vm.radiusText)?.let { toMeters(it, vm.unit) }
-                        if (radiusMetersNow != null && radiusMetersNow < 200.0) {
+                        if (vm.isPolygon || (radiusMetersNow != null && radiusMetersNow < 200.0)) {
                             SectionCard(icon = Icons.Filled.Refresh, title = strings.checkIntervalTitle) {
                                 Text(
                                     strings.checkIntervalSub,

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="200dp"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/radar_widget"
+    android:previewImage="@drawable/img_app_logo"
+    android:label="@string/widget_radar_label"
+    android:description="@string/widget_radar_desc"
+    android:widgetCategory="home_screen" />

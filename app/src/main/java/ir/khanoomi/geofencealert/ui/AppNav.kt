@@ -1,8 +1,10 @@
 package ir.khanoomi.geofencealert.ui
 
+import android.net.Uri
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -14,6 +16,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import ir.khanoomi.geofencealert.GeofenceAlertApp
+import ir.khanoomi.geofencealert.MainActivity
 import kotlinx.coroutines.launch
 
 /** ناوبری اصلی برنامه؛ مقصد شروع به دیده‌شدن آموزش و انتخاب زبان بستگی دارد. */
@@ -41,6 +44,20 @@ fun AppNav() {
     // برنمی‌گردد؛ انتخاب زبان فقط برای نصب تازه و پیش از آموزش است.
     val isExistingUser = onboardingDone == true || zones!!.isNotEmpty()
     val needsLanguageScene = languageChosen != true && !isExistingUser
+
+    // ورود از پیوند اشتراک‌گذاری (موج ۳): MainActivity payload را در
+    // pendingImportPayload گذاشته است؛ اینجا مصرف و به مسیر import
+    // می‌رویم. کدگذاری ناوبری: payload فقط [A-Za-z0-9_-] دارد (Base64
+    // نسخه URL-safe بدون padding)، پس ذاتاً در قطعه مسیر امن است، ولی
+    // طبق قرارداد مسیرها باز هم با Uri.encode فرستاده و در مقصد با
+    // Uri.decode خوانده می‌شود تا اگر روزی الفبا عوض شد نشکند.
+    val pendingImport = MainActivity.pendingImportPayload
+    LaunchedEffect(pendingImport) {
+        if (pendingImport != null) {
+            MainActivity.pendingImportPayload = null
+            navController.navigate("import/${Uri.encode(pendingImport)}")
+        }
+    }
 
     NavHost(
         navController = navController,
@@ -76,7 +93,7 @@ fun AppNav() {
             StatsScreen(navController = navController)
         }
         composable(
-            route = "map_picker?lat={lat}&lng={lng}&radius={radius}",
+            route = "map_picker?lat={lat}&lng={lng}&radius={radius}&mode={mode}",
             arguments = listOf(
                 navArgument("lat") {
                     type = NavType.StringType
@@ -89,6 +106,10 @@ fun AppNav() {
                 navArgument("radius") {
                     type = NavType.StringType
                     defaultValue = "200.0"
+                },
+                navArgument("mode") {
+                    type = NavType.StringType
+                    defaultValue = "circle"
                 }
             )
         ) { backStackEntry ->
@@ -96,8 +117,12 @@ fun AppNav() {
                 navController = navController,
                 initialLat = backStackEntry.arguments?.getString("lat")?.toDoubleOrNull() ?: 0.0,
                 initialLng = backStackEntry.arguments?.getString("lng")?.toDoubleOrNull() ?: 0.0,
-                initialRadiusM = backStackEntry.arguments?.getString("radius")?.toDoubleOrNull() ?: 200.0
+                initialRadiusM = backStackEntry.arguments?.getString("radius")?.toDoubleOrNull() ?: 200.0,
+                mode = backStackEntry.arguments?.getString("mode") ?: "circle"
             )
+        }
+        composable("map") {
+            LiveMapScreen(navController = navController)
         }
         composable(
             route = "edit?zoneId={zoneId}",
@@ -110,6 +135,21 @@ fun AppNav() {
         ) { backStackEntry ->
             val zoneId = backStackEntry.arguments?.getLong("zoneId") ?: -1L
             ZoneEditScreen(navController = navController, zoneId = zoneId)
+        }
+        composable(
+            route = "import/{payload}",
+            arguments = listOf(
+                navArgument("payload") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
+            )
+        ) { backStackEntry ->
+            val raw = backStackEntry.arguments?.getString("payload") ?: ""
+            ZoneImportScreen(
+                navController = navController,
+                payload = Uri.decode(raw)
+            )
         }
         composable("settings") {
             SettingsScreen(navController = navController)

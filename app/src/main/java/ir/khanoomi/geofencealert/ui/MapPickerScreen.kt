@@ -8,6 +8,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.FilledTonalIconButton
@@ -42,6 +44,7 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.tasks.Tasks
+import ir.khanoomi.geofencealert.domain.GeoMath
 import ir.khanoomi.geofencealert.util.Permissions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,12 +53,22 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /** پل ارتباطی جاوااسکریپت نقشه با کامپوز. */
-internal class MapBridge(private val onPick: (Double, Double) -> Unit) {
+internal class MapBridge(
+    private val onPick: (Double, Double) -> Unit,
+    private val onPolygon: ((String) -> Unit)? = null
+) {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     @JavascriptInterface
     fun onLocationSelected(lat: Double, lng: Double) {
         mainHandler.post { onPick(lat, lng) }
+    }
+
+    /** چندضلعی کامل (JSON رأس‌ها) پس از هر ضربه/بازگشت/پاک‌کردن روی نقشه. */
+    @JavascriptInterface
+    fun onPolygonSelected(json: String) {
+        val callback = onPolygon ?: return
+        mainHandler.post { callback(json) }
     }
 }
 
@@ -66,8 +79,23 @@ fun MapPickerScreen(
     navController: NavController,
     initialLat: Double,
     initialLng: Double,
-    initialRadiusM: Double
+    initialRadiusM: Double,
+    mode: String = "circle"
 ) {
+    val isPolygonMode = mode == "polygon"
+    // چندضلعیِ در حال ویرایش: صفحه ویرایش آن را پیش از ناوبری در همان
+    // savedStateHandle می‌گذارد که نتیجه هم به آن برمی‌گردد؛ در نشانی
+    // ناوبری JSON نمی‌گذاریم تا پارس نشانی خراب نشود.
+    val initialPolygon = remember {
+        if (!isPolygonMode) {
+            emptyList()
+        } else {
+            val raw = navController.previousBackStackEntry
+                ?.savedStateHandle?.get<String>("polygon_initial") ?: ""
+            GeoMath.parsePolygonJson(raw)
+        }
+    }
+    var vertices by remember { mutableStateOf(initialPolygon) }
     var selected by remember {
         mutableStateOf(
             if (initialLat != 0.0 || initialLng != 0.0) initialLat to initialLng
@@ -80,15 +108,33 @@ fun MapPickerScreen(
     val scope = rememberCoroutineScope()
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     val bridge = remember {
-        MapBridge { lat, lng -> selected = lat to lng }
+        MapBridge(
+            onPick = { lat, lng -> selected = lat to lng },
+            onPolygon = { json ->
+                val points = GeoMath.parsePolygonJson(json)
+                // گزارش خالی یعنی «پاک کردن»؛ همان را هم بپذیر تا شمارنده
+                // رأس‌ها با نقشه همگام بماند.
+                vertices = points
+            }
+        )
     }
     // مقداردهی نقشه از طریق evaluateJavascript انجام می‌شود؛
     // خواندن query-string از روی file:///android_asset در WebView قابل اعتماد نیست.
     val initJs = remember {
         val la = String.format(Locale.US, "%.6f", initialLat)
         val ln = String.format(Locale.US, "%.6f", initialLng)
-        val r = String.format(Locale.US, "%.1f", initialRadiusM.coerceAtLeast(1.0))
-        "window.initMap($la, $ln, $r, 15)"
+        if (!isPolygonMode) {
+            val r = String.format(Locale.US, "%.1f", initialRadiusM.coerceAtLeast(1.0))
+            "window.initMap($la, $ln, $r, 15)"
+        } else {
+            // رأس‌های اولیه به‌صورت لیترال JSON عددی (بدون رشته‌های کاربر).
+            val verts = initialPolygon.joinToString(",", "[", "]") { (vLat, vLng) ->
+                val a = String.format(Locale.US, "%.6f", vLat)
+                val b = String.format(Locale.US, "%.6f", vLng)
+                "{\"lat\":$a,\"lng\":$b}"
+            }
+            "window.initPolygonMap($la, $ln, 15, $verts)"
+        }
     }
 
     fun fetchLocation() {
@@ -135,6 +181,26 @@ fun MapPickerScreen(
     }
 
     fun confirm() {
+        if (isPolygonMode) {
+            if (vertices.size < 3) {
+                Toast.makeText(
+                    context,
+                    strings.polygonMinPoints,
+                    Toast.LENGTH_SHORT
+                ).show()
+                return
+            }
+            val json = vertices.joinToString(",", "[", "]") { (vLat, vLng) ->
+                val a = String.format(Locale.US, "%.6f", vLat)
+                val b = String.format(Locale.US, "%.6f", vLng)
+                "{\"lat\":$a,\"lng\":$b}"
+            }
+            navController.previousBackStackEntry
+                ?.savedStateHandle
+                ?.set("picked_polygon", json)
+            navController.popBackStack()
+            return
+        }
         val (la, ln) = selected ?: return
         navController.previousBackStackEntry
             ?.savedStateHandle
@@ -162,14 +228,17 @@ fun MapPickerScreen(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = strings.back)
                 }
                 Text(
-                    LocalStrings.current.mapPickerTitle,
+                    if (isPolygonMode) LocalStrings.current.drawPolygonOnMap
+                    else LocalStrings.current.mapPickerTitle,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f)
                 )
                 GradientButton(
                     onClick = { confirm() },
-                    enabled = selected != null
+                    // در حالت چندضلعی دکمه همیشه فعال است تا ردِ کمتر از
+                    // ۳ رأس، پیامش را نشان دهد (نه اینکه بی‌صدا قفل باشد).
+                    enabled = isPolygonMode || selected != null
                 ) {
                     Text(LocalStrings.current.confirm, fontWeight = FontWeight.Bold)
                 }
@@ -177,29 +246,76 @@ fun MapPickerScreen(
         }
 
         // ── نقشه (تمام فضای میانی) ──
-        AndroidView(
+        // در حالت چندضلعی، ردیف کنش‌های ترسیم روی خود نقشه می‌نشیند
+        // (روکش کامپوز، نه دیالوگ جاوااسکریپت): بازگشتِ آخرین رأس،
+        // پاک‌کردن همه و تأیید. در حالت دایره هیچ روکشی نیست.
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
-            factory = { ctx ->
-                WebView(ctx).apply {
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.allowFileAccess = true
-                    settings.loadWithOverviewMode = true
-                    settings.useWideViewPort = true
-                    webViewClient = object : WebViewClient() {
-                        override fun onPageFinished(view: WebView, url: String) {
-                            super.onPageFinished(view, url)
-                            view.evaluateJavascript(initJs, null)
+                .weight(1f)
+        ) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    WebView(ctx).apply {
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.allowFileAccess = true
+                        settings.loadWithOverviewMode = true
+                        settings.useWideViewPort = true
+                        webViewClient = object : WebViewClient() {
+                            override fun onPageFinished(view: WebView, url: String) {
+                                super.onPageFinished(view, url)
+                                view.evaluateJavascript(initJs, null)
+                            }
+                        }
+                        addJavascriptInterface(bridge, "Android")
+                        loadUrl("file:///android_asset/map_picker.html")
+                        webViewRef = this
+                    }
+                }
+            )
+            if (isPolygonMode) {
+                Surface(
+                    tonalElevation = 3.dp,
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextButton(
+                            onClick = {
+                                // به‌روزرسانی خوش‌بینانه محلی + فرمان به نقشه؛
+                                // گزارش برگشتی جاوااسکریپت همان مقدار را تأیید می‌کند.
+                                vertices = vertices.dropLast(1)
+                                if (vertices.isEmpty()) selected = null
+                                webViewRef?.evaluateJavascript("window.undoPolygon()", null)
+                            }
+                        ) {
+                            Text(strings.back, fontWeight = FontWeight.Bold)
+                        }
+                        TextButton(
+                            onClick = {
+                                vertices = emptyList()
+                                selected = null
+                                webViewRef?.evaluateJavascript("window.clearPolygon()", null)
+                            }
+                        ) {
+                            Text(strings.polygonClear, fontWeight = FontWeight.Bold)
+                        }
+                        GradientButton(onClick = { confirm() }) {
+                            Text(LocalStrings.current.confirm, fontWeight = FontWeight.Bold)
                         }
                     }
-                    addJavascriptInterface(bridge, "Android")
-                    loadUrl("file:///android_asset/map_picker.html")
-                    webViewRef = this
                 }
             }
-        )
+        }
 
         // ── نوار پایین (بیرون از نقشه): موقعیت فعلی (راست) | زوم (وسط) | مختصات (چپ) ──
         Surface(

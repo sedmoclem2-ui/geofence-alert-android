@@ -70,6 +70,7 @@ object BackupManager {
         o.put("sortOrder", zone.sortOrder)
         o.put("updatedAt", zone.updatedAt)
         o.put("colorIndex", zone.colorIndex)
+        o.put("polygonJson", zone.polygonJson)
         return o
     }
 
@@ -111,7 +112,9 @@ object BackupManager {
             stayReminded = o.optBoolean("stayReminded", false),
             sortOrder = o.optInt("sortOrder", 0),
             updatedAt = o.optLong("updatedAt", System.currentTimeMillis()),
-            colorIndex = o.optInt("colorIndex", 0)
+            colorIndex = o.optInt("colorIndex", 0),
+            // پیش‌فرض "" یعنی پشتیبان‌های ۳٫۸٫۰ (بدون این کلید) به‌صورت دایره بازیابی می‌شوند.
+            polygonJson = o.optString("polygonJson", "")
         )
     }
 
