@@ -127,7 +127,7 @@ fun ZoneImportScreen(navController: NavController, payload: String) {
         }
 
         val color = ZoneColors.zoneColor(draft.colorIndex, scheme.primary)
-        val polygonPoints = GeoMath.parsePolygonJson(draft.polygonJson)
+        val polygonPoints = GeoMath.normalizePolygon(GeoMath.parsePolygonJson(draft.polygonJson))
         val extentLine = if (draft.polygonJson.isNotBlank() && polygonPoints.isNotEmpty()) {
             // خلاصه چندضلعی موجود: تعداد رأس + مرکز (همان مختصات draft).
             String.format(

@@ -139,6 +139,14 @@
     });
   };
 
+  /** پرواز نرم دوربین به یک نقطه با بزرگ‌نمایی ۱۶ (دکمه‌های کپسول). */
+  window.flyTo = function (lat, lng) {
+    if (!window.__map) return;
+    if (typeof lat !== 'number' || typeof lng !== 'number' ||
+        !isFinite(lat) || !isFinite(lng)) return;
+    window.__map.flyTo([lat, lng], 16);
+  };
+
   /** جاگذاری همه محدوده‌ها در کادر؛ بدون محدوده، نمای پیش‌فرض می‌ماند. */
   window.fitZones = function () {
     if (!window.__map) return;

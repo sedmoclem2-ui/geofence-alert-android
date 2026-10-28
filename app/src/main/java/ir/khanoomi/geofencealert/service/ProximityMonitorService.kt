@@ -194,7 +194,7 @@ class ProximityMonitorService : Service() {
         }
         // چندضلعی‌ها: بدون دروازه و بدون قید شعاع/فاصله، همیشه armed.
         for (zone in zones.filter { it.polygonJson.isNotBlank() }) {
-            val polygon = GeoMath.parsePolygonJson(zone.polygonJson)
+            val polygon = GeoMath.normalizePolygon(GeoMath.parsePolygonJson(zone.polygonJson))
             armed[zone.id] = now
             preciseInside[zone.id] = GeoMath.pointInPolygon(
                 loc.latitude, loc.longitude, polygon
@@ -370,7 +370,7 @@ class ProximityMonitorService : Service() {
         val isInside: Boolean
         val detail: String
         if (isPolygon) {
-            val polygon = GeoMath.parsePolygonJson(zone.polygonJson)
+            val polygon = GeoMath.normalizePolygon(GeoMath.parsePolygonJson(zone.polygonJson))
             isInside = GeoMath.pointInPolygon(loc.latitude, loc.longitude, polygon)
             detail = "polygon vertices=${polygon.size}"
         } else {

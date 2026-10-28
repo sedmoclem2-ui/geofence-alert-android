@@ -92,7 +92,7 @@ fun MapPickerScreen(
         } else {
             val raw = navController.previousBackStackEntry
                 ?.savedStateHandle?.get<String>("polygon_initial") ?: ""
-            GeoMath.parsePolygonJson(raw)
+            GeoMath.normalizePolygon(GeoMath.parsePolygonJson(raw))
         }
     }
     var vertices by remember { mutableStateOf(initialPolygon) }
@@ -113,7 +113,10 @@ fun MapPickerScreen(
             onPolygon = { json ->
                 val points = GeoMath.parsePolygonJson(json)
                 // گزارش خالی یعنی «پاک کردن»؛ همان را هم بپذیر تا شمارنده
-                // رأس‌ها با نقشه همگام بماند.
+                // رأس‌ها با نقشه همگام بماند. عمداً اینجا نرمال نمی‌شود:
+                // فهرست کامپوز باید آینه دقیق ترتیب ضربه‌های جاوااسکریپت
+                // بماند تا دکمه «بازگشت» خوش‌بینانه همان رأس آخر را حذف
+                // کند؛ نرمال‌سازی فقط موقع تأیید انجام می‌شود.
                 vertices = points
             }
         )
@@ -190,7 +193,10 @@ fun MapPickerScreen(
                 ).show()
                 return
             }
-            val json = vertices.joinToString(",", "[", "]") { (vLat, vLng) ->
+            // نرمال‌سازی نهایی همین‌جاست: هر ترتیبی از ضربه‌ها به
+            // چندضلعی‌ای ساده تبدیل می‌شود، بی‌آنکه نقطه‌ای کم یا زیاد شود.
+            val normalized = GeoMath.normalizePolygon(vertices)
+            val json = normalized.joinToString(",", "[", "]") { (vLat, vLng) ->
                 val a = String.format(Locale.US, "%.6f", vLat)
                 val b = String.format(Locale.US, "%.6f", vLng)
                 "{\"lat\":$a,\"lng\":$b}"

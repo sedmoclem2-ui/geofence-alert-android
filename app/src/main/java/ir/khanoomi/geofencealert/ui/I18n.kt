@@ -867,6 +867,7 @@ data class UiStrings(
     val polygonClear: String get() = ext.polygonClear
     val liveMapTitle: String get() = ext.liveMapTitle
     val liveMapEmpty: String get() = ext.liveMapEmpty
+    val nearestZone: String get() = ext.nearestZone
     val shareZone: String get() = ext.shareZone
     val shareFailed: String get() = ext.shareFailed
     val importAdd: String get() = ext.importAdd
@@ -1124,6 +1125,7 @@ data class UiStringsExt(
     val polygonClear: String,
     val liveMapTitle: String,
     val liveMapEmpty: String,
+    val nearestZone: String,
     // اشتراک‌گذاری محدوده، ورود از پیوند و گزارش ماهانه (موج ۳، نسخه ۳.۹.۰)
     val shareZone: String,
     val shareFailed: String,
@@ -1370,6 +1372,7 @@ data class UiStringsExt(
             polygonClear = "پاک کردن",
             liveMapTitle = "نقشه محدوده‌ها",
             liveMapEmpty = "هنوز محدوده‌ای ساخته نشده است.",
+            nearestZone = "نزدیک‌ترین محدوده",
             shareZone = "اشتراک‌گذاری",
             shareFailed = "اشتراک‌گذاری انجام نشد.",
             importAdd = "افزودن به محدوده‌ها",
@@ -1615,6 +1618,7 @@ data class UiStringsExt(
             polygonClear = "Clear",
             liveMapTitle = "Zones map",
             liveMapEmpty = "No zones yet.",
+            nearestZone = "Nearest zone",
             shareZone = "Share",
             shareFailed = "Sharing failed.",
             importAdd = "Add to zones",
@@ -1860,6 +1864,7 @@ data class UiStringsExt(
             polygonClear = "مسح",
             liveMapTitle = "خريطة المناطق",
             liveMapEmpty = "لا توجد مناطق بعد.",
+            nearestZone = "أقرب منطقة",
             shareZone = "مشاركة",
             shareFailed = "فشلت المشاركة.",
             importAdd = "إضافة إلى المناطق",

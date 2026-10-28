@@ -49,7 +49,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Phone
@@ -116,7 +115,6 @@ import ir.khanoomi.geofencealert.domain.RadiusUnit
 import ir.khanoomi.geofencealert.domain.CheckInterval
 import ir.khanoomi.geofencealert.domain.ExitSequenceValidator
 import ir.khanoomi.geofencealert.domain.GeoMath
-import ir.khanoomi.geofencealert.domain.ZoneShareCodec
 import ir.khanoomi.geofencealert.domain.ZoneValidator
 import ir.khanoomi.geofencealert.domain.toMeters
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
@@ -270,9 +268,10 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
      * می‌شود، پس فیلدها فقط نمایشی/قابل‌ویرایش‌اند).
      */
     fun applyPickedPolygon(json: String) {
-        val points = GeoMath.parsePolygonJson(json)
+        val points = GeoMath.normalizePolygon(GeoMath.parsePolygonJson(json))
         if (points.size < 3) return
-        polygonJson = json
+        // ذخیره با ترتیب نرمال‌شده تا شکل ذخیره‌شده همیشه ساده باشد.
+        polygonJson = GeoMath.polygonToJson(points)
         isPolygon = true
         GeoMath.centroid(points)?.let { (cLat, cLng) ->
             latText = coordText(cLat)
@@ -715,53 +714,14 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
         vm.lngText = parts[1]
     }
 
-    /**
-     * ساخت محدوده از فیلدهای فعلی فرم برای اشتراک‌گذاری — همان نگاشت
-     * فیلد→Zone که مسیر ذخیره (doSave) استفاده می‌کند، بدون اعتبارسنجی
-     * و بدون اثر جانبی: در حالت چندضلعی مرکز ثقل رأس‌ها مرکز می‌شود و
-     * شعاعِ خالیِ چندضلعی ۲۰۰ متر خنثی می‌گیرد؛ اگر نام خالی باشد یا
-     * مختصات/شعاع قابل‌پارس نباشند null برمی‌گردد تا دکمه اشتراک‌گذاری
-     * غیرفعال بماند (به‌جای ساخت پیوند خراب).
-     */
-    fun buildShareZone(): Zone? {
-        if (vm.name.isBlank()) return null
-        val lat = ZoneValidator.parseDoubleFa(vm.latText)
-        val lng = ZoneValidator.parseDoubleFa(vm.lngText)
-        val radius = ZoneValidator.parseDoubleFa(vm.radiusText)
-        val centroid = if (vm.isPolygon) {
-            GeoMath.centroid(GeoMath.parsePolygonJson(vm.polygonJson))
-        } else {
-            null
-        }
-        val finalLat = centroid?.first ?: lat ?: return null
-        val finalLng = centroid?.second ?: lng ?: return null
-        val radiusMeters = if (vm.isPolygon) {
-            radius?.let { toMeters(it, vm.unit) } ?: 200.0
-        } else {
-            radius?.let { toMeters(it, vm.unit) } ?: return null
-        }
-        return Zone(
-            id = vm.existing?.id ?: 0,
-            name = vm.name.trim(),
-            latitude = finalLat,
-            longitude = finalLng,
-            radiusMeters = radiusMeters,
-            polygonJson = if (vm.isPolygon) vm.polygonJson else "",
-            isActive = vm.isActive,
-            scheduleEnabled = vm.scheduleEnabled,
-            scheduleDays = vm.scheduleDays.ifBlank { "1,2,3,4,5,6,7" },
-            scheduleStartMin = vm.scheduleStartMin,
-            scheduleEndMin = vm.scheduleEndMin,
-            exitBehavior = vm.exitBehavior,
-            alertMode = vm.alertMode,
-            silentEnabled = vm.silentEnabled,
-            silentStartMin = vm.silentStartMin,
-            silentEndMin = vm.silentEndMin,
-            colorIndex = vm.colorIndex
-        )
-    }
-
     fun doSave() {
+        // نرمال‌سازی ترتیب رأس‌ها پیش از هر اعتبارسنجی و ذخیره: شکل
+        // ذخیره‌شده همیشه ساده است، حتی اگر JSON از مسیری دیگر آمده باشد.
+        if (vm.isPolygon) {
+            vm.polygonJson = GeoMath.polygonToJson(
+                GeoMath.normalizePolygon(GeoMath.parsePolygonJson(vm.polygonJson))
+            )
+        }
         val lat = ZoneValidator.parseDoubleFa(vm.latText)
         val lng = ZoneValidator.parseDoubleFa(vm.lngText)
         val radius = ZoneValidator.parseDoubleFa(vm.radiusText)
@@ -1125,47 +1085,6 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            // اشتراک‌گذاری محدوده (موج ۳): پیوند
-                            // geofencealert://zone?d=… با متن ساده فرستاده
-                            // می‌شود؛ نوار ذخیره چسبان دست‌نخورده می‌ماند.
-                            // دکمه تا وقتی فرم قابل‌اشتراک نیست غیرفعال است.
-                            val shareZoneValue = buildShareZone()
-                            FilledTonalButton(
-                                onClick = {
-                                    val zone = shareZoneValue ?: return@FilledTonalButton
-                                    try {
-                                        val send = Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(
-                                                Intent.EXTRA_TEXT,
-                                                ZoneShareCodec.linkFor(zone)
-                                            )
-                                        }
-                                        context.startActivity(
-                                            Intent.createChooser(send, strings.shareZone)
-                                        )
-                                    } catch (_: Exception) {
-                                        Toast.makeText(
-                                            context,
-                                            strings.shareFailed,
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                enabled = shareZoneValue != null
-                            ) {
-                                Icon(
-                                    Icons.Filled.Share,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(strings.shareZone)
-                            }
                         }
 
                         SectionCard(icon = Icons.Filled.Place, title = strings.coordinates) {
@@ -1355,7 +1274,9 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 // خلاصه چندضلعیِ ذخیره‌شده: تعداد رأس + مرکز ثقل.
-                                val savedPolygon = GeoMath.parsePolygonJson(vm.polygonJson)
+                                val savedPolygon = GeoMath.normalizePolygon(
+                                    GeoMath.parsePolygonJson(vm.polygonJson)
+                                )
                                 val savedCentroid = GeoMath.centroid(savedPolygon)
                                 if (savedPolygon.isNotEmpty() && savedCentroid != null) {
                                     Text(

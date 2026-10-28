@@ -7,6 +7,7 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,11 +15,15 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -26,15 +31,17 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,12 +49,15 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.domain.GeoMath
 import ir.khanoomi.geofencealert.ui.theme.ZoneColors
-import ir.khanoomi.geofencealert.util.LocationUtil
 import ir.khanoomi.geofencealert.util.Permissions
-import kotlinx.coroutines.launch
 import java.util.Locale
 
 /**
@@ -71,19 +81,18 @@ internal class LiveMapBridge(private val onZoneSelected: (Long) -> Unit) {
  * نشان آبی متمایز. ضربه روی یک شکل، کارت اطلاعات همان محدوده را در
  * کامپوز (نه دیالوگ جاوااسکریپت) باز می‌کند. داده محدوده‌ها با همان
  * الگوی انتخاب‌گر نقشه، یعنی JSON از طریق evaluateJavascript پس از
- * بارگذاری صفحه، به صفحه داده می‌شود. موقعیت از همان منبع انتخاب‌گر
- * نقشه می‌آید (FusedLocationProviderClient با دقت بالا، از طریق
- * [LocationUtil])؛ اگر در دسترس نباشد، نقشه با محدوده‌ها می‌ماند و فقط
- * پیام کوتاهی نشان داده می‌شود.
+ * بارگذاری صفحه، به صفحه داده می‌شود. موقعیت به‌صورت زنده ردیابی
+ * می‌شود (FusedLocationProviderClient با دقت بالا، هر ۳ ثانیه یا ۵ متر
+ * جابه‌جایی، فقط تا وقتی این صفحه باز است)؛ اگر در دسترس نباشد، نقشه
+ * با محدوده‌ها می‌ماند و فقط پیام کوتاهی نشان داده می‌شود.
  */
-@SuppressLint("SetJavaScriptEnabled")
+@SuppressLint("SetJavaScriptEnabled", "MissingPermission")
 @Composable
 fun LiveMapScreen(navController: NavController) {
     val context = LocalContext.current
     val strings = LocalStrings.current
     val lang = LocalAppLang.current
     val app = context.applicationContext as GeofenceAlertApp
-    val scope = rememberCoroutineScope()
     // تغییر وضعیت فعال/غیرفعال دقیقاً همان فراخوانی کارت صفحه اصلی است
     // (HomeViewModel.toggleActive)؛ مسیر تازه‌ای ساخته نشده است.
     val homeVm: HomeViewModel = viewModel { HomeViewModel(app) }
@@ -110,7 +119,7 @@ fun LiveMapScreen(navController: NavController) {
             val la = String.format(Locale.US, "%.6f", zone.latitude)
             val ln = String.format(Locale.US, "%.6f", zone.longitude)
             val radius = String.format(Locale.US, "%.1f", zone.radiusMeters)
-            val vertices = GeoMath.parsePolygonJson(zone.polygonJson)
+            val vertices = GeoMath.normalizePolygon(GeoMath.parsePolygonJson(zone.polygonJson))
                 .joinToString(",", "[", "]") { (vLat, vLng) ->
                     val a = String.format(Locale.US, "%.6f", vLat)
                     val b = String.format(Locale.US, "%.6f", vLng)
@@ -132,20 +141,34 @@ fun LiveMapScreen(navController: NavController) {
         }
     }
 
-    // موقعیت فعلی: همان منبع انتخاب‌گر نقشه. نبودن مجوز یا ناموفق
-    // بودن دریافت، نقشه را خالی نمی‌کند؛ فقط پیام کوتاهی می‌آید.
-    LaunchedEffect(Unit) {
+    // ردیابی زنده موقعیت تا وقتی این صفحه روی صفحه است: هر فیکس تازه
+    // (هر ۳ ثانیه یا ۵ متر جابه‌جایی) از طریق همان LaunchedEffect پایین،
+    // نشان آبی را در لحظه جابه‌جا می‌کند؛ با خروج از صفحه، به‌روزرسانی‌ها
+    // قطع می‌شوند و هیچ ردیابی‌ای در پس‌زمینه نمی‌ماند. دوربین خودکار
+    // جابه‌جا نمی‌شود تا کاربر آزادانه بچرخد؛ جابه‌جایی فقط با دکمه‌های
+    // کپسولِ بالا انجام می‌شود. نبودن مجوز، نقشه را خالی نمی‌کند.
+    DisposableEffect(Unit) {
         if (!Permissions.hasAnyLocation(context)) {
             Toast.makeText(context, strings.mapLocationPermNeeded, Toast.LENGTH_SHORT).show()
-            return@LaunchedEffect
-        }
-        scope.launch {
-            val loc = LocationUtil.getCurrentLocation(context)
-            if (loc != null) {
-                myLocation = loc.latitude to loc.longitude
-            } else {
+            onDispose { }
+        } else {
+            val client = LocationServices.getFusedLocationProviderClient(context)
+            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 3000L)
+                .setMinUpdateDistanceMeters(5f)
+                .build()
+            val callback = object : LocationCallback() {
+                override fun onLocationResult(result: LocationResult) {
+                    result.lastLocation?.let { loc ->
+                        myLocation = loc.latitude to loc.longitude
+                    }
+                }
+            }
+            try {
+                client.requestLocationUpdates(request, callback, Looper.getMainLooper())
+            } catch (_: SecurityException) {
                 Toast.makeText(context, strings.mapLocationFailed, Toast.LENGTH_SHORT).show()
             }
+            onDispose { client.removeLocationUpdates(callback) }
         }
     }
     LaunchedEffect(myLocation, pageLoaded) {
@@ -209,6 +232,86 @@ fun LiveMapScreen(navController: NavController) {
                     }
                 }
             )
+
+            // کپسول پرش بالا-چپ (در چیدمان راست‌به‌چپ: TopEnd) — زیر
+            // نوار بالا، بالای کارت پایین؛ ضربه روی محدوده‌ها را نمی‌گیرد
+            // چون کارت انتخاب، پایین نقشه است و کپسول کوچک است.
+            Surface(
+                shape = CircleShape,
+                tonalElevation = 3.dp,
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+            ) {
+                Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
+                    MapJumpButton(
+                        icon = Icons.Filled.LocationOn,
+                        label = strings.currentLocation,
+                        onClick = {
+                            val loc = myLocation
+                            if (loc == null) {
+                                Toast.makeText(
+                                    context,
+                                    strings.mapLocationFailed,
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                val a = String.format(Locale.US, "%.6f", loc.first)
+                                val b = String.format(Locale.US, "%.6f", loc.second)
+                                webViewRef?.evaluateJavascript("window.flyTo($a, $b)", null)
+                            }
+                        }
+                    )
+                    MapJumpButton(
+                        icon = Icons.Filled.Place,
+                        label = strings.nearestZone,
+                        onClick = {
+                            val loc = myLocation
+                            if (loc == null) {
+                                Toast.makeText(
+                                    context,
+                                    strings.mapLocationFailed,
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@MapJumpButton
+                            }
+                            val nearest = zones.minByOrNull { zone ->
+                                val point = if (zone.polygonJson.isNotBlank()) {
+                                    GeoMath.centroid(
+                                        GeoMath.normalizePolygon(
+                                            GeoMath.parsePolygonJson(zone.polygonJson)
+                                        )
+                                    ) ?: (zone.latitude to zone.longitude)
+                                } else {
+                                    zone.latitude to zone.longitude
+                                }
+                                GeoMath.distanceMeters(loc.first, loc.second, point.first, point.second)
+                            }
+                            if (nearest == null) {
+                                Toast.makeText(
+                                    context,
+                                    strings.liveMapEmpty,
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                val point = if (nearest.polygonJson.isNotBlank()) {
+                                    GeoMath.centroid(
+                                        GeoMath.normalizePolygon(
+                                            GeoMath.parsePolygonJson(nearest.polygonJson)
+                                        )
+                                    ) ?: (nearest.latitude to nearest.longitude)
+                                } else {
+                                    nearest.latitude to nearest.longitude
+                                }
+                                val a = String.format(Locale.US, "%.6f", point.first)
+                                val b = String.format(Locale.US, "%.6f", point.second)
+                                webViewRef?.evaluateJavascript("window.flyTo($a, $b)", null)
+                            }
+                        }
+                    )
+                }
+            }
 
             if (zones.isEmpty()) {
                 Surface(
@@ -302,5 +405,34 @@ fun LiveMapScreen(navController: NavController) {
                 }
             }
         }
+    }
+}
+
+/** دکمه کوچک کپسول پرش نقشه: آیکن ۲۰dp کنار برچسب. */
+@Composable
+private fun MapJumpButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .clip(CircleShape)
+            .clickable { onClick() }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }

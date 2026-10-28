@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -60,12 +61,12 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -122,6 +123,7 @@ import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.alert.AlertController
 import ir.khanoomi.geofencealert.data.Zone
 import ir.khanoomi.geofencealert.domain.TimeFormat
+import ir.khanoomi.geofencealert.domain.ZoneShareCodec
 import ir.khanoomi.geofencealert.domain.ZoneSort
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.ui.theme.RedDeep
@@ -687,13 +689,37 @@ fun HomeScreen(navController: NavController) {
                         Modifier.animateItem()
                     }
                     val duplicateSuffix = LocalStrings.current.duplicateSuffix
+                    val shareTitle = LocalStrings.current.shareZone
+                    val shareFailedText = LocalStrings.current.shareFailed
                     ZoneCardEntrance(index = index) {
                         ZoneCard(
                             zone = zone,
                             modifier = cardModifier,
-                            manualSort = isManualSort,
                             onToggleActive = { vm.toggleActive(zone) },
                             onEdit = { navController.navigate("edit?zoneId=${zone.id}") },
+                            onShare = {
+                                try {
+                                    val send = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(
+                                            Intent.EXTRA_TEXT,
+                                            ZoneShareCodec.linkFor(zone)
+                                        )
+                                    }
+                                    context.startActivity(
+                                        Intent.createChooser(
+                                            send,
+                                            shareTitle
+                                        )
+                                    )
+                                } catch (_: Exception) {
+                                    Toast.makeText(
+                                        context,
+                                        shareFailedText,
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            },
                             onDuplicate = {
                                 vm.duplicateZone(
                                     zone,
@@ -1478,9 +1504,9 @@ private fun ZoneCardEntrance(index: Int, content: @Composable () -> Unit) {
 private fun ZoneCard(
     zone: Zone,
     modifier: Modifier = Modifier,
-    manualSort: Boolean = false,
     onToggleActive: () -> Unit,
     onEdit: () -> Unit,
+    onShare: () -> Unit,
     onDuplicate: () -> Unit,
     onDelete: () -> Unit,
     onStopAlert: () -> Unit
@@ -1488,13 +1514,13 @@ private fun ZoneCard(
     val scheme = MaterialTheme.colorScheme
     val strings = LocalStrings.current
     val lang = LocalAppLang.current
-    // لمس کارت = فعال/غیرفعال کردن محدوده (جایگزین کلید قبلی)؛ اما در
-    // حالت مرتب‌سازی دستی ژست درگ مالک کارت است و هنگام پخش هشدار هم
-    // لمس نباید وضعیت را عوض کند.
+    // لمس کارت = باز کردن پنل ویرایش همان محدوده، در همه حالت‌ها
+    // (از جمله مرتب‌سازی دستی و هنگام هشدار)؛ فعال/غیرفعال کردن فقط
+    // با لمس موج انجام می‌شود. در حالت مرتب‌سازی دستی، ژست درگِ لمس
+    // طولانی مالک کارت است و لمس کوتاه به این clickable می‌رسد.
     val haptics = LocalHapticFeedback.current
     val interaction = remember { MutableInteractionSource() }
     val pressScale = rememberPressScale(interaction, pressedScale = 0.98f)
-    val tapEnabled = !manualSort && !zone.isAlerting
     val zoneTint = ZoneColors.colorOrNull(zone.colorIndex)
     // شست‌وشوی رنگی بدنه کارت (طرح نوار باریک نسخه ۳.۵.۰): هویت هر
     // کارت از رنگ خودش می‌آید — فعال با رنگ اختصاصی محدوده (یا رنگ
@@ -1512,19 +1538,13 @@ private fun ZoneCard(
                 scaleX = pressScale
                 scaleY = pressScale
             }
-            .then(
-                if (tapEnabled) {
-                    Modifier.clickable(
-                        interactionSource = interaction,
-                        indication = null
-                    ) {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onToggleActive()
-                    }
-                } else {
-                    Modifier
-                }
-            )
+            .clickable(
+                interactionSource = interaction,
+                indication = null
+            ) {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onEdit()
+            }
             .animateContentSize(),
         shape = MaterialTheme.shapes.large,
         tonalElevation = 2.dp,
@@ -1537,8 +1557,8 @@ private fun ZoneCard(
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // لمس خود موج‌های کارت هم محدوده را فعال/غیرفعال
-                // می‌کند (در حالت مرتب‌سازی دستی هم کار می‌کند، چون
+                // لمس موج‌های کارت تنها راه فعال/غیرفعال کردن محدوده
+                // است (در حالت مرتب‌سازی دستی هم کار می‌کند، چون
                 // لمس کوتاه پیش از شکل گرفتن لمس طولانیِ درگ مصرف
                 // می‌شود)؛ هنگام هشدار لمس موج غیرفعال است. رنگ
                 // اختصاصی محدوده اگر انتخاب شده باشد روی موج‌ها و
@@ -1654,16 +1674,17 @@ private fun ZoneCard(
                     }
                 }
                 Spacer(Modifier.width(4.dp))
-                // کنش‌های شبحی ویرایش/تکثیر/حذف در انتهای همان ردیف: بدون
-                // پس‌زمینه، کپسول یا حاشیه — فقط آیکن؛ حذف مثل قبل
-                // از دیالوگ تأیید می‌گذرد.
+                // کنش‌های شبحی اشتراک‌گذاری/تکثیر/حذف در انتهای همان ردیف:
+                // بدون پس‌زمینه، کپسول یا حاشیه — فقط آیکن؛ ویرایش با
+                // لمس خود کارت انجام می‌شود و دکمه ویرایش حذف شده است؛
+                // حذف مثل قبل از دیالوگ تأیید می‌گذرد.
                 ZoneGhostAction(
-                    icon = Icons.Default.Edit,
-                    contentDescription = strings.editCd,
+                    icon = Icons.Filled.Share,
+                    contentDescription = strings.shareZone,
                     tint = if (zone.isActive) scheme.primary else scheme.onSurfaceVariant,
-                    onClick = onEdit
+                    onClick = onShare
                 )
-                // کنش شبحی سوم: تکثیر (آیکن کپی سفارشی) میان ویرایش و حذف.
+                // کنش شبحی دوم: تکثیر (آیکن کپی سفارشی) میان اشتراک و حذف.
                 // برای برچسب دسترس‌پذیری، رشته جداگانه‌ای اضافه نشده است
                 // (سهمیه رشته این موج همان یک کلید duplicateSuffix است) و
                 // همان پسوند، بدون فاصله ابتدایی، به‌کار می‌رود.
@@ -1699,7 +1720,7 @@ private fun ZoneCard(
 }
 
 /**
- * کنش شبحی کارت محدوده (ویرایش/تکثیر/حذف): آیکن ساده ۲۱dp بدون هیچ
+ * کنش شبحی کارت محدوده (اشتراک‌گذاری/تکثیر/حذف): آیکن ساده ۲۱dp بدون
  * پس‌زمینه، کپسول یا حاشیه‌ای، در ناحیه لمس ۳۶dp با همان فشردن فنری
  * (۰٫۸۸) و بازخورد لمسی داک قبلی — جایگزین مینیمال داک از نسخه ۳.۵.۰.
  */

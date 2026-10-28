@@ -176,6 +176,24 @@
       }));
     }
 
+    /**
+     * ترتیب نمایشی رأس‌ها: زاویه قطبی دور مرکز ثقل (آینه
+     * نرمال‌سازی کامپوز). نشانگرها به‌ترتیب ضربه می‌مانند، ولی خود
+     * چندضلعی همیشه با این ترتیب رسم می‌شود تا ضربه‌های قطری،
+     * ضربدر نسازند و پیش‌نمایش دقیقاً همان شکلی باشد که ذخیره می‌شود.
+     */
+    function sortedForDisplay() {
+      if (vertices.length < 3) return vertices.slice();
+      var cLat = 0, cLng = 0;
+      vertices.forEach(function (p) { cLat += p.lat; cLng += p.lng; });
+      cLat /= vertices.length;
+      cLng /= vertices.length;
+      return vertices.slice().sort(function (a, b) {
+        return Math.atan2(a.lat - cLat, a.lng - cLng) -
+          Math.atan2(b.lat - cLat, b.lng - cLng);
+      });
+    }
+
     function redraw() {
       markers.forEach(function (m) { map.removeLayer(m); });
       markers = [];
@@ -187,7 +205,7 @@
       if (polygonLayer) map.removeLayer(polygonLayer);
       polygonLayer = null;
       if (vertices.length >= 2) {
-        polygonLayer = L.polygon(vertices, {
+        polygonLayer = L.polygon(sortedForDisplay(), {
           color: '#0B2A52', weight: 2, fillColor: '#0B2A52', fillOpacity: 0.15
         }).addTo(map);
       }
