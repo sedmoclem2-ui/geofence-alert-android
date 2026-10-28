@@ -86,9 +86,6 @@ fun AppNav() {
         composable("home") {
             HomeScreen(navController = navController)
         }
-        composable("history") {
-            HistoryScreen(navController = navController)
-        }
         composable("stats") {
             StatsScreen(navController = navController)
         }

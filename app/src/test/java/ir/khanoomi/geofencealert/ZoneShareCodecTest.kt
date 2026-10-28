@@ -167,6 +167,68 @@ class ZoneShareCodecTest {
     }
 
     @Test
+    fun `extractPayload accepts link preceded by Persian words`() {
+        val payload = ZoneShareCodec.encode(fullZone())
+        val link = ZoneShareCodec.linkFor(fullZone())
+        assertEquals(payload, ZoneShareCodec.extractPayload("این هم لینک محدوده: $link"))
+        assertTrue(
+            ZoneShareCodec.decode(
+                ZoneShareCodec.extractPayload("سلام، این لینک محدوده است $link")
+            ).isSuccess
+        )
+    }
+
+    @Test
+    fun `extractPayload strips bidi marks around the link`() {
+        val payload = ZoneShareCodec.encode(fullZone())
+        val link = ZoneShareCodec.linkFor(fullZone())
+        // نشانه‌های جهت‌نما و صفرعرض که پیام‌رسان‌ها دور پیست می‌گذارند.
+        val dirty = "\u200F\u202B$link\u202C\u200E"
+        assertEquals(payload, ZoneShareCodec.extractPayload(dirty))
+        assertTrue(ZoneShareCodec.decode(ZoneShareCodec.extractPayload(dirty)).isSuccess)
+    }
+
+    @Test
+    fun `extractPayload rejoins payload split by newline mid payload`() {
+        val payload = ZoneShareCodec.encode(fullZone())
+        val link = ZoneShareCodec.linkFor(fullZone())
+        val mid = payload.length / 2
+        val wrapped = link.replaceRange(
+            "intent://zone?d=".length + mid,
+            "intent://zone?d=".length + mid,
+            "\n"
+        )
+        assertEquals(payload, ZoneShareCodec.extractPayload(wrapped))
+        val spaced = link.replaceRange(
+            "intent://zone?d=".length + mid,
+            "intent://zone?d=".length + mid,
+            " "
+        )
+        assertEquals(payload, ZoneShareCodec.extractPayload(spaced))
+        assertTrue(ZoneShareCodec.decode(ZoneShareCodec.extractPayload(wrapped)).isSuccess)
+    }
+
+    @Test
+    fun `extractPayload accepts trailing words after end marker`() {
+        val payload = ZoneShareCodec.encode(fullZone())
+        val link = ZoneShareCodec.linkFor(fullZone())
+        assertEquals(payload, ZoneShareCodec.extractPayload("$link موفق باشی"))
+        assertTrue(
+            ZoneShareCodec.decode(
+                ZoneShareCodec.extractPayload("$link مرسی")
+            ).isSuccess
+        )
+    }
+
+    @Test
+    fun `extractPayload still rejects bare scheme and empty input`() {
+        val payload = ZoneShareCodec.encode(fullZone())
+        assertEquals("", ZoneShareCodec.extractPayload("geofencealert://zone?d=$payload"))
+        assertEquals("", ZoneShareCodec.extractPayload(""))
+        assertEquals("", ZoneShareCodec.extractPayload("   "))
+    }
+
+    @Test
     fun `extractPayload rejects bare scheme links and raw payloads`() {
         val payload = ZoneShareCodec.encode(fullZone())
         // پیوند قدیمی bare-scheme دیگر پذیرفته نمی‌شود.

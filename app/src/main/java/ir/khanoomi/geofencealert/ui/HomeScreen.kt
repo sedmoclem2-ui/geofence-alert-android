@@ -65,7 +65,6 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
@@ -494,9 +493,6 @@ fun HomeScreen(navController: NavController) {
                     IconButton(onClick = { navController.navigate("stats") }) {
                         Icon(Icons.Filled.DateRange, contentDescription = LocalStrings.current.statistics)
                     }
-                    IconButton(onClick = { navController.navigate("history") }) {
-                        Icon(Icons.Filled.List, contentDescription = LocalStrings.current.history)
-                    }
                     // مرتب‌سازی: پنل آن به‌صورت روکش روی محتوای صفحه
                     // باز می‌شود. آیکنش دو پیکان روی هم (بالا/پایین) است
                     // تا با آیکن فهرست تاریخچه اشتباه نشود.
@@ -519,15 +515,14 @@ fun HomeScreen(navController: NavController) {
                             }
                         }
                     }
+                    // نقشه زنده محدوده‌ها.
+                    IconButton(onClick = { navController.navigate("map") }) {
+                        Icon(Icons.Filled.Place, contentDescription = LocalStrings.current.liveMapTitle)
+                    }
                     // تنظیمات آخرین دکمه در کد است تا در نوار راست‌به‌چپ
                     // اولین (چپ‌ترین) دکمه دیده شود.
                     IconButton(onClick = { navController.navigate("settings") }) {
                         Icon(Icons.Default.Settings, contentDescription = LocalStrings.current.settingsCd)
-                    }
-                    // نقشه زنده محدوده‌ها: تنها افزوده این موج، انتهای
-                    // فهرست کنش‌ها تا ترتیب و معنای بقیه دست نخورده بماند.
-                    IconButton(onClick = { navController.navigate("map") }) {
-                        Icon(Icons.Filled.Place, contentDescription = LocalStrings.current.liveMapTitle)
                     }
                 }
             )

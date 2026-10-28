@@ -75,20 +75,33 @@ object ZoneShareCodec {
         "intent://$HOST?$PARAM=${encode(zone)}#Intent;scheme=$SCHEME;package=$PACKAGE;end"
 
     /**
-     * استخراج payload فقط از پیوندهای قالب تازه (intent://): مقدار `d=`
-     * تا اولین `#` یا `&` یا فاصله. هر ورودی دیگری — از جمله پیوندهای
-     * قدیمیِ bare-scheme (`geofencealert://zone?d=…`) و payload خام —
-     * نامعتبر است و رشته خالی برمی‌گردد ([decode] آن را رد می‌کند).
-     * الفبای payload (Base64 امن برای URL بدون padding) نه `=` دارد نه
-     * `#` و نه `&`، پس برش‌ها امن‌اند.
+     * استخراج payload فقط از پیوندهای قالب تازه (intent://)، با تحمل
+     * خرابی‌های پیست از پیام‌رسان‌ها: اول همه کاراکترهای کنترلی و
+     * قالب‌بندی یونیکد (نشانه‌های جهت‌نما، صفرعرض و مانندشان) و همه
+     * فاصله‌ها حذف می‌شوند — پس پیستی که چت وسط Base64 خط‌شکسته باشد
+     * دوباره به هم می‌چسبد — بعد `intent://` در هر جای متن پیدا می‌شود
+     * (جستجو بدون حساسیت به بزرگی حروف، ولی برش از همان متن با حفظ
+     * بزرگی حروف انجام می‌شود چون بزرگی حروف Base64 معنا دارد) و مقدار
+     * `d=` تا اولین `#` برداشته می‌شود. هر ورودی دیگری — از جمله
+     * پیوندهای قدیمیِ bare-scheme (`geofencealert://zone?d=…`) و payload
+     * خام — نامعتبر است و رشته خالی برمی‌گردد ([decode] آن را رد
+     * می‌کند). الفبای payload (Base64 امن برای URL بدون padding) نه
+     * `=` دارد نه `#`، پس برش امن است.
      */
     fun extractPayload(input: String): String {
-        val trimmed = input.trim()
-        if (!trimmed.startsWith("intent://")) return ""
-        val dIndex = trimmed.indexOf("$PARAM=")
+        val cleaned = input.filter { c ->
+            val type = Character.getType(c)
+            type != Character.CONTROL.toInt() &&
+                type != Character.FORMAT.toInt() &&
+                !c.isWhitespace()
+        }
+        val markerIndex = cleaned.indexOf("intent://", ignoreCase = true)
+        if (markerIndex < 0) return ""
+        val fromMarker = cleaned.substring(markerIndex)
+        val dIndex = fromMarker.indexOf("$PARAM=")
         if (dIndex < 0) return ""
-        val after = trimmed.substring(dIndex + PARAM.length + 1)
-        val end = after.indexOfFirst { it == '#' || it == '&' || it.isWhitespace() }
+        val after = fromMarker.substring(dIndex + PARAM.length + 1)
+        val end = after.indexOf('#')
         return if (end < 0) after else after.substring(0, end)
     }
 

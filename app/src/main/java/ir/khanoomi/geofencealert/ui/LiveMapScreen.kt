@@ -54,6 +54,7 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.domain.GeoMath
 import ir.khanoomi.geofencealert.ui.theme.ZoneColors
@@ -82,9 +83,11 @@ internal class LiveMapBridge(private val onZoneSelected: (Long) -> Unit) {
  * کامپوز (نه دیالوگ جاوااسکریپت) باز می‌کند. داده محدوده‌ها با همان
  * الگوی انتخاب‌گر نقشه، یعنی JSON از طریق evaluateJavascript پس از
  * بارگذاری صفحه، به صفحه داده می‌شود. موقعیت به‌صورت زنده ردیابی
- * می‌شود (FusedLocationProviderClient با دقت بالا، هر ۳ ثانیه یا ۵ متر
- * جابه‌جایی، فقط تا وقتی این صفحه باز است)؛ اگر در دسترس نباشد، نقشه
- * با محدوده‌ها می‌ماند و فقط پیام کوتاهی نشان داده می‌شود.
+ * می‌شود (FusedLocationProviderClient با دقت بالا، با سریع‌ترین نرخ
+ * ممکن و بدون آستانه جابه‌جایی، فقط تا وقتی این صفحه باز است)؛ اگر
+ * در دسترس نباشد، نقشه با محدوده‌ها می‌ماند و فقط پیام کوتاهی نشان
+ * داده می‌شود. دکمه «موقعیت فعلی» در نوار بالا همیشه یک فیکس تازه
+ * با دقت بالا می‌گیرد، نه آخرین مقدار دوره‌ای.
  */
 @SuppressLint("SetJavaScriptEnabled", "MissingPermission")
 @Composable
@@ -141,20 +144,22 @@ fun LiveMapScreen(navController: NavController) {
         }
     }
 
-    // ردیابی زنده موقعیت تا وقتی این صفحه روی صفحه است: هر فیکس تازه
-    // (هر ۳ ثانیه یا ۵ متر جابه‌جایی) از طریق همان LaunchedEffect پایین،
-    // نشان آبی را در لحظه جابه‌جا می‌کند؛ با خروج از صفحه، به‌روزرسانی‌ها
-    // قطع می‌شوند و هیچ ردیابی‌ای در پس‌زمینه نمی‌ماند. دوربین خودکار
-    // جابه‌جا نمی‌شود تا کاربر آزادانه بچرخد؛ جابه‌جایی فقط با دکمه‌های
-    // کپسولِ بالا انجام می‌شود. نبودن مجوز، نقشه را خالی نمی‌کند.
+    // ردیابی زنده موقعیت تا وقتی این صفحه روی صفحه است: با سریع‌ترین
+    // نرخ ممکن و بدون آستانه جابه‌جایی — هر فیکس تازه از طریق همان
+    // LaunchedEffect پایین، نشان آبی را در لحظه جابه‌جا می‌کند؛ با خروج
+    // از صفحه، به‌روزرسانی‌ها قطع می‌شوند و هیچ ردیابی‌ای در پس‌زمینه
+    // نمی‌ماند. دوربین خودکار جابه‌جا نمی‌شود تا کاربر آزادانه بچرخد؛
+    // جابه‌جایی فقط با دکمه‌های نوار بالا انجام می‌شود. نبودن مجوز،
+    // نقشه را خالی نمی‌کند.
     DisposableEffect(Unit) {
         if (!Permissions.hasAnyLocation(context)) {
             Toast.makeText(context, strings.mapLocationPermNeeded, Toast.LENGTH_SHORT).show()
             onDispose { }
         } else {
             val client = LocationServices.getFusedLocationProviderClient(context)
-            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 3000L)
-                .setMinUpdateDistanceMeters(5f)
+            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 0L)
+                .setMinUpdateIntervalMillis(0L)
+                .setMinUpdateDistanceMeters(0f)
                 .build()
             val callback = object : LocationCallback() {
                 override fun onLocationResult(result: LocationResult) {
@@ -179,6 +184,76 @@ fun LiveMapScreen(navController: NavController) {
         webViewRef?.evaluateJavascript("window.setMyLocation($a, $b)", null)
     }
 
+    /** پرواز به نقطه داده‌شده (اعداد با قالب ثابت، مستقل از زبان). */
+    fun flyTo(lat: Double, lng: Double) {
+        val a = String.format(Locale.US, "%.6f", lat)
+        val b = String.format(Locale.US, "%.6f", lng)
+        webViewRef?.evaluateJavascript("window.flyTo($a, $b)", null)
+    }
+
+    /**
+     * «موقعیت فعلی»: همیشه یک فیکس تازه با دقت بالا می‌گیرد و بی‌درنگ
+     * به آن پرواز می‌کند (نه آخرین مقدار دوره‌ای). نشان آبی هم با همان
+     * فیکس تازه به‌روز می‌شود تا «نزدیک‌ترین محدوده» هم تازه بماند.
+     */
+    fun flyToMyLocationFresh() {
+        if (!Permissions.hasAnyLocation(context)) {
+            Toast.makeText(context, strings.mapLocationPermNeeded, Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            LocationServices.getFusedLocationProviderClient(context)
+                .getCurrentLocation(
+                    Priority.PRIORITY_HIGH_ACCURACY,
+                    CancellationTokenSource().token
+                )
+                .addOnSuccessListener { loc ->
+                    if (loc == null) {
+                        Toast.makeText(context, strings.mapLocationFailed, Toast.LENGTH_SHORT).show()
+                    } else {
+                        myLocation = loc.latitude to loc.longitude
+                        flyTo(loc.latitude, loc.longitude)
+                    }
+                }
+                .addOnFailureListener {
+                    Toast.makeText(context, strings.mapLocationFailed, Toast.LENGTH_SHORT).show()
+                }
+        } catch (_: SecurityException) {
+            Toast.makeText(context, strings.mapLocationFailed, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** «نزدیک‌ترین محدوده»: با آخرین موقعیت زنده، به مرکز/مرکزوار نزدیک‌ترین محدوده پرواز می‌کند. */
+    fun flyToNearestZone() {
+        val loc = myLocation
+        if (loc == null) {
+            Toast.makeText(context, strings.mapLocationFailed, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val nearest = zones.minByOrNull { zone ->
+            val point = if (zone.polygonJson.isNotBlank()) {
+                GeoMath.centroid(
+                    GeoMath.normalizePolygon(GeoMath.parsePolygonJson(zone.polygonJson))
+                ) ?: (zone.latitude to zone.longitude)
+            } else {
+                zone.latitude to zone.longitude
+            }
+            GeoMath.distanceMeters(loc.first, loc.second, point.first, point.second)
+        }
+        if (nearest == null) {
+            Toast.makeText(context, strings.liveMapEmpty, Toast.LENGTH_SHORT).show()
+        } else {
+            val point = if (nearest.polygonJson.isNotBlank()) {
+                GeoMath.centroid(
+                    GeoMath.normalizePolygon(GeoMath.parsePolygonJson(nearest.polygonJson))
+                ) ?: (nearest.latitude to nearest.longitude)
+            } else {
+                nearest.latitude to nearest.longitude
+            }
+            flyTo(point.first, point.second)
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         // ── نوار بالا (بیرون از نقشه) ──
         Surface(
@@ -200,6 +275,19 @@ fun LiveMapScreen(navController: NavController) {
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f)
+                )
+                // پرش‌ها در نوار بالا (نه کپسول شناور روی نقشه):
+                // «موقعیت فعلی» فیکس تازه می‌گیرد، «نزدیک‌ترین محدوده»
+                // با آخرین موقعیت زنده کار می‌کند.
+                MapJumpButton(
+                    icon = Icons.Filled.LocationOn,
+                    label = strings.currentLocation,
+                    onClick = { flyToMyLocationFresh() }
+                )
+                MapJumpButton(
+                    icon = Icons.Filled.Place,
+                    label = strings.nearestZone,
+                    onClick = { flyToNearestZone() }
                 )
             }
         }
@@ -232,86 +320,6 @@ fun LiveMapScreen(navController: NavController) {
                     }
                 }
             )
-
-            // کپسول پرش بالا-چپ (در چیدمان راست‌به‌چپ: TopEnd) — زیر
-            // نوار بالا، بالای کارت پایین؛ ضربه روی محدوده‌ها را نمی‌گیرد
-            // چون کارت انتخاب، پایین نقشه است و کپسول کوچک است.
-            Surface(
-                shape = CircleShape,
-                tonalElevation = 3.dp,
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp)
-            ) {
-                Row(modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)) {
-                    MapJumpButton(
-                        icon = Icons.Filled.LocationOn,
-                        label = strings.currentLocation,
-                        onClick = {
-                            val loc = myLocation
-                            if (loc == null) {
-                                Toast.makeText(
-                                    context,
-                                    strings.mapLocationFailed,
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            } else {
-                                val a = String.format(Locale.US, "%.6f", loc.first)
-                                val b = String.format(Locale.US, "%.6f", loc.second)
-                                webViewRef?.evaluateJavascript("window.flyTo($a, $b)", null)
-                            }
-                        }
-                    )
-                    MapJumpButton(
-                        icon = Icons.Filled.Place,
-                        label = strings.nearestZone,
-                        onClick = {
-                            val loc = myLocation
-                            if (loc == null) {
-                                Toast.makeText(
-                                    context,
-                                    strings.mapLocationFailed,
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                                return@MapJumpButton
-                            }
-                            val nearest = zones.minByOrNull { zone ->
-                                val point = if (zone.polygonJson.isNotBlank()) {
-                                    GeoMath.centroid(
-                                        GeoMath.normalizePolygon(
-                                            GeoMath.parsePolygonJson(zone.polygonJson)
-                                        )
-                                    ) ?: (zone.latitude to zone.longitude)
-                                } else {
-                                    zone.latitude to zone.longitude
-                                }
-                                GeoMath.distanceMeters(loc.first, loc.second, point.first, point.second)
-                            }
-                            if (nearest == null) {
-                                Toast.makeText(
-                                    context,
-                                    strings.liveMapEmpty,
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            } else {
-                                val point = if (nearest.polygonJson.isNotBlank()) {
-                                    GeoMath.centroid(
-                                        GeoMath.normalizePolygon(
-                                            GeoMath.parsePolygonJson(nearest.polygonJson)
-                                        )
-                                    ) ?: (nearest.latitude to nearest.longitude)
-                                } else {
-                                    nearest.latitude to nearest.longitude
-                                }
-                                val a = String.format(Locale.US, "%.6f", point.first)
-                                val b = String.format(Locale.US, "%.6f", point.second)
-                                webViewRef?.evaluateJavascript("window.flyTo($a, $b)", null)
-                            }
-                        }
-                    )
-                }
-            }
 
             if (zones.isEmpty()) {
                 Surface(
@@ -408,7 +416,7 @@ fun LiveMapScreen(navController: NavController) {
     }
 }
 
-/** دکمه کوچک کپسول پرش نقشه: آیکن ۲۰dp کنار برچسب. */
+/** دکمه کوچک پرش نقشه در نوار بالا: آیکن ۲۰dp کنار برچسب. */
 @Composable
 private fun MapJumpButton(
     icon: ImageVector,
