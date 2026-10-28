@@ -872,6 +872,9 @@ data class UiStrings(
     val shareFailed: String get() = ext.shareFailed
     val importAdd: String get() = ext.importAdd
     val importInvalid: String get() = ext.importInvalid
+    val importFromLink: String get() = ext.importFromLink
+    val importLinkHint: String get() = ext.importLinkHint
+    val checkLink: String get() = ext.checkLink
     val importFailed: String get() = ext.importFailed
     val monthlyReport: String get() = ext.monthlyReport
     val reportDone: String get() = ext.reportDone
@@ -1131,6 +1134,9 @@ data class UiStringsExt(
     val shareFailed: String,
     val importAdd: String,
     val importInvalid: String,
+    val importFromLink: String,
+    val importLinkHint: String,
+    val checkLink: String,
     val importFailed: String,
     val monthlyReport: String,
     val reportDone: String,
@@ -1377,6 +1383,9 @@ data class UiStringsExt(
             shareFailed = "اشتراک‌گذاری انجام نشد.",
             importAdd = "افزودن به محدوده‌ها",
             importInvalid = "پیوند محدوده معتبر نیست.",
+            importFromLink = "وارد کردن از لینک",
+            importLinkHint = "لینک کامل محدوده را اینجا پیست کنید.",
+            checkLink = "بررسی لینک",
             importFailed = "افزودن محدوده انجام نشد.",
             monthlyReport = "گزارش ماهانه",
             reportDone = "گزارش ماهانه ساخته شد.",
@@ -1623,6 +1632,9 @@ data class UiStringsExt(
             shareFailed = "Sharing failed.",
             importAdd = "Add to zones",
             importInvalid = "This zone link is invalid.",
+            importFromLink = "Import from link",
+            importLinkHint = "Paste the full zone link here.",
+            checkLink = "Check link",
             importFailed = "Adding the zone failed.",
             monthlyReport = "Monthly report",
             reportDone = "Monthly report created.",
@@ -1869,6 +1881,9 @@ data class UiStringsExt(
             shareFailed = "فشلت المشاركة.",
             importAdd = "إضافة إلى المناطق",
             importInvalid = "رابط المنطقة غير صالح.",
+            importFromLink = "استيراد من رابط",
+            importLinkHint = "الصق رابط المنطقة الكامل هنا.",
+            checkLink = "فحص الرابط",
             importFailed = "فشلت إضافة المنطقة.",
             monthlyReport = "التقرير الشهري",
             reportDone = "تم إنشاء التقرير الشهري.",

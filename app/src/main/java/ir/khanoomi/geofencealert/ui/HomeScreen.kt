@@ -2,6 +2,7 @@ package ir.khanoomi.geofencealert.ui
 
 import android.app.Activity
 import android.app.Application
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.location.LocationManager
@@ -54,6 +55,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -75,6 +77,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -366,6 +370,7 @@ fun HomeScreen(navController: NavController) {
     var permSms by remember { mutableStateOf(false) }
     var permContacts by remember { mutableStateOf(false) }
     var zoneToDelete by remember { mutableStateOf<Zone?>(null) }
+    var showImportLinkDialog by remember { mutableStateOf(false) }
     // آیا بهینه‌سازی باتری برای این برنامه فعال است؟ (پایش را در پس‌زمینه خفه می‌کند)
     var batteryRestricted by remember { mutableStateOf(false) }
     // پنل کشویی مرتب‌سازی (زیر دکمه مرتب‌سازی، بالای کارت پایش)
@@ -584,6 +589,20 @@ fun HomeScreen(navController: NavController) {
                     },
                     onOpenSettings = { navController.navigate("settings") }
                 )
+            }
+
+            // وارد کردن محدوده از لینک (۳٫۹٫۲): دکمه تمام‌عرض زیر کارت
+            // پایش — برای وقتی که لمس لینک در پیام‌رسانِ گیرنده کار نمی‌کند
+            // و کاربر فقط متن لینک را دارد.
+            item {
+                FilledTonalButton(
+                    onClick = { showImportLinkDialog = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Filled.Share, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(LocalStrings.current.importFromLink)
+                }
             }
 
             // هشدار بهینه‌سازی باتری: وقتی پایش روشن است اما سیستم برنامه را
@@ -808,6 +827,79 @@ fun HomeScreen(navController: NavController) {
             },
             dismissButton = {
                 TextButton(onClick = { zoneToDelete = null }) {
+                    Text(LocalStrings.current.cancel)
+                }
+            }
+        )
+    }
+
+    // دیالوگ «وارد کردن از لینک» (۳٫۹٫۲): متن لینک را می‌گیرد، فقط قالب
+    // تازه intent:// را می‌پذیرد (پیوندهای قدیمی bare-scheme رد می‌شوند)
+    // و با همان مسیر پیش‌نمایش وارداتِ پیوند عمیق ادامه می‌دهد.
+    if (showImportLinkDialog) {
+        var linkText by remember { mutableStateOf("") }
+        var linkError by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { showImportLinkDialog = false },
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = { Text(LocalStrings.current.importFromLink, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = linkText,
+                        onValueChange = { linkText = it; linkError = false },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        trailingIcon = {
+                            IconButton(onClick = {
+                                val clipboard = context.getSystemService(
+                                    Context.CLIPBOARD_SERVICE
+                                ) as? ClipboardManager
+                                val clip = clipboard?.primaryClip
+                                val pasted = if (clip != null && clip.itemCount > 0) {
+                                    clip.getItemAt(0)?.text?.toString()
+                                } else {
+                                    null
+                                }
+                                if (!pasted.isNullOrBlank()) {
+                                    linkText = pasted
+                                    linkError = false
+                                }
+                            }) {
+                                Icon(AppIcons.Paste, contentDescription = null)
+                            }
+                        }
+                    )
+                    Text(
+                        LocalStrings.current.importLinkHint,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (linkError) {
+                        Text(
+                            LocalStrings.current.importInvalid,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val payload = ZoneShareCodec.extractPayload(linkText)
+                    if (ZoneShareCodec.decode(payload).isSuccess) {
+                        showImportLinkDialog = false
+                        navController.navigate("import/${Uri.encode(payload)}")
+                    } else {
+                        linkError = true
+                    }
+                }) {
+                    Text(LocalStrings.current.checkLink, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportLinkDialog = false }) {
                     Text(LocalStrings.current.cancel)
                 }
             }

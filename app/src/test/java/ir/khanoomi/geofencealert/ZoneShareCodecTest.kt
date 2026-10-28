@@ -52,12 +52,56 @@ class ZoneShareCodecTest {
     }
 
     @Test
-    fun `link format uses geofencealert scheme and d param`() {
+    fun `link format is an intent URL targeting the geofencealert scheme`() {
         val link = ZoneShareCodec.linkFor(fullZone())
-        assertTrue(link.startsWith("geofencealert://zone?d="))
-        val payload = link.substringAfter("d=")
+        assertTrue(link.startsWith("intent://zone?d="))
+        assertTrue(
+            link.endsWith(
+                "#Intent;scheme=geofencealert;package=ir.khanoomi.geofencealert;end"
+            )
+        )
+        val payload = ZoneShareCodec.extractPayload(link)
         assertTrue(payload.matches(Regex("[A-Za-z0-9_-]+")))
         assertTrue(ZoneShareCodec.decode(payload).isSuccess)
+    }
+
+    @Test
+    fun `extractPayload accepts intent links including trailing text`() {
+        val payload = ZoneShareCodec.encode(fullZone())
+        val link = ZoneShareCodec.linkFor(fullZone())
+        assertEquals(payload, ZoneShareCodec.extractPayload(link))
+        assertEquals(payload, ZoneShareCodec.extractPayload("  $link  "))
+        assertEquals(payload, ZoneShareCodec.extractPayload("$link some trailing words"))
+        assertTrue(ZoneShareCodec.decode(ZoneShareCodec.extractPayload(link)).isSuccess)
+    }
+
+    @Test
+    fun `extractPayload rejects bare scheme links and raw payloads`() {
+        val payload = ZoneShareCodec.encode(fullZone())
+        // پیوند قدیمی bare-scheme دیگر پذیرفته نمی‌شود.
+        assertEquals("", ZoneShareCodec.extractPayload("geofencealert://zone?d=$payload"))
+        assertFalse(
+            ZoneShareCodec.decode(
+                ZoneShareCodec.extractPayload("geofencealert://zone?d=$payload")
+            ).isSuccess
+        )
+        // payload خام هم قالب پیوند نیست.
+        assertEquals("", ZoneShareCodec.extractPayload(payload))
+        assertFalse(ZoneShareCodec.decode(ZoneShareCodec.extractPayload(payload)).isSuccess)
+    }
+
+    @Test
+    fun `extractPayload rejects malformed input`() {
+        assertEquals("", ZoneShareCodec.extractPayload("not a link at all"))
+        assertFalse(
+            ZoneShareCodec.decode(ZoneShareCodec.extractPayload("not a link at all")).isSuccess
+        )
+        assertEquals("", ZoneShareCodec.extractPayload("intent://zone?d="))
+        assertFalse(
+            ZoneShareCodec.decode(ZoneShareCodec.extractPayload("intent://zone?d=")).isSuccess
+        )
+        assertEquals("", ZoneShareCodec.extractPayload(""))
+        assertFalse(ZoneShareCodec.decode(ZoneShareCodec.extractPayload("")).isSuccess)
     }
 
     @Test

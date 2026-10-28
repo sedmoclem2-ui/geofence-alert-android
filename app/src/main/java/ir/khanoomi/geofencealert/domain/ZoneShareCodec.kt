@@ -32,8 +32,8 @@ data class ZoneDraft(
 /**
  * کدک پیوند اشتراک‌گذاری محدوده (موج ۳).
  *
- * قالب پیوند: `geofencealert://zone?d=<payload>` که payload همان خروجی
- * [encode] است: JSON فشرده از فقط ۱۵ فیلد قابل‌اشتراک، کدشده با
+ * قالب پیوند (از ۳٫۹٫۲): `intent://zone?d=<payload>#Intent;scheme=geofencealert;package=ir.khanoomi.geofencealert;end`
+ * که payload همان خروجی [encode] است: JSON فشرده از فقط ۱۵ فیلد قابل‌اشتراک، کدشده با
  * Base64 نسخه URL-safe بدون padding (java.util، نه android.util، تا
  * همین کد مستقیم در تست‌های JVM هم اجرا شود؛ minSdk برابر ۲۶ است، پس
  * روی دستگاه هم java.util.Base64 در دسترس است).
@@ -52,10 +52,36 @@ object ZoneShareCodec {
     const val SCHEME = "geofencealert"
     const val HOST = "zone"
     const val PARAM = "d"
+    const val PACKAGE = "ir.khanoomi.geofencealert"
     const val MAX_RADIUS_METERS = 1_000_000.0
 
-    /** ساخت پیوند کامل از یک محدوده. */
-    fun linkFor(zone: Zone): String = "$SCHEME://$HOST?$PARAM=${encode(zone)}"
+    /**
+     * ساخت پیوند کامل از یک محدوده — فقط در قالب intent:// تا مرورگرها
+     * آن را به‌عنوان intent بفهمند و به intent-filter همان scheme بسپارند
+     * (manifest تغییری نمی‌خواهد؛ scheme و package داخل intent همان
+     * فیلتر موجود را هدف می‌گیرند). هیچ پیوند bare-scheme دیگری هرگز
+     * فرستاده نمی‌شود و در دیالوگ واردات هم پذیرفته نمی‌شود.
+     */
+    fun linkFor(zone: Zone): String =
+        "intent://$HOST?$PARAM=${encode(zone)}#Intent;scheme=$SCHEME;package=$PACKAGE;end"
+
+    /**
+     * استخراج payload فقط از پیوندهای قالب تازه (intent://): مقدار `d=`
+     * تا اولین `#` یا `&` یا فاصله. هر ورودی دیگری — از جمله پیوندهای
+     * قدیمیِ bare-scheme (`geofencealert://zone?d=…`) و payload خام —
+     * نامعتبر است و رشته خالی برمی‌گردد ([decode] آن را رد می‌کند).
+     * الفبای payload (Base64 امن برای URL بدون padding) نه `=` دارد نه
+     * `#` و نه `&`، پس برش‌ها امن‌اند.
+     */
+    fun extractPayload(input: String): String {
+        val trimmed = input.trim()
+        if (!trimmed.startsWith("intent://")) return ""
+        val dIndex = trimmed.indexOf("$PARAM=")
+        if (dIndex < 0) return ""
+        val after = trimmed.substring(dIndex + PARAM.length + 1)
+        val end = after.indexOfFirst { it == '#' || it == '&' || it.isWhitespace() }
+        return if (end < 0) after else after.substring(0, end)
+    }
 
     /** کدگذاری یک محدوده به payload قابل‌جایگذاری در پیوند. */
     fun encode(zone: Zone): String {
