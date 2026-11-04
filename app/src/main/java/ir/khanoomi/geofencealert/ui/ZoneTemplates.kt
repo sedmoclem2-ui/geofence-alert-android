@@ -32,6 +32,10 @@ import ir.khanoomi.geofencealert.domain.RadiusUnit
  * هر قالب همه فیلدهای شعاع، بازه بی‌صدا و زمان‌بندی را صراحتاً تعیین می‌کند
  * (قالب بدون زمان‌بندی/بی‌صدا، آن‌ها را خاموش و به پیش‌فرض برمی‌گرداند)، تا
  * انتخاب یک قالب پس از قالب دیگر، مقادیر کهنه قالب قبلی را باقی نگذارد.
+ * از ۳٫۹٫۵ زمان‌بندی در همه قالب‌ها پیش‌فرض خاموش است (تا زمان‌بندی
+ * ناخواسته‌ای هشدار ورود را بیرون از ساعاتش مسدود نکند)؛ روزهای و
+ * ساعت‌های پیش‌فرض قالب‌های محل کار و مدرسه حفظ شده‌اند تا کاربر با
+ * روشن کردن دستی زمان‌بندی، همان مقادیر معقول را داشته باشد.
  */
 data class ZoneTemplate(
     val name: String,
@@ -86,7 +90,7 @@ fun zoneTemplates(strings: UiStrings): List<ZoneTemplate> = listOf(
         silentEnabled = false,
         silentStartMin = 1320,
         silentEndMin = 360,
-        scheduleEnabled = true,
+        scheduleEnabled = false,
         scheduleDays = "1,2,3,4,5",
         scheduleStartMin = 8 * 60,
         scheduleEndMin = 17 * 60
@@ -110,7 +114,7 @@ fun zoneTemplates(strings: UiStrings): List<ZoneTemplate> = listOf(
         silentEnabled = false,
         silentStartMin = 1320,
         silentEndMin = 360,
-        scheduleEnabled = true,
+        scheduleEnabled = false,
         scheduleDays = "1,2,3,4,5",
         scheduleStartMin = 7 * 60 + 30,
         scheduleEndMin = 14 * 60

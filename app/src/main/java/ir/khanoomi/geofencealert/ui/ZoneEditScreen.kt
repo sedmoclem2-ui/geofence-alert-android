@@ -61,7 +61,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.ExitToApp
-import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
@@ -950,7 +949,7 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                 .padding(padding)
         ) {
             // تب‌های موضوعی فرم: «کجاست؟» (مشخصات، مختصات، شعاع، دقت پایش و وضعیت)،
-            // «هشدار» (رفتار خروج، صدا، نوع هشدار، اعلام صوتی و پیامک) و
+            // «هشدار» (رفتار خروج، صدا، نوع هشدار و پیامک) و
             // «زمان‌بندی» (زمان‌بندی، سکوت، نزدیک‌شدن و ماندن). همه وضعیت فرم در
             // ویومدل نگه داشته می‌شود، پس جابه‌جایی بین تب‌ها چیزی را از دست نمی‌دهد.
             val errorTabs = errors.map { it.first }.toSet()
@@ -1761,32 +1760,6 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
                                     title = strings.alertNoneTitle,
                                     subtitle = strings.alertNoneSub,
                                     onClick = { vm.alertMode = Zone.ALERT_NONE }
-                                )
-                            }
-                        }
-
-                        SectionCard(icon = Icons.Filled.Face, title = strings.voiceAnnounce) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        strings.voiceAnnounceTitle,
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        strings.voiceAnnounceSub,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Switch(
-                                    checked = vm.voiceAnnounce,
-                                    onCheckedChange = { vm.voiceAnnounce = it }
                                 )
                             }
                         }
