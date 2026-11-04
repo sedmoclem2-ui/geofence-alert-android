@@ -36,6 +36,11 @@ private fun lightScheme(p: PaletteColors, accentOverride: Color? = null): ColorS
         onSurface = InkOnBackground,
         surfaceVariant = p.surfaceVariant,
         onSurfaceVariant = SandOnSurfaceVariant,
+        surfaceContainerLowest = p.background,
+        surfaceContainerLow = p.surface,
+        surfaceContainer = p.surface,
+        surfaceContainerHigh = p.surface,
+        surfaceContainerHighest = p.surface,
         error = CoralError,
         onError = Color.White,
         errorContainer = CoralErrorContainer,
@@ -103,6 +108,11 @@ private fun darkScheme(palette: AppPalette): ColorScheme {
         onSurface = onDark,
         surfaceVariant = p.surfaceVariant,
         onSurfaceVariant = onDarkVariant,
+        surfaceContainerLowest = p.background,
+        surfaceContainerLow = p.surface,
+        surfaceContainer = p.surface,
+        surfaceContainerHigh = p.surface,
+        surfaceContainerHighest = p.surface,
         error = SalmonErrorDark,
         onError = NightOnError,
         errorContainer = NightErrorContainer,
@@ -131,6 +141,11 @@ private fun darkSchemeCustom(p: PaletteColors, accentOverride: Color? = null): C
         onSurface = Color(0xFFF5F5F5),
         surfaceVariant = p.surfaceVariant,
         onSurfaceVariant = Color(0xFFBDBDBD),
+        surfaceContainerLowest = p.background,
+        surfaceContainerLow = p.surface,
+        surfaceContainer = p.surface,
+        surfaceContainerHigh = p.surface,
+        surfaceContainerHighest = p.surface,
         error = SalmonErrorDark,
         onError = NightOnError,
         errorContainer = NightErrorContainer,
@@ -164,20 +179,25 @@ fun AppTheme(
 /**
  * تم برنامه بر اساس کلید رشته‌ای + پالت شخصی‌سازی‌شده اختیاری.
  * اگر [paletteKey] برابر [CUSTOM_THEME_KEY] باشد و [customColors] داده شده باشد،
- * از پالت ساخته‌شده توسط کاربر استفاده می‌شود. [customSecondary] رنگ مکمل دستی
- * کاربر است؛ null یعنی لهجه به‌صورت خودکار مکمل رنگ اصلی بماند.
+ * از پالت ساخته‌شده توسط کاربر استفاده می‌شود؛ مثل پالت‌های توکار، گونه‌ی
+ * روشن/تیره از روی [darkTheme] (پیش‌فرض: حالت سیستم) انتخاب می‌شود:
+ * [customColors] گونه‌ی روشن و [customDarkColors] گونه‌ی تیره است (اگر گونه‌ی
+ * تیره داده نشده باشد، همان گونه‌ی روشن به darkSchemeCustom می‌رسد).
+ * [customSecondary] رنگ مکمل دستی کاربر است؛ null یعنی لهجه به‌صورت
+ * خودکار مکمل رنگ اصلی بماند.
  */
 @Composable
 fun AppTheme(
     paletteKey: String,
     customColors: PaletteColors? = null,
+    customDarkColors: PaletteColors? = null,
     customSecondary: Color? = null,
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
     val scheme = when {
         paletteKey == CUSTOM_THEME_KEY && customColors != null ->
-            if (darkTheme) darkSchemeCustom(customColors, customSecondary)
+            if (darkTheme) darkSchemeCustom(customDarkColors ?: customColors, customSecondary)
             else lightScheme(customColors, customSecondary)
         else -> {
             val palette = AppPalette.fromKey(paletteKey)

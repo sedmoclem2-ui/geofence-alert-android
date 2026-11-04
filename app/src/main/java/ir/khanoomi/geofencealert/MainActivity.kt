@@ -104,8 +104,6 @@ class MainActivity : ComponentActivity() {
                 .collectAsStateWithLifecycle(initialValue = 0xFF0E6B5CL)
             val customSecondaryArgb by app.prefs.customSecondaryArgb
                 .collectAsStateWithLifecycle(initialValue = 0L)
-            val customDark by app.prefs.customDark
-                .collectAsStateWithLifecycle(initialValue = false)
             val languageKey by app.prefs.appLanguage
                 .collectAsStateWithLifecycle(initialValue = "fa")
             val lang = appLangOf(languageKey)
@@ -115,8 +113,15 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(languageKey) {
                 writeLangMirror(this@MainActivity, languageKey)
             }
+            // تم شخصی‌سازی‌شده مثل پالت‌های توکار هر دو گونه را دارد تا با
+            // حالت روشن/تیره سیستم هم‌گام شود؛ دیگر کلید تیره‌ی جداگانه ندارد.
             val customColors = if (paletteKey == CUSTOM_THEME_KEY) {
-                buildCustomPalette(customArgb, customDark, customSecondaryArgb)
+                buildCustomPalette(customArgb, false, customSecondaryArgb)
+            } else {
+                null
+            }
+            val customDarkColors = if (paletteKey == CUSTOM_THEME_KEY) {
+                buildCustomPalette(customArgb, true, customSecondaryArgb)
             } else {
                 null
             }
@@ -129,6 +134,7 @@ class MainActivity : ComponentActivity() {
             AppTheme(
                 paletteKey = paletteKey,
                 customColors = customColors,
+                customDarkColors = customDarkColors,
                 customSecondary = customSecondary
             ) {
                 // زبان برنامه: فارسی و عربی راست‌به‌چپ، انگلیسی چپ‌به‌راست.

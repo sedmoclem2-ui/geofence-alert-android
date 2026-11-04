@@ -132,7 +132,6 @@ fun SettingsScreen(navController: NavController) {
     val themeKey by app.prefs.themePalette.collectAsStateWithLifecycle(initialValue = "deepblue")
     val customArgb by app.prefs.customPrimaryArgb.collectAsStateWithLifecycle(initialValue = 0xFF0E6B5CL)
     val customSecondaryArgb by app.prefs.customSecondaryArgb.collectAsStateWithLifecycle(initialValue = 0L)
-    val customDarkVal by app.prefs.customDark.collectAsStateWithLifecycle(initialValue = false)
     val languageKey by app.prefs.appLanguage.collectAsStateWithLifecycle(initialValue = "fa")
     val alertVolumeVal by app.prefs.alertVolume.collectAsStateWithLifecycle(initialValue = 80)
     val vibrationIntensityVal by app.prefs.vibrationIntensity
@@ -524,13 +523,11 @@ fun SettingsScreen(navController: NavController) {
         CustomThemeDialog(
             initialArgb = customArgb,
             initialSecondaryArgb = customSecondaryArgb,
-            initialDark = customDarkVal,
             onDismiss = { showCustomTheme = false },
-            onSave = { argb, dark, secondaryArgb ->
+            onSave = { argb, secondaryArgb ->
                 scope.launch {
                     app.prefs.setCustomPrimaryArgb(argb)
                     app.prefs.setCustomSecondaryArgb(secondaryArgb)
-                    app.prefs.setCustomDark(dark)
                     app.prefs.setThemePalette(CUSTOM_THEME_KEY)
                 }
                 showCustomTheme = false
@@ -918,13 +915,11 @@ private val CUSTOM_SWATCHES = listOf(
 private fun CustomThemeDialog(
     initialArgb: Long,
     initialSecondaryArgb: Long,
-    initialDark: Boolean,
     onDismiss: () -> Unit,
-    onSave: (Long, Boolean, Long) -> Unit
+    onSave: (Long, Long) -> Unit
 ) {
     var picked by remember(initialArgb) { mutableStateOf(initialArgb) }
     var pickedSecondary by remember(initialSecondaryArgb) { mutableStateOf(initialSecondaryArgb) }
-    var dark by remember(initialDark) { mutableStateOf(initialDark) }
     // رنگ مکمل خودکار از رنگ اصلی ساخته می‌شود (قانون رنگ مکمل)؛ کاربر
     // می‌تواند به‌جای آن یک رنگ مکمل دستی هم انتخاب کند (۰ = خودکار).
     val autoComplement = complementArgb(picked)
@@ -1055,25 +1050,10 @@ private fun CustomThemeDialog(
                         }
                     }
                 }
-                Text(LocalStrings.current.baseTheme, fontWeight = FontWeight.Bold)
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    SegmentedButton(
-                        selected = !dark,
-                        onClick = { dark = false },
-                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
-                        label = { Text(LocalStrings.current.lightTheme) }
-                    )
-                    SegmentedButton(
-                        selected = dark,
-                        onClick = { dark = true },
-                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
-                        label = { Text(LocalStrings.current.darkTheme) }
-                    )
-                }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(picked, dark, pickedSecondary) }) {
+            TextButton(onClick = { onSave(picked, pickedSecondary) }) {
                 Text(LocalStrings.current.save, fontWeight = FontWeight.Bold)
             }
         },
