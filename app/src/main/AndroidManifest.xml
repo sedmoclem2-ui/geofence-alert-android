@@ -109,6 +109,13 @@
             android:name=".receiver.SelfHealReceiver"
             android:exported="false" />
 
+        <!-- بیدارسازی دوره‌ای پایش دقیق در Doze (فقط از AlarmManager داخلی):
+             قفل بیداری در Doze عمیق نادیده گرفته می‌شود، پس این گیرنده هر
+             ۲ دقیقه گوشی را بیدار می‌کند تا یک دور ارزیابی محدوده‌ها انجام شود -->
+        <receiver
+            android:name=".receiver.WakeupReceiver"
+            android:exported="false" />
+
         <!-- یادآور ماندن طولانی داخل محدوده (فقط از AlarmManager داخلی) -->
         <receiver
             android:name=".receiver.StayReminderReceiver"

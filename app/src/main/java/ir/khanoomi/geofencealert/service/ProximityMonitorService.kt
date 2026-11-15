@@ -24,6 +24,7 @@ import ir.khanoomi.geofencealert.domain.GeoMath
 import ir.khanoomi.geofencealert.geofence.ZoneTransitionHandler
 import ir.khanoomi.geofencealert.notify.Notifications
 import ir.khanoomi.geofencealert.receiver.GpsStateReceiver
+import ir.khanoomi.geofencealert.receiver.WakeupReceiver
 import ir.khanoomi.geofencealert.util.Permissions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -138,15 +139,40 @@ class ProximityMonitorService : Service() {
             scope.launch {
                 try {
                     if (!shouldStayAlive()) {
+                        WakeupReceiver.cancel(this@ProximityMonitorService)
                         releaseMonitorWakeLock()
                         stopSelf()
                         return@launch
                     }
                     acquireMonitorWakeLock()
+                    // بیدارسازی دوره‌ای Doze هم از همین‌جا مسلح می‌شود تا
+                    // هر بار که پایش همگام می‌شود، زنجیره بیدارسازی برقرار باشد.
+                    WakeupReceiver.schedule(this@ProximityMonitorService)
                     coarseArmPass()
                     ensureLoopRunning()
                 } catch (e: Exception) {
                     Log.e(TAG, "sync failed", e)
+                }
+            }
+        }
+        // بیدارسازی دوره‌ای از Doze: یک دور ارزیابی فوری با همان نقشه وضعیتِ
+        // موجود، بدون coarseArmPass (دلیلش در KDoc روی ACTION_WAKEUP_CHECK).
+        // اگر پایش خاموش شده باشد، بیدارسازی لغو و سرویس متوقف می‌شود.
+        if (intent?.action == ACTION_WAKEUP_CHECK) {
+            scope.launch {
+                try {
+                    if (!shouldStayAlive()) {
+                        WakeupReceiver.cancel(this@ProximityMonitorService)
+                        releaseMonitorWakeLock()
+                        stopSelf()
+                        return@launch
+                    }
+                    acquireMonitorWakeLock()
+                    WakeupReceiver.schedule(this@ProximityMonitorService)
+                    ensureLoopRunning()
+                    tickDue()
+                } catch (e: Exception) {
+                    Log.e(TAG, "wakeup check failed", e)
                 }
             }
         }
@@ -496,6 +522,16 @@ class ProximityMonitorService : Service() {
 
         const val ACTION_SYNC = "ir.khanoomi.geofencealert.action.PROXIMITY_SYNC"
 
+        /**
+         * بیدارسازی دوره‌ای از Doze ([ir.khanoomi.geofencealert.receiver.WakeupReceiver]):
+         * برخلاف ACTION_SYNC، مسیر همگام‌سازیِ کامل (coarseArmPass) را اجرا
+         * نمی‌کند — coarseArmPass وضعیت داخل/خارج فعلی را بی‌صدا ثبت می‌کند و
+         * اگر کاربر در خواب Doze وارد محدوده شده باشد، ورود برای همیشه
+         * بلعیده می‌شود. این مسیر فقط یک دور ارزیابی (tickDue) با همان نقشه
+         * وضعیتِ موجود انجام می‌دهد تا گذارِ بیرون→داخل، ورودِ تازه حساب شود.
+         */
+        const val ACTION_WAKEUP_CHECK = "ir.khanoomi.geofencealert.action.PROXIMITY_WAKEUP_CHECK"
+
         private const val FOREGROUND_NOTIFICATION_ID = 9003
         private const val LOCATION_TIMEOUT_S = 15L
 
@@ -599,6 +635,7 @@ class ProximityMonitorService : Service() {
                         )
                         Log.i(TAG, "sync: keeping monitoring service alive")
                     } else {
+                        WakeupReceiver.cancel(context)
                         context.stopService(
                             Intent(context, ProximityMonitorService::class.java)
                         )
