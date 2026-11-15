@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -60,6 +61,10 @@ import kotlin.math.max
  * کردن پایش توسط کاربر، سرویس را متوقف می‌کند.
  *
  * چون سرویس پیش‌زمینه است، با بسته شدن برنامه (سوایپ) از بین نمی‌رود.
+ *
+ * از نسخه ۳٫۹٫۸ سرویس در تمام مدت پایش یک قفل بیداری جزئی نگه می‌دارد تا
+ * با قفل شدن صفحه و رفتن گوشی به Doze، حلقه پایش دقیق نخوابد و ورود در
+ * پس‌زمینه هم تشخیص داده شود (به بهای مصرف بیشتر باتری در حالت بیکار).
  */
 class ProximityMonitorService : Service() {
 
@@ -77,6 +82,14 @@ class ProximityMonitorService : Service() {
 
     /** شنونده تغییر وضعیت مکان‌یابی گوشی برای اعلان «جی‌پی‌اس خاموش است». */
     private val gpsStateReceiver = GpsStateReceiver()
+
+    /**
+     * قفل بیداری جزئی (PARTIAL_WAKE_LOCK) برای پایش دقیق: تا وقتی پایش
+     * روشن است نگه داشته می‌شود تا با قفل/خاموش شدن صفحه و رفتن گوشی به
+     * Doze، پردازنده نخوابد و حلقه تیک (delay) و گرفتن موقعیت متوقف نشود.
+     * بدون این قفل، با قفل شدن صفحه تشخیص ورود در پس‌زمینه می‌خوابید.
+     */
+    private var monitorWakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -114,6 +127,7 @@ class ProximityMonitorService : Service() {
             )
         } catch (e: Exception) {
             Log.e(TAG, "startForeground failed in onStartCommand", e)
+            releaseMonitorWakeLock()
             stopSelf()
             return START_NOT_STICKY
         }
@@ -124,9 +138,11 @@ class ProximityMonitorService : Service() {
             scope.launch {
                 try {
                     if (!shouldStayAlive()) {
+                        releaseMonitorWakeLock()
                         stopSelf()
                         return@launch
                     }
+                    acquireMonitorWakeLock()
                     coarseArmPass()
                     ensureLoopRunning()
                 } catch (e: Exception) {
@@ -159,6 +175,36 @@ class ProximityMonitorService : Service() {
             PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
+
+    /**
+     * گرفتن قفل بیداری جزئی برای تمام مدت پایش (بدون سقف زمانی؛ آزادی
+     * دستی در onDestroy و همه مسیرهای توقف سرویس). برخلاف قفل هشدار
+     * ([ir.khanoomi.geofencealert.service.AlertService]) که صفحه را روشن
+     * می‌کند، این قفل فقط پردازنده را بیدار نگه می‌دارد و صفحه را روشن
+     * نمی‌کند. گرفتن دوباره بی‌خطر است (اول قفل قبلی آزاد می‌شود).
+     * هزینه‌اش مصرف بیشتر باتری در حالت بیکار است؛ بهای اینکه تشخیص ورود
+     * با صفحه قفل هم کار کند.
+     */
+    private fun acquireMonitorWakeLock() {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            releaseMonitorWakeLock()
+            monitorWakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "GeofenceAlert:MonitorWakeLock"
+            ).apply { acquire() }
+        } catch (e: Exception) {
+            Log.w(TAG, "acquireMonitorWakeLock failed", e)
+        }
+    }
+
+    private fun releaseMonitorWakeLock() {
+        try {
+            monitorWakeLock?.let { if (it.isHeld) it.release() }
+        } catch (_: Exception) {
+        }
+        monitorWakeLock = null
+    }
 
     /**
      * یک دور درشت اولیه هنگام شروع سرویس: موقعیت فعلی گرفته می‌شود و هر
@@ -241,6 +287,7 @@ class ProximityMonitorService : Service() {
                     // و فقط وضعیت پایش را هر ۳۰ ثانیه بازبینی می‌کند؛
                     // تنها وقتی کاربر پایش را خاموش کند متوقف می‌شود.
                     if (!shouldStayAlive()) {
+                        releaseMonitorWakeLock()
                         stopSelf()
                         break
                     }
@@ -430,6 +477,7 @@ class ProximityMonitorService : Service() {
     }
 
     override fun onDestroy() {
+        releaseMonitorWakeLock()
         GpsStateReceiver.unregister(this, gpsStateReceiver)
         loopJob?.cancel()
         tickerJob?.cancel()

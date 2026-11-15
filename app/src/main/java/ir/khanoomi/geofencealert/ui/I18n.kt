@@ -642,6 +642,8 @@ data class UiStrings(
     val createZone: String get() = ext.createZone
     val batteryWarning: String get() = ext.batteryWarning
     val batteryWarningAction: String get() = ext.batteryWarningAction
+    val autoEnableOnBoot: String get() = ext.autoEnableOnBoot
+    val autoEnableOnBootDesc: String get() = ext.autoEnableOnBootDesc
     val backupRestored: String get() = ext.backupRestored
     val sectionPermissions: String get() = ext.sectionPermissions
     val sectionAlerts: String get() = ext.sectionAlerts
@@ -1140,7 +1142,9 @@ data class UiStringsExt(
     val importFailed: String,
     val monthlyReport: String,
     val reportDone: String,
-    val reportFailed: String
+    val reportFailed: String,
+    val autoEnableOnBoot: String,
+    val autoEnableOnBootDesc: String
 ) {
     companion object {
         val FA = UiStringsExt(
@@ -1389,7 +1393,9 @@ data class UiStringsExt(
             importFailed = "افزودن محدوده انجام نشد.",
             monthlyReport = "گزارش ماهانه",
             reportDone = "گزارش ماهانه ساخته شد.",
-            reportFailed = "ساخت گزارش ماهانه انجام نشد."
+            reportFailed = "ساخت گزارش ماهانه انجام نشد.",
+            autoEnableOnBoot = "فعال‌سازی خودکار پس از روشن شدن گوشی",
+            autoEnableOnBootDesc = "اگر روشن باشد، با هر بار خاموش و روشن شدن گوشی، پایش به‌صورت خودکار فعال می‌شود؛ بدون نیاز به باز کردن برنامه."
         )
 
         val EN = UiStringsExt(
@@ -1638,7 +1644,9 @@ data class UiStringsExt(
             importFailed = "Adding the zone failed.",
             monthlyReport = "Monthly report",
             reportDone = "Monthly report created.",
-            reportFailed = "Creating the monthly report failed."
+            reportFailed = "Creating the monthly report failed.",
+            autoEnableOnBoot = "Auto-enable monitoring on boot",
+            autoEnableOnBootDesc = "When on, monitoring turns itself on every time the phone is powered off and back on; no need to open the app."
         )
 
         val AR = UiStringsExt(
@@ -1887,7 +1895,9 @@ data class UiStringsExt(
             importFailed = "فشلت إضافة المنطقة.",
             monthlyReport = "التقرير الشهري",
             reportDone = "تم إنشاء التقرير الشهري.",
-            reportFailed = "فشل إنشاء التقرير الشهري."
+            reportFailed = "فشل إنشاء التقرير الشهري.",
+            autoEnableOnBoot = "التفعيل التلقائي بعد تشغيل الهاتف",
+            autoEnableOnBootDesc = "عند التفعيل، تُفعَّل المراقبة تلقائيًا في كل مرة يُطفأ فيها الهاتف ويُعاد تشغيله؛ دون الحاجة إلى فتح التطبيق."
         )
     }
 }

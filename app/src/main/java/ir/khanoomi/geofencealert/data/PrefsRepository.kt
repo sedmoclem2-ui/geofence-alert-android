@@ -32,6 +32,17 @@ class PrefsRepository(private val context: Context) {
         context.prefsDataStore.edit { prefs -> prefs[KEY_MONITORING] = enabled }
     }
 
+    private val KEY_AUTO_ENABLE_ON_BOOT = booleanPreferencesKey("auto_enable_on_boot")
+
+    /** فعال‌سازی خودکار پایش پس از روشن شدن گوشی (پیش‌فرض: نه). */
+    val autoEnableOnBoot: Flow<Boolean> = context.prefsDataStore.data
+        .map { prefs -> prefs[KEY_AUTO_ENABLE_ON_BOOT] ?: false }
+        .catch { emit(false) }
+
+    suspend fun setAutoEnableOnBoot(enabled: Boolean) {
+        context.prefsDataStore.edit { prefs -> prefs[KEY_AUTO_ENABLE_ON_BOOT] = enabled }
+    }
+
     private val KEY_ONBOARDING = booleanPreferencesKey("onboarding_done")
 
     /** آیا آموزش شروع به کار دیده شده است (پیش‌فرض: نه). */

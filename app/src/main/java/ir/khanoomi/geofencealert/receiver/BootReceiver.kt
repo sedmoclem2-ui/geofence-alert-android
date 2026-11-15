@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import ir.khanoomi.geofencealert.GeofenceAlertApp
 import ir.khanoomi.geofencealert.geofence.GeofenceHelper
 import ir.khanoomi.geofencealert.service.ProximityMonitorService
 import ir.khanoomi.geofencealert.widget.ZoneWidgetProvider
@@ -11,6 +12,7 @@ import ir.khanoomi.geofencealert.widget.RadarWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -27,6 +29,29 @@ class BootReceiver : BroadcastReceiver() {
         val pending = goAsync()
         scope.launch {
             try {
+                // روشن شدن کامل گوشی: اگر کاربر فعال‌سازی خودکار را روشن
+                // کرده باشد، پایش پیش از ثبت ژئوفنس‌ها روشن می‌شود تا
+                // بدون باز کردن برنامه، پس از خاموش و روشن شدن گوشی هم
+                // پایش کار کند. در بقیه رویدادها (به‌روزرسانی برنامه،
+                // تغییر ساعت/منطقه زمانی) رفتار مثل قبل است: فقط اگر پایش
+                // از پیش روشن بوده باشد از سر گرفته می‌شود.
+                if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+                    val app = context.applicationContext as GeofenceAlertApp
+                    val autoEnable = try {
+                        app.prefs.autoEnableOnBoot.first()
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Cannot read autoEnableOnBoot, defaulting to false", e)
+                        false
+                    }
+                    if (autoEnable) {
+                        try {
+                            app.prefs.setMonitoringEnabled(true)
+                            Log.i(TAG, "Auto-enabled monitoring on boot")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "setMonitoringEnabled(true) failed on boot", e)
+                        }
+                    }
+                }
                 GeofenceHelper.refreshRegistrations(context)
                 ZoneWidgetProvider.updateAll(context)
                 RadarWidgetProvider.updateAll(context)

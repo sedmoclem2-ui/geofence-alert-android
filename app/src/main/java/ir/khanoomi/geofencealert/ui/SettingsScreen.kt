@@ -139,6 +139,8 @@ fun SettingsScreen(navController: NavController) {
     val smsAskedVal by app.prefs.smsAsked.collectAsStateWithLifecycle(initialValue = false)
     val wakeScreenVal by app.prefs.wakeScreenOnAlert
         .collectAsStateWithLifecycle(initialValue = true)
+    val autoEnableOnBootVal by app.prefs.autoEnableOnBoot
+        .collectAsStateWithLifecycle(initialValue = false)
     val flashlightModeVal by app.prefs.flashlightMode
         .collectAsStateWithLifecycle(initialValue = PrefsRepository.FLASHLIGHT_OFF)
     var showCustomTheme by remember { mutableStateOf(false) }
@@ -408,6 +410,12 @@ fun SettingsScreen(navController: NavController) {
                                 } catch (_: Exception) {
                                 }
                             }
+                        }
+                    )
+                    AutoEnableOnBootRow(
+                        enabled = autoEnableOnBootVal,
+                        onEnabledChange = {
+                            scope.launch { app.prefs.setAutoEnableOnBoot(it) }
                         }
                     )
                     OutlinedButton(
@@ -707,6 +715,38 @@ private fun WakeScreenRow(
             )
             Text(
                 strings.wakeScreenSub,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Switch(checked = enabled, onCheckedChange = onEnabledChange)
+    }
+}
+
+/**
+ * سطر فعال‌سازی خودکار پایش پس از روشن شدن گوشی (نسخه ۳٫۹٫۸): با روشن
+ * بودن، با هر بار خاموش و روشن شدن گوشی پایش خودبه‌خود فعال می‌شود؛
+ * بدون نیاز به باز کردن برنامه.
+ */
+@Composable
+private fun AutoEnableOnBootRow(
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit
+) {
+    val strings = LocalStrings.current
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                strings.autoEnableOnBoot,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                strings.autoEnableOnBootDesc,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
