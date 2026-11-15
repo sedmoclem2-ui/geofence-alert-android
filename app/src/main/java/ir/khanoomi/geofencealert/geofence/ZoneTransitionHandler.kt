@@ -85,10 +85,22 @@ object ZoneTransitionHandler {
         }
         approachedTrips.remove(id)
 
-        if (!AlertDecider.shouldStartAlert(zone, zone.isAlerting)) {
+        // بازخوانی تازه پیش از تصمیم هشدار: حالا دو منبع ورود داریم
+        // (ژئوفنس سیستمی و پایش دقیق) و ممکن است دو onEnter برای یک ورود
+        // پشت سر هم برسد. اگر اولی هشدار را شروع کرده باشد
+        // (isAlerting=true)، دومی نباید هشدار تکراری بسازد؛ پس تصمیم روی
+        // سطر تازه از دیتابیس گرفته می‌شود، نه روی شیء zone که ممکن است
+        // کهنه باشد.
+        val decideRow = try {
+            app.zoneRepo.getById(id)
+        } catch (e: Exception) {
+            Log.e(TAG, "getById failed for zone $id", e)
+            null
+        } ?: zone
+        if (!AlertDecider.shouldStartAlert(decideRow, decideRow.isAlerting)) {
             Log.i(
                 TAG,
-                "ENTER ignored for zone $id (active=${zone.isActive}, alerting=${zone.isAlerting})"
+                "ENTER ignored for zone $id (active=${decideRow.isActive}, alerting=${decideRow.isAlerting})"
             )
             return
         }

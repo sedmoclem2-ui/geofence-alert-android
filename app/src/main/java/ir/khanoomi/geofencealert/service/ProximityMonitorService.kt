@@ -192,6 +192,24 @@ class ProximityMonitorService : Service() {
                 Log.i(TAG, "Coarse-armed zone ${zone.id} (d=${d.toInt()}m)")
             }
         }
+        // محدوده‌های بزرگ (دایره با شعاع ۲۰۰ متر یا بیشتر): از نسخه ۳٫۹٫۷
+        // مثل محدوده‌های کوچک و چندضلعی‌ها با پایش دقیق هم ارزیابی می‌شوند،
+        // به‌عنوان پشتیبانِ ژئوفنس سیستمی — اگر سیستم در پس‌زمینه رویداد
+        // ورود را تحویل ندهد (فیکس تازه‌ی مکان نمی‌رسد)، پایش دقیقِ خود
+        // برنامه با همان فاصله زمانی محدوده ورود را می‌فهمد. مثل
+        // چندضلعی‌ها بدون دروازه و بدون قید فاصله، همیشه armed می‌شوند و
+        // وضعیت اولیه بی‌صدا ثبت می‌شود. ژئوفنس‌های سیستمی همچنان ثبت
+        // می‌مانند و دست نخورده‌اند.
+        for (zone in zones.filter {
+            it.polygonJson.isBlank() && it.radiusMeters >= PRECISE_RADIUS_THRESHOLD_M
+        }) {
+            val d = GeoMath.distanceMeters(
+                loc.latitude, loc.longitude, zone.latitude, zone.longitude
+            )
+            armed[zone.id] = now
+            preciseInside[zone.id] = d <= zone.radiusMeters
+            Log.i(TAG, "Coarse-armed large zone ${zone.id} (d=${d.toInt()}m)")
+        }
         // چندضلعی‌ها: بدون دروازه و بدون قید شعاع/فاصله، همیشه armed.
         for (zone in zones.filter { it.polygonJson.isNotBlank() }) {
             val polygon = GeoMath.normalizePolygon(GeoMath.parsePolygonJson(zone.polygonJson))
@@ -335,17 +353,17 @@ class ProximityMonitorService : Service() {
         val due = armed.filter { it.value <= now }.keys.toList()
         for (id in due) {
             val zone = zonesById[id]
-            // تصمیم گیتینگ چندضلعی: محدوده چندضلعی صرف‌نظر از شعاع،
-            // واجد پایش دقیق است — قاعده «شعاع ≥ ۲۰۰ متر یعنی ژئوفنس
-            // سیستمی، نه پایش دقیق» فقط برای دایره‌ها اعمال می‌شود.
-            // چندضلعی‌ها هرگز ژئوفنس سیستمی ندارند، پس اگر این استثنا
-            // نباشد هیچ‌چیز آن‌ها را ارزیابی نمی‌کند. همان سازوکار
-            // فاصله زمانی (checkIntervalSec، و حالت مداوم ۲ ثانیه) و
-            // همان خط لوله ورود/خروج دایره‌ها استفاده می‌شود؛ هیچ
+            // از نسخه ۳٫۹٫۷ همه محدوده‌های فعال — دایره با هر شعاع و
+            // چندضلعی — با پایش دقیق ارزیابی می‌شوند. پیش از این دایره‌های
+            // با شعاع ۲۰۰ متر یا بیشتر از پایش دقیق کنار گذاشته می‌شدند و
+            // فقط به ژئوفنس سیستمی تکیه داشتند؛ اگر سیستم در پس‌زمینه
+            // رویداد ورود را تحویل نمی‌داد، هیچ‌چیز ورود را نمی‌فهمید و
+            // کارت محدوده برای همیشه «در انتظار ورود» می‌ماند. ژئوفنس‌های
+            // سیستمی همچنان ثبت می‌مانند و پایش دقیق فقط پشتیبان آن‌هاست.
+            // همان سازوکار فاصله زمانی (checkIntervalSec، و حالت مداوم
+            // ۲ ثانیه) و همان خط لوله ورود/خروج استفاده می‌شود؛ هیچ
             // زمان‌بندی یا کلاس مصرف باتری تازه‌ای ساخته نشده است.
-            if (zone == null || !zone.isActive ||
-                (zone.polygonJson.isBlank() && zone.radiusMeters >= PRECISE_RADIUS_THRESHOLD_M)
-            ) {
+            if (zone == null || !zone.isActive) {
                 armed.remove(id)
                 preciseInside.remove(id)
                 continue
