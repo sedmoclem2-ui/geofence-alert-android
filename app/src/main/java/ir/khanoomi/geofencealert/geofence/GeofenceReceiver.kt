@@ -3,15 +3,23 @@ package ir.khanoomi.geofencealert.geofence
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.location.Location
 import android.util.Log
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingEvent
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import com.google.android.gms.tasks.Tasks
 import ir.khanoomi.geofencealert.GeofenceAlertApp
+import ir.khanoomi.geofencealert.data.Zone
+import ir.khanoomi.geofencealert.domain.GeoMath
 import ir.khanoomi.geofencealert.service.ProximityMonitorService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 
 /**
  * دریافت رویدادهای ورود/خروج از Geofencing API و هدایت به [ZoneTransitionHandler].
@@ -95,8 +103,14 @@ class GeofenceReceiver : BroadcastReceiver() {
                     when (transition) {
                         Geofence.GEOFENCE_TRANSITION_ENTER ->
                             ZoneTransitionHandler.onEnter(context, zone)
-                        Geofence.GEOFENCE_TRANSITION_EXIT ->
-                            ZoneTransitionHandler.onExit(context, zone)
+                        Geofence.GEOFENCE_TRANSITION_EXIT -> {
+                            val freshLoc = fetchFreshLocation(context)
+                            if (freshLoc != null && isLocationInsideZone(freshLoc, zone)) {
+                                Log.i(TAG, "ignoring spurious system EXIT for zone ${zone.id}")
+                            } else {
+                                ZoneTransitionHandler.onExit(context, zone)
+                            }
+                        }
                     }
                 }
             } finally {
@@ -105,7 +119,33 @@ class GeofenceReceiver : BroadcastReceiver() {
         }
     }
 
+    private fun fetchFreshLocation(context: Context): Location? {
+        return try {
+            val client = LocationServices.getFusedLocationProviderClient(context)
+            val task = client.getCurrentLocation(
+                Priority.PRIORITY_HIGH_ACCURACY,
+                CancellationTokenSource().token
+            )
+            Tasks.await(task, EXIT_VERIFY_TIMEOUT_S, TimeUnit.SECONDS)
+        } catch (e: Exception) {
+            Log.w(TAG, "fresh fix for EXIT check failed", e)
+            null
+        }
+    }
+
+    private fun isLocationInsideZone(loc: Location, zone: Zone): Boolean {
+        return if (zone.polygonJson.isNotBlank()) {
+            val polygon = GeoMath.normalizePolygon(GeoMath.parsePolygonJson(zone.polygonJson))
+            GeoMath.pointInPolygon(loc.latitude, loc.longitude, polygon)
+        } else {
+            GeoMath.distanceMeters(
+                loc.latitude, loc.longitude, zone.latitude, zone.longitude
+            ) <= zone.radiusMeters
+        }
+    }
+
     companion object {
         private const val TAG = "GeofenceReceiver"
+        private const val EXIT_VERIFY_TIMEOUT_S = 10L
     }
 }

@@ -150,7 +150,7 @@ class ZoneEditViewModel(app: Application, private val zoneId: Long) : AndroidVie
     var soundKey by mutableStateOf(Zone.SOUND_ALARM)
     var customSoundUri by mutableStateOf<String?>(null)
     var isActive by mutableStateOf(true)
-    /** فاصله بررسی دقیق به‌صورت متنی (ثانیه یا دقیقه)؛ فقط برای شعاع < ۲۰۰ متر */
+    /** فاصله بررسی دقیق به‌صورت متنی (ثانیه یا دقیقه) برای همه محدوده‌ها */
     var checkIntervalText by mutableStateOf("20")
     var checkIntervalIsMinutes by mutableStateOf(false)
     /** حالت «مداوم»: بررسی تقریباً پیوسته (checkIntervalSec = 0) */
@@ -743,21 +743,15 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
         if (vm.isPolygon && polygonPoints.size < 3) {
             allErrors += (0 to strings.polygonMinPoints)
         }
-        // فاصله بررسی دقیق فقط وقتی معنا دارد که شعاع کمتر از ۲۰۰ متر باشد؛
-        // چندضلعی‌ها همیشه با پایش دقیق ارزیابی می‌شوند، پس بازه‌شان همیشه
-        // از فیلد خوانده می‌شود (کنترل بازه در حالت چندضلعی پنهان نمی‌شود).
-        val radiusMetersForCheck = radius?.let { toMeters(it, vm.unit) }
+        // فاصله بررسی دقیق برای همه محدوده‌ها (دایره با هر شعاع و چندضلعی)
+        // از فیلد خوانده و اعتبارسنجی می‌شود.
         val checkIntervalSec: Int =
-            if (vm.isPolygon || (radiusMetersForCheck != null && radiusMetersForCheck < 200.0)) {
-                if (vm.checkIntervalContinuous) {
-                    CheckInterval.CONTINUOUS
-                } else {
-                    val sec = CheckInterval.toSeconds(vm.checkIntervalText, vm.checkIntervalIsMinutes)
-                    CheckInterval.errorFa(sec)?.let { allErrors += (0 to it) }
-                    sec ?: 20
-                }
+            if (vm.checkIntervalContinuous) {
+                CheckInterval.CONTINUOUS
             } else {
-                20
+                val sec = CheckInterval.toSeconds(vm.checkIntervalText, vm.checkIntervalIsMinutes)
+                CheckInterval.errorFa(sec)?.let { allErrors += (0 to it) }
+                sec ?: 20
             }
         // اعتبارسنجی الگوی تکراری پس از خروج
         if (vm.exitBehavior == Zone.EXIT_SEQUENCE) {
@@ -1435,82 +1429,77 @@ fun ZoneEditScreen(navController: NavController, zoneId: Long) {
 
                         } // پایان if (!vm.isPolygon) — کارت شعاع
 
-                        // فاصله بررسی دقیق: فقط برای شعاع‌های کمتر از ۲۰۰ متر؛
-                        // در حالت چندضلعی همیشه دیده می‌شود (چندضلعی‌ها با
-                        // همین بازه ارزیابی می‌شوند).
-                        val radiusMetersNow =
-                            ZoneValidator.parseDoubleFa(vm.radiusText)?.let { toMeters(it, vm.unit) }
-                        if (vm.isPolygon || (radiusMetersNow != null && radiusMetersNow < 200.0)) {
-                            SectionCard(icon = Icons.Filled.Refresh, title = strings.checkIntervalTitle) {
+                        // فاصله بررسی دقیق: برای همه محدوده‌ها (دایره با هر شعاع و چندضلعی)
+                        // نمایش داده می‌شود و با همین بازه ارزیابی می‌شوند.
+                        SectionCard(icon = Icons.Filled.Refresh, title = strings.checkIntervalTitle) {
+                            Text(
+                                strings.checkIntervalSub,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedTextField(
+                                value = vm.checkIntervalText,
+                                onValueChange = { vm.checkIntervalText = it },
+                                label = { Text(strings.checkIntervalLabel) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .alpha(if (vm.checkIntervalContinuous) 0.4f else 1f),
+                                enabled = !vm.checkIntervalContinuous,
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                trailingIcon = {
+                                    Text(
+                                        if (vm.checkIntervalIsMinutes) {
+                                            strings.unitMinute
+                                        } else {
+                                            strings.unitSecond
+                                        },
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(end = 12.dp)
+                                    )
+                                }
+                            )
+                            val checkModeIndex = when {
+                                vm.checkIntervalContinuous -> 2
+                                vm.checkIntervalIsMinutes -> 1
+                                else -> 0
+                            }
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                listOf(
+                                    strings.unitSecond,
+                                    strings.unitMinute,
+                                    strings.unitContinuous
+                                ).forEachIndexed { index, label ->
+                                    OptionTile(
+                                        selected = checkModeIndex == index,
+                                        title = label,
+                                        onClick = {
+                                            vm.checkIntervalContinuous = index == 2
+                                            vm.checkIntervalIsMinutes = index == 1
+                                        }
+                                    )
+                                }
+                            }
+                            if (vm.checkIntervalContinuous) {
                                 Text(
-                                    strings.checkIntervalSub,
+                                    strings.continuousNote,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                OutlinedTextField(
-                                    value = vm.checkIntervalText,
-                                    onValueChange = { vm.checkIntervalText = it },
-                                    label = { Text(strings.checkIntervalLabel) },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .alpha(if (vm.checkIntervalContinuous) 0.4f else 1f),
-                                    enabled = !vm.checkIntervalContinuous,
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(12.dp),
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                    trailingIcon = {
-                                        Text(
-                                            if (vm.checkIntervalIsMinutes) {
-                                                strings.unitMinute
-                                            } else {
-                                                strings.unitSecond
-                                            },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(end = 12.dp)
-                                        )
-                                    }
+                            } else {
+                                val intervalError = CheckInterval.errorFa(
+                                    CheckInterval.toSeconds(vm.checkIntervalText, vm.checkIntervalIsMinutes)
                                 )
-                                val checkModeIndex = when {
-                                    vm.checkIntervalContinuous -> 2
-                                    vm.checkIntervalIsMinutes -> 1
-                                    else -> 0
-                                }
-                                Column(
-                                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    listOf(
-                                        strings.unitSecond,
-                                        strings.unitMinute,
-                                        strings.unitContinuous
-                                    ).forEachIndexed { index, label ->
-                                        OptionTile(
-                                            selected = checkModeIndex == index,
-                                            title = label,
-                                            onClick = {
-                                                vm.checkIntervalContinuous = index == 2
-                                                vm.checkIntervalIsMinutes = index == 1
-                                            }
-                                        )
-                                    }
-                                }
-                                if (vm.checkIntervalContinuous) {
+                                if (intervalError != null) {
                                     Text(
-                                        strings.continuousNote,
+                                        localizeValidatorError(intervalError, strings),
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.error
                                     )
-                                } else {
-                                    val intervalError = CheckInterval.errorFa(
-                                        CheckInterval.toSeconds(vm.checkIntervalText, vm.checkIntervalIsMinutes)
-                                    )
-                                    if (intervalError != null) {
-                                        Text(
-                                            localizeValidatorError(intervalError, strings),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.error
-                                        )
-                                    }
                                 }
                             }
                         }

@@ -261,6 +261,7 @@ class ProximityMonitorService : Service() {
             if (d <= PRECISE_RADIUS_THRESHOLD_M) {
                 armed[zone.id] = now
                 preciseInside[zone.id] = d <= zone.radiusMeters
+                outsideStreak.remove(zone.id)
                 Log.i(TAG, "Coarse-armed zone ${zone.id} (d=${d.toInt()}m)")
             }
         }
@@ -280,6 +281,7 @@ class ProximityMonitorService : Service() {
             )
             armed[zone.id] = now
             preciseInside[zone.id] = d <= zone.radiusMeters
+            outsideStreak.remove(zone.id)
             Log.i(TAG, "Coarse-armed large zone ${zone.id} (d=${d.toInt()}m)")
         }
         // چندضلعی‌ها: بدون دروازه و بدون قید شعاع/فاصله، همیشه armed.
@@ -289,6 +291,7 @@ class ProximityMonitorService : Service() {
             preciseInside[zone.id] = GeoMath.pointInPolygon(
                 loc.latitude, loc.longitude, polygon
             )
+            outsideStreak.remove(zone.id)
             Log.i(TAG, "Coarse-armed polygon zone ${zone.id} (vertices=${polygon.size})")
         }
     }
@@ -439,6 +442,7 @@ class ProximityMonitorService : Service() {
             if (zone == null || !zone.isActive) {
                 armed.remove(id)
                 preciseInside.remove(id)
+                outsideStreak.remove(id)
                 continue
             }
             tickZone(zone)
@@ -471,19 +475,27 @@ class ProximityMonitorService : Service() {
             isInside = d <= zone.radiusMeters
             detail = "d=${d.toInt()}m"
         }
-        when (val prev = preciseInside[zone.id]) {
-            null -> preciseInside[zone.id] = isInside // مقداردهی اولیه بدون هشدار
-            else -> {
-                if (!prev && isInside) {
-                    preciseInside[zone.id] = true
-                    Log.i(TAG, "Precise ENTER for zone ${zone.id} ($detail)")
-                    ZoneTransitionHandler.onEnter(this, zone)
-                } else if (prev && !isInside) {
-                    preciseInside[zone.id] = false
-                    Log.i(TAG, "Precise EXIT for zone ${zone.id} ($detail)")
-                    ZoneTransitionHandler.onExit(this, zone)
-                }
+        val decision = ExitDebounce.evaluate(
+            prevInside = preciseInside[zone.id],
+            isInside = isInside,
+            outsideStreak = outsideStreak[zone.id] ?: 0
+        )
+        preciseInside[zone.id] = decision.nextInside
+        if (decision.nextOutsideStreak == 0) {
+            outsideStreak.remove(zone.id)
+        } else {
+            outsideStreak[zone.id] = decision.nextOutsideStreak
+        }
+        when (decision.action) {
+            ExitDebounce.Action.ENTER -> {
+                Log.i(TAG, "Precise ENTER for zone ${zone.id} ($detail)")
+                ZoneTransitionHandler.onEnter(this, zone)
             }
+            ExitDebounce.Action.EXIT -> {
+                Log.i(TAG, "Precise EXIT for zone ${zone.id} ($detail)")
+                ZoneTransitionHandler.onExit(this, zone)
+            }
+            ExitDebounce.Action.NONE -> Unit
         }
     }
 
@@ -549,6 +561,9 @@ class ProximityMonitorService : Service() {
         /** آخرین وضعیت داخل/خارج شناخته‌شده هر محدوده armed. */
         private val preciseInside = ConcurrentHashMap<Long, Boolean>()
 
+        /** شمارنده مشاهدات پیاپی بیرون برای دیبانس خروج دقیق (zoneId → تعداد). */
+        private val outsideStreak = ConcurrentHashMap<Long, Int>()
+
         /**
          * فعال/غیرفعال کردن پایش دقیق یک محدوده (از رویداد دروازه).
          * امن برای فراخوانی از هر نخی.
@@ -560,6 +575,7 @@ class ProximityMonitorService : Service() {
                 // لحظه ورود، بیرونِ شعاع دقیق هستیم (شعاع < ۲۰۰ متر). مقداردهی
                 // false باعث می‌شود اولین تیکِ داخلِ شعاع، ورودِ تازه حساب شود.
                 preciseInside[zoneId] = false
+                outsideStreak.remove(zoneId)
                 try {
                     ContextCompat.startForegroundService(
                         context,
@@ -572,6 +588,7 @@ class ProximityMonitorService : Service() {
                 return
             }
             armed.remove(zoneId)
+            outsideStreak.remove(zoneId)
             syncScope.launch {
                 try {
                     // اگر داخل شعاع کوچک بودیم، خروج ثبت شود
@@ -602,6 +619,7 @@ class ProximityMonitorService : Service() {
         fun clearArmed() {
             armed.clear()
             preciseInside.clear()
+            outsideStreak.clear()
         }
 
         /**

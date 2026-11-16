@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- نمای سفارشی اعلان پایش دقیق: نام محدوده + ثانیه‌شمار دایره‌ای قرمز -->
+<!-- نمای سفارشی اعلان پایش دقیق: نام محدوده + شمارنده کوچک خاکستری -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -32,12 +32,11 @@
 
     <TextView
         android:id="@+id/tv_prox_countdown"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:background="@drawable/bg_countdown_circle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
         android:gravity="center"
-        android:textColor="#FFFFFF"
-        android:textSize="20sp"
-        android:textStyle="bold" />
+        android:textColor="#757575"
+        android:textSize="12sp" />
 
 </LinearLayout>
